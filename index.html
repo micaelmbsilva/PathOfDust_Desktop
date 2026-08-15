@@ -143,7 +143,11 @@
 
 <script>
   document.getElementById('appTitle').textContent = GAME_NAME;
-  document.title = GAME_NAME;
+  let appVersion = '';
+  const setTitle = (name) => {
+    document.title = GAME_NAME + (appVersion ? ` v${appVersion}` : '') + (name ? ` — ${name}` : '');
+  };
+  setTitle();
 
   // open a custom page in its own app-style window
   function openWin(path, name, w = 1000, h = 800) {
@@ -244,7 +248,7 @@
     try {
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
-      if (r.name) document.title = GAME_NAME + ' — ' + r.name;
+      if (r.name) setTitle(r.name);
       if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); } // enable highlight once we know the name
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
@@ -405,7 +409,12 @@
   bar.addEventListener('pointerup', (e) => { dragging = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); });
 
   // ---- version + auto-update feedback ----
-  fetch('/api/version').then(r => r.json()).then(v => { document.getElementById('ver').textContent = 'v' + v.version; }).catch(() => {});
+  fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
+    appVersion = v.version;
+    document.getElementById('ver').textContent = 'v' + v.version;
+    const n = document.getElementById('hname').textContent;
+    setTitle(n && n !== 'Character' ? n : '');
+  }).catch(() => {});
 
   function infoToast(msg) {
     const el = document.createElement('div');
