@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - '**.md'   # docs-only changes don't need a rebuild
+      - '**.md'      # docs-only changes don't need a rebuild
+      - 'server/**'  # telemetry backend deploys on Railway, not here
 
 permissions:
   contents: write

@@ -3,4 +3,4 @@
 export const GAME_NAME = 'Path of Dust';
 // Telemetry/feedback backend (the server/ app on Railway). Empty = disabled.
 // Set to your Railway URL, e.g. 'https://pathofdust-production.up.railway.app'
-export const TELEMETRY_URL = '';
+export const TELEMETRY_URL = 'https://pathofdustdesktop-production.up.railway.app';
