@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'   # docs-only changes don't need a rebuild
 
 permissions:
   contents: write

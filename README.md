@@ -5,7 +5,8 @@ An unofficial desktop companion for **Path of Dust**, the interactive Twitch RPG
 character sheet, and the full bag / crafting / passives dashboard into one app — so you can manage
 your character and watch the action without juggling browser tabs.
 
-> Not affiliated with Path of Dust or Lokati_Gaming. It uses your own Twitch login to show and
+> A community companion app, built and released **with Lokati_Gaming's approval** — but not the
+> official app, and not authored by Lokati_Gaming. It uses your own Twitch login to show and
 > manage *your* character, exactly as the website does.
 
 ---
