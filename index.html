@@ -64,8 +64,8 @@
   .toast .th { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
   .toast .tn { font-weight: 700; } .toast .ts { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; }
   .toast .perfect { color: #ffcf5a; font-weight: 700; }
-  .toast.reforge { border-color: #d9a441; background: rgba(60,44,20,0.96); }
-  .toast.reforge .tn { color: #ffcf5a; }
+  .toast.reforge, .toast.reforge-result { border-color: #d9a441; background: rgba(60,44,20,0.96); }
+  .toast.reforge .tn, .toast.reforge-result .tn { color: #ffcf5a; }
   .toast .tmods { font-size: 0.8rem; color: #c9bdf0; margin: 2px 0 8px; }
   .toast .tmods span { display: block; }
   .toast .tacts { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -373,7 +373,50 @@
     el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
     el.querySelector('[data-act="chat"]').onclick = () => toggleChat(true);
     const db = el.querySelector('[data-act="dust"]');
-    if (db) db.onclick = async () => { db.disabled = true; await action(rf.action, {}); loadStats(); };
+    if (db) db.onclick = async () => {
+      db.disabled = true;
+      // Snapshot equipped tiers, reforge, re-snapshot: the site shows no result
+      // flash, so we detect the upgraded item by which slot's tier went up.
+      const snap = () => fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
+      const before = await snap();
+      const res = await action(rf.action, {}).catch(() => null);
+      if (!res || !res.ok) { reforgeToast('⚒️ Reforge failed', 'Could not reach the game — try again.'); loadStats(); return; }
+      let hit = reforgeDiff(before, await snap());
+      if (!hit) { await new Promise(r => setTimeout(r, 700)); hit = reforgeDiff(before, await snap()); } // read-after-write retry
+      if (hit) reforgeToast(`⚒️ Reforged ${hit.name}`, `${hit.from} → ${hit.to} (+${hit.d} tiers)`, hit.slot);
+      else reforgeToast('⚒️ Reforge done', "Submitted — couldn't detect the upgraded item.");
+      loadStats();
+    };
+    document.getElementById('dismissAll').after(el);
+    updateDismissAll();
+  }
+  // Which equipped slot jumped 2–4 tiers between snapshots (reforge upgrades one
+  // equipped item by 2–4). Requires exactly one such candidate so we never guess.
+  // ponytail: keyed by slot, not item id — equipped markup carries no item id, and
+  // a concurrent gear swap could misattribute; fine for a cosmetic toast.
+  function reforgeDiff(before, after) {
+    if (!before?.equipped || !after?.equipped) return null;
+    const tnum = (t) => { const m = String(t).match(/(\d+)/); return m ? +m[1] : null; };
+    const prev = Object.fromEntries(before.equipped.map(e => [e.slot, e]));
+    const hits = [];
+    for (const e of after.equipped) {
+      const p = prev[e.slot]; if (!p) continue;
+      const a = tnum(p.tier), b = tnum(e.tier);
+      if (a == null || b == null) continue;
+      if (b - a >= 2 && b - a <= 4) hits.push({ name: e.name, slot: e.slot, from: p.tier, to: e.tier, d: b - a });
+    }
+    return hits.length === 1 ? hits[0] : null;
+  }
+  // Distinct class from the reminder toast: reconcileReforge reaps `.toast.reforge`
+  // on cooldown, which would delete this result the instant loadStats() runs.
+  function reforgeToast(title, body, slot) {
+    const el = document.createElement('div');
+    el.className = 'toast reforge-result';
+    el.innerHTML = `
+      <div class="th"><span class="tn">${title}</span>${slot ? `<span class="ts">${slot}</span>` : ''}</div>
+      <div class="tmods"><span>${body}</span></div>
+      <div class="tacts"><button data-act="x">Dismiss</button></div>`;
+    el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
     document.getElementById('dismissAll').after(el);
     updateDismissAll();
   }
