@@ -153,8 +153,9 @@
     lastBag = inv.bag;
     renderBag();
 
-    // crafting form — keep the current selection across the post-craft reload
-    const prevA = $('itemA')?.value, prevB = $('itemB')?.value;
+    // crafting form — keep the selection across reloads AND app restarts (localStorage fallback)
+    const prevA = $('itemA')?.value || localStorage.getItem('craftItemA');
+    const prevB = $('itemB')?.value || localStorage.getItem('craftItemB');
     const opt = (o) => `<option value="${o.id}">${o.label}</option>`;
     $('craft').innerHTML = `
       <label>Item A <select id="itemA">${inv.craft.options.map(opt).join('')}</select></label>
@@ -167,8 +168,8 @@
 
     lastCraft = inv.craft;
     updateCosts();
-    $('itemA').onchange = () => { updateCosts(); };
-    $('itemB').onchange = updateCosts;
+    $('itemA').onchange = () => { localStorage.setItem('craftItemA', $('itemA').value); updateCosts(); };
+    $('itemB').onchange = () => { localStorage.setItem('craftItemB', $('itemB').value); updateCosts(); };
     $('veil').onchange = updateCosts;
 
     wire();
