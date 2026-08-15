@@ -35,7 +35,9 @@ jobs:
 
       - name: Zip build
         shell: pwsh
-        run: Compress-Archive -Path "dist/Path of Dust-win32-x64" -DestinationPath "PathOfDust-v${{ steps.ver.outputs.v }}.zip" -Force
+        run: |
+          Compress-Archive -Path "dist/Path of Dust-win32-x64" -DestinationPath "PathOfDust-v${{ steps.ver.outputs.v }}.zip" -Force
+          Copy-Item "PathOfDust-v${{ steps.ver.outputs.v }}.zip" PathOfDust.zip -Force   # stable name for the latest-download link
 
       - name: Publish versioned release
         uses: softprops/action-gh-release@v2
@@ -61,4 +63,6 @@ jobs:
             here when the app shell itself changes.
 
             See the [README](https://github.com/micaelmbsilva/PathOfDust_Desktop#readme) for the full guide.
-          files: PathOfDust-v${{ steps.ver.outputs.v }}.zip
+          files: |
+            PathOfDust-v${{ steps.ver.outputs.v }}.zip
+            PathOfDust.zip
