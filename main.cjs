@@ -65,6 +65,15 @@ async function load7tv() {
   catch { /* MV3 in Electron may reject it — no emotes, chat still works */ }
 }
 
+// A random, anonymous per-install id (no name/PII), persisted in userData.
+function installId() {
+  const f = path.join(app.getPath('userData'), 'install-id');
+  try { return fs.readFileSync(f, 'utf8').trim(); } catch {}
+  const id = require('node:crypto').randomUUID();
+  try { fs.mkdirSync(app.getPath('userData'), { recursive: true }); fs.writeFileSync(f, id); } catch {}
+  return id;
+}
+
 const waitForPort = () => new Promise((resolve) => {
   const tick = () => http.get({ port: PORT, path: '/', timeout: 500 }, (r) => { r.destroy(); resolve(); })
     .on('error', () => setTimeout(tick, 150));
@@ -122,6 +131,7 @@ async function start() {
   allowTwitchFraming();
   await load7tv(); // custom emotes in chat, if 7TV is installed
   const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
+  process.env.INSTALL_ID = installId(); // anonymous, for usage stats
   global.__relaunch = () => { app.relaunch(); app.exit(0); }; // used by /api/restart to apply updates
   await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);

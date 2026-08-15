@@ -5,7 +5,25 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { post, getAuthed } from './actions.mjs';
-import { GAME_NAME } from './config.mjs';
+import { GAME_NAME, TELEMETRY_URL } from './config.mjs';
+
+// Anonymous telemetry/feedback → the Railway backend. No-op if no URL set.
+const INSTALL = process.env.INSTALL_ID || '';
+const appVersion = async () => { try { return JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch { return 0; } };
+async function telemetry(pathname, extra) {
+  if (!TELEMETRY_URL) return;
+  try {
+    await fetch(`${TELEMETRY_URL}${pathname}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ install: INSTALL, version: await appVersion(), ...extra }),
+    });
+  } catch { /* offline / backend down — ignore */ }
+}
+async function ping() {
+  let archetype = null, level = null;
+  try { const m = (await me()).nav.match(/Lv\s*(\d+)\s+([A-Za-z]+)/); if (m) { level = +m[1]; archetype = m[2]; } } catch {}
+  telemetry('/ping', { archetype, level });
+}
 
 const PORT = 8787;
 const ROOT = new URL('./', import.meta.url);
@@ -192,6 +210,16 @@ createServer(async (req, res) => {
       if (global.__relaunch) setTimeout(global.__relaunch, 200); // pull the new version on relaunch
       return;
     }
+    if (url.pathname === '/api/feedback' && req.method === 'POST') {
+      const { message, contact } = JSON.parse(await body(req) || '{}');
+      await telemetry('/feedback', { message, contact });
+      return json(res, { ok: !!TELEMETRY_URL });
+    }
+    if (url.pathname === '/api/log' && req.method === 'POST') {
+      const { level, message } = JSON.parse(await body(req) || '{}');
+      telemetry('/log', { level, message });
+      return json(res, { ok: true });
+    }
     if (url.pathname === '/api/me') {
       return json(res, await me());
     }
@@ -222,3 +250,7 @@ createServer(async (req, res) => {
 
 const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 const body = (req) => new Promise((r) => { let b = ''; req.on('data', c => b += c); req.on('end', () => r(b)); });
+
+// usage heartbeat: once ~after login, then every 30 min
+setTimeout(ping, 20000);
+setInterval(ping, 30 * 60000);

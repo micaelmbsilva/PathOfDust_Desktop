@@ -9,7 +9,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-packager . \"Path of Dust\" --platform=win32 --arch=x64 --out=dist --overwrite --prune=true --ignore=\"(\\.profile|\\.chrome|\\.appchrome|authed|dist|auth\\.json|twitch\\.json|node_modules/.cache)\""
+    "dist": "electron-packager . \"Path of Dust\" --platform=win32 --arch=x64 --out=dist --overwrite --prune=true --ignore=\"(\\.profile|\\.chrome|\\.appchrome|authed|dist|auth\\.json|twitch\\.json|node_modules/.cache|server/)\""
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
