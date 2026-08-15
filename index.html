@@ -37,7 +37,7 @@
     border-radius: 12px; backdrop-filter: blur(6px); box-shadow: 0 8px 30px #0008;
     user-select: none; resize: both; overflow: hidden; min-width: 200px; min-height: 110px;
     display: flex; flex-direction: column; }
-  #stats.collapsed { height: auto !important; resize: none; }
+  #stats.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
   #stats .bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: grab;
     border-bottom: 1px solid rgba(160,140,255,0.2); }
   #stats.collapsed .bar { border-bottom: 0; }
@@ -97,7 +97,7 @@
   #chatpanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
     font-size: 1rem; line-height: 1; padding: 2px 6px; }
   #chatpanel .cwrap { flex: 1; min-height: 0; }
-  #chatpanel.collapsed { height: auto !important; }
+  #chatpanel.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
   #chatpanel.collapsed .cwrap { display: none; }
   #chatpanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
