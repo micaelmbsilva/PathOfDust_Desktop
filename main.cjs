@@ -122,6 +122,7 @@ async function start() {
   allowTwitchFraming();
   await load7tv(); // custom emotes in chat, if 7TV is installed
   const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
+  global.__relaunch = () => { app.relaunch(); app.exit(0); }; // used by /api/restart to apply updates
   await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);

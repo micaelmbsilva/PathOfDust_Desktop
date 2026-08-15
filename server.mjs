@@ -177,6 +177,21 @@ createServer(async (req, res) => {
       try { version = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
       return json(res, { version });
     }
+    if (url.pathname === '/api/check-update') {
+      let current = 0;
+      try { current = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
+      try {
+        const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' } }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
+        const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
+        const latest = JSON.parse(await g(`https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}/version.json`)).version;
+        return json(res, { current, latest, updateAvailable: latest > current });
+      } catch { return json(res, { current, latest: current, updateAvailable: false, error: true }); }
+    }
+    if (url.pathname === '/api/restart' && req.method === 'POST') {
+      json(res, { ok: !!global.__relaunch });
+      if (global.__relaunch) setTimeout(global.__relaunch, 200); // pull the new version on relaunch
+      return;
+    }
     if (url.pathname === '/api/me') {
       return json(res, await me());
     }
