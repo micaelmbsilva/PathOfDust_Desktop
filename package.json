@@ -1,7 +1,7 @@
 {
   "name": "lokati_overlay",
   "productName": "Path of Dust",
-  "version": "1.0.0",
+  "version": "25.0.0",
   "description": "Custom overlay + dashboard app for adventure.lokati.net",
   "main": "main.cjs",
   "author": "Kibukah",
@@ -9,36 +9,48 @@
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-packager . \"Path of Dust\" --platform=win32 --arch=x64 --out=dist --overwrite --prune=true --ignore=\"(\\.profile|\\.chrome|\\.appchrome|authed|dist|auth\\.json|twitch\\.json|node_modules/.cache|server/)\""
+    "release": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
-    "@electron/packager": "^20.3.0",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "playwright": "^1.62.1"
   },
   "build": {
-    "appId": "net.lokati.overlay",
-    "productName": "LokatiOverlay",
+    "appId": "net.lokati.pathofdust",
+    "productName": "Path of Dust",
     "asar": false,
     "files": [
-      "main.cjs",
-      "server.mjs",
-      "actions.mjs",
-      "index.html",
-      "bag.html",
-      "passives.html",
-      "auth.json",
-      "package.json"
+      "**/*",
+      "!server/**",
+      "!dist/**",
+      "!.github/**",
+      "!.profile/**",
+      "!.chrome/**",
+      "!.appchrome/**",
+      "!authed/**",
+      "!auth.json",
+      "!twitch.json",
+      "!harvest.mjs",
+      "!twitch-login.mjs",
+      "!*.md"
     ],
     "win": {
-      "target": "portable"
+      "target": "nsis"
     },
-    "portable": {
-      "artifactName": "LokatiOverlay.exe"
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "PathOfDust-Setup.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "micaelmbsilva",
+      "repo": "PathOfDust_Desktop",
+      "releaseType": "release"
     }
-  },
-  "allowScripts": {
-    "electron@33.4.11": true
   }
 }

@@ -2,7 +2,8 @@
 // window. Standalone .exe (bundled Chromium). Multi-user: no tokens are shipped —
 // each user logs in once via the site's Twitch OAuth, and that one login drives
 // everything (site session for stats/bag/passives/actions, and Twitch chat).
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -50,6 +51,25 @@ async function resolveAppDir() {
     }
   } catch { /* offline / fetch failed — use what we already have */ }
   return localVer > bundledVer ? appDir : __dirname;
+}
+
+// Full-app self-update via electron-updater (NSIS + GitHub releases feed). The
+// web/bridge files still hot-update in place via resolveAppDir; this handles the
+// Electron shell itself, which those can't touch. Downloads in the background and
+// prompts to restart once staged. Only meaningful in a packaged install.
+function initAutoUpdate(win) {
+  if (!app.isPackaged) return; // `electron .` dev runs have no update feed
+  autoUpdater.autoDownload = true;
+  autoUpdater.on('update-downloaded', async ({ version }) => {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'info', buttons: ['Restart now', 'Later'], defaultId: 0, cancelId: 1,
+      title: 'Update ready', message: `Path of Dust ${version} is ready.`,
+      detail: 'Restart now to install it? Your login and layout are kept.',
+    });
+    if (response === 0) autoUpdater.quitAndInstall();
+  });
+  autoUpdater.on('error', () => {}); // offline / feed hiccup — try again next launch
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 // Load the 7TV extension (for custom emotes in the chat) from the user's own
@@ -133,6 +153,8 @@ async function start() {
   const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
   process.env.INSTALL_ID = installId(); // anonymous, for usage stats
   global.__relaunch = () => { app.relaunch(); app.exit(0); }; // used by /api/restart to apply updates
+  global.__autoUpdate = true; // this (installer) shell self-updates; the bridge reports it so the
+                              // hot-updated UI can warn old portable shells, which never set this
   await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);
@@ -153,6 +175,7 @@ async function start() {
   await relaxTwitchCookies();                     // make the chat embed see the login
   await session.defaultSession.clearCache().catch(() => {}); // drop stale cached app files
   win.loadURL(`http://localhost:${PORT}/${updatedTo ? `?updated=${updatedTo}` : ''}`);
+  initAutoUpdate(win); // background: full-app update via electron-updater
 }
 
 app.whenReady().then(start);
