@@ -1,11 +1,13 @@
 name: Release
 
+# Installer releases fire on a version tag only. Day-to-day web/bridge changes
+# hot-update straight from main (see resolveAppDir in main.cjs) and need no build.
+# To ship a shell/app update: bump package.json "version", commit, then
+#   git tag v<version> && git push origin main --tags
 on:
   push:
-    branches: [main]
-    paths-ignore:
-      - '**.md'      # docs-only changes don't need a rebuild
-      - 'server/**'  # telemetry backend deploys on Railway, not here
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -20,50 +22,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Read version
-        id: ver
-        shell: bash
-        run: echo "v=$(node -p "require('./version.json').version")" >> "$GITHUB_OUTPUT"
-
       - name: Install deps
         run: npm ci
 
-      - name: Ensure Electron binary
-        run: node node_modules/electron/install.js
-
-      - name: Package app
-        run: npm run dist
-
-      - name: Zip build
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "dist/Path of Dust-win32-x64" -DestinationPath "PathOfDust-v${{ steps.ver.outputs.v }}.zip" -Force
-          Copy-Item "PathOfDust-v${{ steps.ver.outputs.v }}.zip" PathOfDust.zip -Force   # stable name for the latest-download link
-
-      - name: Publish versioned release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.ver.outputs.v }}
-          name: Path of Dust — Desktop v${{ steps.ver.outputs.v }}
-          make_latest: true
-          body: |
-            **Path of Dust — Desktop** · companion app for the Twitch RPG *Path of Dust* by
-            [Lokati_Gaming](https://www.twitch.tv/lokati_gaming).
-
-            Live game overlay, character stats, and the full bag / crafting / passives dashboard —
-            plus in-app Twitch chat with 7TV emotes — all driven by your own Twitch login.
-
-            ### Install
-            1. Download the **`PathOfDust-v${{ steps.ver.outputs.v }}.zip`** below.
-            2. Extract it anywhere.
-            3. Run **`Path of Dust.exe`** and log in with Twitch on first launch.
-
-            *(SmartScreen may warn on an unsigned app → More info → Run anyway.)*
-
-            The app **self-updates** its interface from the repo on launch — you only re-download
-            here when the app shell itself changes.
-
-            See the [README](https://github.com/micaelmbsilva/PathOfDust_Desktop#readme) for the full guide.
-          files: |
-            PathOfDust-v${{ steps.ver.outputs.v }}.zip
-            PathOfDust.zip
+      # electron-builder builds the NSIS installer and publishes it to a GitHub
+      # release tagged v{package.json version}, alongside latest.yml + blockmap —
+      # the feed electron-updater reads. CSC discovery is off: the app is unsigned
+      # (avoids the winCodeSign download that fails to extract on Windows).
+      - name: Build and publish
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false

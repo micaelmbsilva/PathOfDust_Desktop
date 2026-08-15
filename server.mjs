@@ -202,7 +202,9 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/version') {
       let version = 0;
       try { version = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
-      return json(res, { version });
+      // autoUpdate=true only on the installer shell (sets global.__autoUpdate). Old
+      // portable shells never set it, so the UI can warn them to move to the installer.
+      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate });
     }
     if (url.pathname === '/api/check-update') {
       let current = 0;

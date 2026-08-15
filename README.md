@@ -33,13 +33,11 @@ your character and watch the action without juggling browser tabs.
 
 ## Install
 
-1. Go to the [**latest release**](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest) — this link always points to the newest version.
-2. Download **`PathOfDust.zip`** (or grab it directly: [**download latest**](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest/download/PathOfDust.zip)).
-3. **Extract** it anywhere (right-click → Extract All).
-4. Open the extracted folder and run **`Path of Dust.exe`**.
+1. Download the installer: [**PathOfDust-Setup.exe**](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest/download/PathOfDust-Setup.exe) — this link always points to the newest version.
+2. Run it. It installs for the current user (no admin needed) and launches automatically.
    - Windows SmartScreen may warn on an unsigned app → *More info → Run anyway*.
 
-> **Tip:** right-click `Path of Dust.exe` → *Send to → Desktop (create shortcut)* for one-click launch.
+A Start Menu shortcut is created for you.
 
 ### First launch — log in
 
@@ -66,11 +64,13 @@ app reads it from your Chrome profile). Without it, chat still works — just wi
 
 ## Updates
 
-The app **updates itself**. On launch it pulls the latest interface and logic from this repo, so
-day-to-day improvements arrive automatically — no reinstall.
+The app **updates itself** — no reinstall, ever.
 
-You only need to **re-download the release** when the underlying app shell changes (rare); those
-are announced on the release page. Everything else just updates.
+- **Interface & logic** hot-update on launch: the app pulls the latest web/bridge files from this
+  repo each time it starts, so day-to-day improvements arrive automatically.
+- **The app itself** (the Electron shell) updates in the background via the installer feed. When a
+  new version has downloaded, the app asks to restart, then applies it. Your login and layout are
+  kept.
 
 ---
 
