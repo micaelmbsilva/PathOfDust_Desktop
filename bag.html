@@ -25,6 +25,11 @@
   .veilbox h2 { color: #ffcf5a; margin: 0 0 4px; }
   .veilbox .acts { margin-top: 10px; }
   .veilbox button { font-size: 0.95rem; padding: 8px 14px; }
+  .bag-head { display: flex; align-items: center; gap: 12px; margin-top: 34px;
+    padding-top: 16px; border-top: 1px solid rgba(160,140,255,0.18); }
+  .bag-head h2 { margin: 0; }
+  .bag-head label { font-size: 0.85rem; color: #b0a2d9; }
+  .bag-head #disAll { margin-left: auto; }
   .grouphdr { font-size: 0.9rem; color: #b0a2d9; margin: 14px 0 6px; }
   select { background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; padding: 3px 6px; }
   .mline { display: flex; align-items: center; gap: 6px; }
@@ -63,7 +68,7 @@
   <h2>Equipped</h2>
   <div class="grid" id="equipped"></div>
 
-  <div class="bar" style="justify-content:space-between; width:100%">
+  <div class="bag-head">
     <h2 id="bagh" style="margin:0">Bag</h2>
     <label>Sort <select id="sortBy">
       <option value="tier">Tier</option>
@@ -235,8 +240,12 @@
     }
     wire();
   }
-  document.getElementById('sortBy').onchange = renderBag;
-  document.getElementById('groupBy').onchange = renderBag;
+  // remember the user's sort/group across reloads
+  const sSel = document.getElementById('sortBy'), gSel = document.getElementById('groupBy');
+  if (localStorage.getItem('bagSort')) sSel.value = localStorage.getItem('bagSort');
+  if (localStorage.getItem('bagGroup')) gSel.value = localStorage.getItem('bagGroup');
+  sSel.onchange = () => { localStorage.setItem('bagSort', sSel.value); renderBag(); };
+  gSel.onchange = () => { localStorage.setItem('bagGroup', gSel.value); renderBag(); };
 
   function wire() {
     document.querySelectorAll('[data-un]').forEach(b => b.onclick = async () => { await api('unequip', { slot: b.dataset.un }); refresh(); });
