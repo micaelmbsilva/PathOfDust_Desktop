@@ -116,6 +116,7 @@
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight me</button>
   <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag()">🔄 Refresh</button>
   <button class="tbtn" id="updateBtn" title="Check for updates" onclick="updateAction()">Check for Updates</button>
+  <button class="tbtn" title="Send feedback / report a bug" onclick="sendFeedback()">🐛 Feedback</button>
 </div>
 
 <div id="chatpanel">
@@ -460,6 +461,22 @@
   }
   setTimeout(() => checkUpdate(false), 15000);        // shortly after launch
   setInterval(() => checkUpdate(false), 20 * 60000);  // and every 20 min
+
+  // ---- feedback + error reporting (anonymous, to the telemetry backend) ----
+  function sendFeedback() {
+    const msg = prompt('Send feedback or report a bug (anonymous — no name is sent):');
+    if (!msg) return;
+    fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+      .then(r => r.json()).then(r => infoToast(r.ok ? '✅ Thanks — sent.' : 'Feedback isn\'t set up yet.'))
+      .catch(() => infoToast('Could not send feedback.'));
+  }
+  let _lastLog = 0;
+  function logRemote(level, message) {
+    const now = Date.now(); if (now - _lastLog < 2000) return; _lastLog = now; // throttle
+    fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level, message: String(message).slice(0, 2000) }) }).catch(() => {});
+  }
+  window.addEventListener('error', (e) => logRemote('error', `${e.message} @ ${e.filename}:${e.lineno}`));
+  window.addEventListener('unhandledrejection', (e) => logRemote('error', 'unhandled: ' + (e.reason && e.reason.message || e.reason)));
   const _upd = new URLSearchParams(location.search).get('updated');
   if (_upd) {
     const el = document.createElement('div');
