@@ -8,6 +8,10 @@ const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const http = require('node:http');
 
+// Keep third-party cookies working in the embedded Twitch chat (so it's logged
+// in and you can actually send messages), and let us iframe the full popout chat.
+app.commandLine.appendSwitch('disable-features', 'ThirdPartyStoragePartitioning,PartitionedCookies');
+
 const PORT = 8787;
 const SITE = 'https://adventure.lokati.net';
 const SEVENTV_ID = 'lppmekppnliemjclknbagdhoocikieoi';
@@ -100,7 +104,22 @@ async function relaxTwitchCookies() {
   }
 }
 
+// Strip frame-blocking headers for twitch.tv so the full popout chat (which is
+// send-capable, unlike the read-oriented embed) can load inside our panel.
+function allowTwitchFraming() {
+  session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+    const h = details.responseHeaders;
+    if (h) for (const k of Object.keys(h)) {
+      const lk = k.toLowerCase();
+      if (lk === 'x-frame-options') delete h[k];
+      else if (lk === 'content-security-policy') h[k] = h[k].map(v => v.replace(/frame-ancestors[^;]*(;|$)/gi, ''));
+    }
+    cb({ responseHeaders: h });
+  });
+}
+
 async function start() {
+  allowTwitchFraming();
   await load7tv(); // custom emotes in chat, if 7TV is installed
   const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
   await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
