@@ -23,7 +23,8 @@ const pool = new Pool({
 async function init() {
   await pool.query(`CREATE TABLE IF NOT EXISTS installs (
     id TEXT PRIMARY KEY, first_seen TIMESTAMPTZ DEFAULT now(), last_seen TIMESTAMPTZ DEFAULT now(),
-    version TEXT, archetype TEXT, level INT)`);
+    version TEXT, archetype TEXT, level INT, data JSONB)`);
+  await pool.query(`ALTER TABLE installs ADD COLUMN IF NOT EXISTS data JSONB`); // for older tables
   await pool.query(`CREATE TABLE IF NOT EXISTS logs (
     id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), install TEXT, version TEXT, level TEXT, message TEXT)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS feedback (
@@ -33,12 +34,13 @@ async function init() {
 app.get('/', (_req, res) => res.type('text').send('Path of Dust telemetry — ok'));
 
 app.post('/ping', async (req, res) => {
-  const { install, version, archetype, level } = req.body || {};
+  const { install, version, archetype, level, ...data } = req.body || {};
   if (!install) return res.sendStatus(400);
   await pool.query(
-    `INSERT INTO installs (id, version, archetype, level) VALUES ($1,$2,$3,$4)
-     ON CONFLICT (id) DO UPDATE SET last_seen = now(), version = $2, archetype = $3, level = $4`,
-    [String(install).slice(0, 64), version || null, archetype || null, Number.isFinite(+level) ? +level : null]);
+    `INSERT INTO installs (id, version, archetype, level, data) VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (id) DO UPDATE SET last_seen = now(), version = $2, archetype = $3, level = $4, data = $5`,
+    [String(install).slice(0, 64), version || null, archetype || null,
+     Number.isFinite(+level) ? +level : null, JSON.stringify(data)]);
   res.sendStatus(204);
 });
 
@@ -69,6 +71,7 @@ app.get('/stats', async (req, res) => {
     byClass: await one(`SELECT archetype, count(*)::int FROM installs GROUP BY archetype ORDER BY 2 DESC`),
     byVersion: await one(`SELECT version, count(*)::int FROM installs GROUP BY version ORDER BY 2 DESC`),
     levels: await one(`SELECT min(level), round(avg(level)) avg, max(level) FROM installs WHERE level IS NOT NULL`),
+    recentSnapshots: await one(`SELECT id, last_seen, version, archetype, level, data FROM installs ORDER BY last_seen DESC LIMIT 50`),
     recentFeedback: await one(`SELECT ts, version, message, contact FROM feedback ORDER BY ts DESC LIMIT 50`),
     recentErrors: await one(`SELECT ts, version, message FROM logs WHERE level='error' ORDER BY ts DESC LIMIT 50`),
   });

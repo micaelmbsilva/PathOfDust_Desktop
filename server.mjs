@@ -20,9 +20,17 @@ async function telemetry(pathname, extra) {
   } catch { /* offline / backend down — ignore */ }
 }
 async function ping() {
-  let archetype = null, level = null;
-  try { const m = (await me()).nav.match(/Lv\s*(\d+)\s+([A-Za-z]+)/); if (m) { level = +m[1]; archetype = m[2]; } } catch {}
-  telemetry('/ping', { archetype, level });
+  // Full non-sensitive snapshot: version/platform + class/level + all stats,
+  // record, currency, settings. Never the character/Twitch name (PII).
+  const snap = { platform: process.platform };
+  try {
+    const m = await me();
+    const lv = (m.nav || '').match(/Lv\s*(\d+)\s+([A-Za-z]+)/);
+    if (lv) { snap.level = +lv[1]; snap.archetype = lv[2]; }
+    snap.autoRepair = m.autoRepair;
+    snap.stats = Object.fromEntries((m.stats || []).map(s => [s.label, s.value])); // Record, Dust, DPS, etc.
+  } catch {}
+  telemetry('/ping', snap);
 }
 
 const PORT = 8787;
