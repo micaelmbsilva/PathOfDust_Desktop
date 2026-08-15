@@ -2,7 +2,8 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Path Of Dust</title>
+<title>Path of Dust</title>
+<script src="/config.js"></script>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -103,7 +104,7 @@
 <div id="zoomcapture" title="Wheel to zoom · double-click to reset"></div>
 
 <div id="topbar">
-  <span class="title">Path Of Dust</span>
+  <span class="title" id="appTitle"></span>
   <span class="ver" id="ver" title="App version — updates automatically on launch"></span>
   <button class="tbtn" onclick="openWin('/bag.html','bag',1140,880)">🎒 Bag</button>
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
@@ -135,6 +136,9 @@
 <div id="toasts"><button id="dismissAll">✕ Dismiss all</button></div>
 
 <script>
+  document.getElementById('appTitle').textContent = GAME_NAME;
+  document.title = GAME_NAME;
+
   // open a custom page in its own app-style window
   function openWin(path, name, w = 1000, h = 800) {
     window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`);
@@ -220,7 +224,7 @@
     try {
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
-      if (r.name) document.title = 'Path Of Dust — ' + r.name;
+      if (r.name) document.title = GAME_NAME + ' — ' + r.name;
       if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); } // enable highlight once we know the name
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();

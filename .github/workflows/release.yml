@@ -35,7 +35,7 @@ jobs:
 
       - name: Zip build
         shell: pwsh
-        run: Compress-Archive -Path dist/LokatiOverlay-win32-x64 -DestinationPath "PathOfDust-v${{ steps.ver.outputs.v }}.zip" -Force
+        run: Compress-Archive -Path "dist/Path of Dust-win32-x64" -DestinationPath "PathOfDust-v${{ steps.ver.outputs.v }}.zip" -Force
 
       - name: Publish versioned release
         uses: softprops/action-gh-release@v2
@@ -53,7 +53,7 @@ jobs:
             ### Install
             1. Download the **`PathOfDust-v${{ steps.ver.outputs.v }}.zip`** below.
             2. Extract it anywhere.
-            3. Run **`LokatiOverlay.exe`** and log in with Twitch on first launch.
+            3. Run **`Path of Dust.exe`** and log in with Twitch on first launch.
 
             *(SmartScreen may warn on an unsigned app → More info → Run anyway.)*
 

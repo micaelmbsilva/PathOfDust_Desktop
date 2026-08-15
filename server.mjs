@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { post, getAuthed } from './actions.mjs';
+import { GAME_NAME } from './config.mjs';
 
 const PORT = 8787;
 const ROOT = new URL('./', import.meta.url);
@@ -167,6 +168,10 @@ async function passives() {
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://localhost:${PORT}`);
+    if (url.pathname === '/config.js') {
+      res.writeHead(200, { 'Content-Type': 'text/javascript' });
+      return res.end(`window.GAME_NAME=${JSON.stringify(GAME_NAME)};`);
+    }
     if (url.pathname === '/api/version') {
       let version = 0;
       try { version = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
