@@ -106,6 +106,7 @@
   <button class="tbtn" onclick="openWin('/bag.html','bag',1140,880)">🎒 Bag</button>
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
+  <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight me</button>
   <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag()">🔄 Refresh</button>
 </div>
 
@@ -135,6 +136,22 @@
   // open a custom page in its own app-style window
   function openWin(path, name, w = 1000, h = 800) {
     window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`);
+  }
+
+  // Overlay source: plain, or ?highlight=<name> to dim other players (lokati's
+  // feature). Toggle persists; needs our character name (from /api/me).
+  const OVERLAY = 'https://adventure.lokati.net/overlay';
+  let myName = '';
+  function applyHighlight() {
+    const on = localStorage.getItem('highlight') === '1';
+    const src = on && myName ? `${OVERLAY}?highlight=${encodeURIComponent(myName)}` : OVERLAY;
+    const ov = document.getElementById('overlay');
+    if (ov.getAttribute('src') !== src) ov.setAttribute('src', src); // reload only if changed
+    document.getElementById('hlBtn').classList.toggle('active', on);
+  }
+  function toggleHighlight() {
+    localStorage.setItem('highlight', localStorage.getItem('highlight') === '1' ? '0' : '1');
+    applyHighlight();
   }
 
   // Twitch chat panel — embed loads lazily; `parent` must be the serving host.
@@ -200,6 +217,7 @@
     try {
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
+      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); } // enable highlight once we know the name
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
