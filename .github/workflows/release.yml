@@ -34,9 +34,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Latest build
+          name: Path of Dust — Desktop (latest)
           body: |
-            Latest PathOfDust desktop build.
-            Download PathOfDust.zip, extract, run LokatiOverlay.exe.
-            The app self-updates its content from the repo on launch; re-download only for a new shell version.
+            **Path of Dust — Desktop** · companion app for the Twitch RPG *Path of Dust* by
+            [Lokati_Gaming](https://www.twitch.tv/lokati_gaming).
+
+            Live game overlay, character stats, and the full bag / crafting / passives dashboard —
+            plus in-app Twitch chat with 7TV emotes — all driven by your own Twitch login.
+
+            ### Install
+            1. Download **`PathOfDust.zip`** below.
+            2. Extract it anywhere.
+            3. Run **`LokatiOverlay.exe`** and log in with Twitch on first launch.
+
+            *(SmartScreen may warn on an unsigned app → More info → Run anyway.)*
+
+            The app **self-updates** its interface from the repo on launch — you only re-download
+            here when the app shell itself changes.
+
+            See the [README](https://github.com/micaelmbsilva/PathOfDust_Desktop#readme) for the full guide.
           files: PathOfDust.zip
