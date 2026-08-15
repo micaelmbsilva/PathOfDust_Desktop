@@ -11,25 +11,34 @@ const http = require('node:http');
 const PORT = 8787;
 const SITE = 'https://adventure.lokati.net';
 const SEVENTV_ID = 'lppmekppnliemjclknbagdhoocikieoi';
-const RAW = 'https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/main';
+const REPO = 'micaelmbsilva/PathOfDust_Desktop';
 
 // Self-update: the app's web/bridge files (server.mjs, actions.mjs, *.html,
-// tooltip.js) are plain text served from disk, so we can refresh just those
-// from the repo without reinstalling the Electron shell. Downloads a newer set
-// into userData/app and returns the dir to load from (bundled copy otherwise).
+// tooltip.js) are plain text served from disk, so we refresh just those from
+// the repo without reinstalling the Electron shell. Pinned to the latest commit
+// SHA — raw.githubusercontent caches the branch path for ~5 min and ignores
+// query cache-busters, but per-SHA paths are immutable, so the manifest and the
+// files it lists always come from the same, current commit. Downloads a newer
+// set into userData/app and returns the dir to load from (bundled otherwise).
 // The Electron shell (main.cjs/Chromium) still needs a full reinstall to change.
 async function resolveAppDir() {
-  const appDir = require('node:path').join(app.getPath('userData'), 'app');
+  const appDir = path.join(app.getPath('userData'), 'app');
   const readVer = (dir) => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'version.json'), 'utf8')).version || 0; } catch { return 0; } };
   const bundledVer = readVer(__dirname);
   let localVer = readVer(appDir);
   try {
-    const get = async (u) => { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return r.text(); };
-    const manifest = JSON.parse(await get(`${RAW}/version.json`));
+    const get = async (u, json) => {
+      const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' } }); // GH API needs a UA
+      if (!r.ok) throw new Error(r.status);
+      return json ? r.json() : r.text();
+    };
+    const sha = (await get(`https://api.github.com/repos/${REPO}/commits/main`, true)).sha;
+    const base = `https://raw.githubusercontent.com/${REPO}/${sha}`; // immutable, never stale
+    const manifest = JSON.parse(await get(`${base}/version.json`));
     if (manifest.version > Math.max(bundledVer, localVer)) {
-      const files = await Promise.all(manifest.files.map(f => get(`${RAW}/${f}`).then(t => [f, t])));
+      const files = await Promise.all(manifest.files.map(f => get(`${base}/${f}`).then(t => [f, t])));
       fs.mkdirSync(appDir, { recursive: true });
-      for (const [f, t] of files) fs.writeFileSync(path.join(appDir, f), t); // all-or-nothing: fetched before writing
+      for (const [f, t] of files) fs.writeFileSync(path.join(appDir, f), t); // all fetched before writing
       fs.writeFileSync(path.join(appDir, 'version.json'), JSON.stringify(manifest));
       localVer = manifest.version;
     }
