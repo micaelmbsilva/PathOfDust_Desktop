@@ -1,4 +1,4 @@
 {
-  "version": 15,
+  "version": 16,
   "files": ["config.mjs", "server.mjs", "actions.mjs", "index.html", "bag.html", "passives.html", "tooltip.js"]
 }

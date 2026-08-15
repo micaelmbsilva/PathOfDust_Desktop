@@ -17,7 +17,8 @@
      the content (characters) shrinks/grows. Anchored top-left (ground at bottom). */
   #overlay { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 0;
     pointer-events: none; transform-origin: 0 0; }
-  #zoomcapture { position: fixed; inset: 0; z-index: 10; }
+  #zoomcapture { position: fixed; inset: 0; z-index: 10; cursor: grab; }
+  #zoomcapture.grabbing { cursor: grabbing; }
 
   /* top button bar */
   #topbar { position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 20;
@@ -212,22 +213,31 @@
   // (zoom out) or larger (zoom in) with no dead margins.
   const ov = document.getElementById('overlay');
   const cap = document.getElementById('zoomcapture');
-  let z = 1;
+  let z = 1, panX = 0, panY = 0;
   const MIN = 0.4, MAX = 3;
-  // Change the frame's internal size inversely (both dims by the same factor →
-  // aspect preserved) and scale it back. Net: frame stays full-bleed, but the
-  // overlay's canvas is larger (z<1) so characters render smaller, or smaller
-  // (z>1) so they render bigger. The scene keeps filling the window.
+  // Reflow zoom (internal size inverse + scale back → aspect-preserved, full-bleed),
+  // plus a translate so you can hold-drag to move the camera.
   const applyZoom = () => {
     ov.style.width = ov.style.height = (100 / z) + '%';
-    ov.style.transform = `scale(${z})`;
+    ov.style.transform = `translate(${panX}px,${panY}px) scale(${z})`;
   };
   cap.addEventListener('wheel', (e) => {
     e.preventDefault();
     z = Math.min(MAX, Math.max(MIN, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
     applyZoom();
   }, { passive: false });
-  cap.addEventListener('dblclick', () => { z = 1; applyZoom(); });
+  // hold + drag to move the camera
+  let panning = false, sx = 0, sy = 0;
+  cap.addEventListener('pointerdown', (e) => {
+    panning = true; sx = e.clientX - panX; sy = e.clientY - panY;
+    cap.setPointerCapture(e.pointerId); cap.classList.add('grabbing');
+  });
+  cap.addEventListener('pointermove', (e) => {
+    if (!panning) return;
+    panX = e.clientX - sx; panY = e.clientY - sy; applyZoom();
+  });
+  cap.addEventListener('pointerup', (e) => { panning = false; cap.classList.remove('grabbing'); cap.releasePointerCapture(e.pointerId); });
+  cap.addEventListener('dblclick', () => { z = 1; panX = 0; panY = 0; applyZoom(); });
 
   // ---- stats modal: load + refresh ----
   async function loadStats() {
