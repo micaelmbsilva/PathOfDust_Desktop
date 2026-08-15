@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Adventure — Kibukah</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    font-family: "Segoe UI", Arial, sans-serif; color: #eae6f5;
+    background: #1a1a1a; } /* matches the overlay's own bg so zoom-out margins blend */
+
+  /* overlay fills everything, behind the chrome. display-only (cross-origin),
+     so pointer-events off — a capture layer above it handles zoom. Its INTERNAL
+     size is changed inversely + scaled back, so the scene stays full-bleed while
+     the content (characters) shrinks/grows. Anchored top-left (ground at bottom). */
+  #overlay { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 0;
+    pointer-events: none; transform-origin: 0 0; }
+  #zoomcapture { position: fixed; inset: 0; z-index: 10; }
+
+  /* top button bar */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 20;
+    display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    background: linear-gradient(#1c1830ee, #1c183099); backdrop-filter: blur(4px);
+    border-bottom: 1px solid rgba(160,140,255,0.25); }
+  #topbar .title { font-weight: 600; color: #c9bdf0; margin-right: auto; font-size: 0.95rem; }
+  .tbtn { background: rgba(120,90,255,0.18); color: #eae6f5; border: 1px solid rgba(160,140,255,0.35);
+    border-radius: 8px; padding: 6px 14px; font-size: 0.9rem; cursor: pointer; }
+  .tbtn:hover { background: rgba(120,90,255,0.34); }
+
+  /* draggable stats modal */
+  #stats { position: fixed; top: 64px; left: 16px; z-index: 30; width: 260px;
+    background: rgba(24,20,40,0.92); border: 1px solid rgba(160,140,255,0.3);
+    border-radius: 12px; backdrop-filter: blur(6px); box-shadow: 0 8px 30px #0008;
+    user-select: none; }
+  #stats .bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: grab;
+    border-bottom: 1px solid rgba(160,140,255,0.2); }
+  #stats.collapsed .bar { border-bottom: 0; }
+  #stats .bar.grabbing { cursor: grabbing; }
+  #stats .hname { font-weight: 700; }
+  #stats .hsub { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; white-space: nowrap; }
+  #stats .toggle { background: none; border: 0; color: #c9bdf0; cursor: pointer; font-size: 1rem;
+    line-height: 1; padding: 2px 4px; }
+  #stats .rows { max-height: 60vh; overflow-y: auto; padding: 6px 10px 10px; }
+  #stats.collapsed .rows { display: none; }
+  .srow { display: flex; justify-content: space-between; gap: 10px; font-size: 0.83rem; padding: 2px 0; }
+  .srow .l { color: #b0a2d9; } .srow .v { font-weight: 600; }
+  .srow[title] { cursor: help; } .tmods span[title] { cursor: help; }
+  .srow.repair { cursor: pointer; border-bottom: 1px solid rgba(160,140,255,0.15); margin-bottom: 3px; padding-bottom: 4px; }
+  .srow.repair.on .v { color: #7fdba3; } .srow.repair.off .v { color: #ff8080; }
+  .muted { color: #8a7fb0; font-size: 0.8rem; }
+
+  /* new-item notifications */
+  #toasts { position: fixed; top: 56px; right: 16px; z-index: 40; width: 300px;
+    display: flex; flex-direction: column; gap: 10px; }
+  .toast { background: rgba(24,20,40,0.96); border: 1px solid rgba(160,140,255,0.4);
+    border-radius: 12px; padding: 12px; box-shadow: 0 8px 30px #0009; animation: pop .18s ease-out; }
+  @keyframes pop { from { transform: translateY(-6px); opacity: 0; } }
+  .toast .th { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
+  .toast .tn { font-weight: 700; } .toast .ts { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; }
+  .toast .perfect { color: #ffcf5a; font-weight: 700; }
+  .toast.reforge { border-color: #d9a441; background: rgba(60,44,20,0.96); }
+  .toast.reforge .tn { color: #ffcf5a; }
+  .toast .tmods { font-size: 0.8rem; color: #c9bdf0; margin: 2px 0 8px; }
+  .toast .tmods span { display: block; }
+  .toast .tacts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toast button { border-radius: 7px; padding: 5px 10px; font-size: 0.8rem; cursor: pointer;
+    border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.18); color: #eae6f5; }
+  .toast button:hover { background: rgba(120,90,255,0.34); }
+  .toast button.danger { border-color: #a04a4a; background: rgba(200,70,70,0.18); }
+  .toast button.danger:hover { background: rgba(200,70,70,0.34); }
+  .toast button:disabled { opacity: 0.5; cursor: default; }
+  /* dismiss-all: shown only when >2 toasts (toggled in JS) */
+  #dismissAll { display: none; align-self: flex-end; cursor: pointer;
+    background: rgba(200,70,70,0.2); border: 1px solid #a04a4a; color: #eae6f5;
+    border-radius: 8px; padding: 5px 12px; font-size: 0.8rem; }
+  #dismissAll:hover { background: rgba(200,70,70,0.36); }
+
+  /* Twitch chat — draggable/collapsible modal, like the stats modal.
+     The embed includes the channel-points redeem button. */
+  #chatpanel { position: fixed; top: 60px; right: 16px; z-index: 36; width: 360px;
+    display: none; flex-direction: column; background: rgba(24,20,40,0.96);
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 30px #0009; }
+  #chatpanel.open { display: flex; }
+  #chatpanel .cbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    cursor: grab; user-select: none; border-bottom: 1px solid rgba(160,140,255,0.2); }
+  #chatpanel .cbar.grabbing { cursor: grabbing; }
+  #chatpanel.collapsed .cbar { border-bottom: 0; }
+  #chatpanel .ctitle { font-weight: 700; font-size: 0.9rem; }
+  #chatpanel .cbtns { margin-left: auto; display: flex; gap: 2px; }
+  #chatpanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 2px 6px; }
+  #chatpanel .cwrap { height: 520px; }
+  #chatpanel.collapsed .cwrap { display: none; }
+  #chatpanel iframe { width: 100%; height: 100%; border: 0; }
+  #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
+</style>
+</head>
+<body>
+<iframe id="overlay" src="https://adventure.lokati.net/overlay"></iframe>
+<div id="zoomcapture" title="Wheel to zoom · double-click to reset"></div>
+
+<div id="topbar">
+  <span class="title">Adventure</span>
+  <button class="tbtn" onclick="openWin('/bag.html','bag',1140,880)">🎒 Bag</button>
+  <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
+  <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
+  <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag()">🔄 Refresh</button>
+</div>
+
+<div id="chatpanel">
+  <div class="cbar" id="chatbar">
+    <span class="ctitle">💬 Twitch Chat</span>
+    <span class="cbtns">
+      <button id="chatCollapse" title="collapse">▾</button>
+      <button id="chatCloseBtn" title="close" onclick="toggleChat(false)">✕</button>
+    </span>
+  </div>
+  <div class="cwrap"><iframe id="chatFrame" title="Twitch chat"></iframe></div>
+</div>
+
+<div id="stats">
+  <div class="bar" id="statsbar">
+    <span class="hname" id="hname">Character</span>
+    <span class="hsub" id="hsub"></span>
+    <button class="toggle" id="toggle" title="collapse">▾</button>
+  </div>
+  <div class="rows" id="rows"><p class="muted">Loading…</p></div>
+</div>
+
+<div id="toasts"><button id="dismissAll">✕ Dismiss all</button></div>
+
+<script>
+  // open a custom page in its own app-style window
+  function openWin(path, name, w = 1000, h = 800) {
+    window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`);
+  }
+
+  // Twitch chat panel — embed loads lazily; `parent` must be the serving host.
+  const TWITCH_LOGIN = 'lokati_gaming';
+  function toggleChat(show) {
+    const p = document.getElementById('chatpanel'), b = document.getElementById('chatBtn'),
+          f = document.getElementById('chatFrame');
+    const open = show === undefined ? !p.classList.contains('open') : show;
+    if (open && !f.getAttribute('src'))
+      f.src = `https://www.twitch.tv/embed/${TWITCH_LOGIN}/chat?parent=${location.hostname}&darkpopout`;
+    p.classList.toggle('open', open);
+    b.classList.toggle('active', open);
+  }
+  // collapse + drag, same pattern as the stats modal
+  (function () {
+    const panel = document.getElementById('chatpanel');
+    const bar = document.getElementById('chatbar');
+    const cbtn = document.getElementById('chatCollapse');
+    cbtn.onclick = () => {
+      panel.classList.toggle('collapsed');
+      cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+    };
+    let drag = false, dx = 0, dy = 0;
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.cbtns')) return;
+      drag = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
+      const r = panel.getBoundingClientRect();
+      dx = e.clientX - r.left; dy = e.clientY - r.top; panel.style.right = 'auto';
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      panel.style.left = Math.max(0, Math.min(innerWidth - 60, e.clientX - dx)) + 'px';
+      panel.style.top = Math.max(44, Math.min(innerHeight - 40, e.clientY - dy)) + 'px';
+    });
+    bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); });
+  })();
+
+  // ---- overlay zoom (wheel) ----
+  // The frame always fills the window; we change its INTERNAL size inversely
+  // and scale it back, so the overlay's own canvas reflows the scene smaller
+  // (zoom out) or larger (zoom in) with no dead margins.
+  const ov = document.getElementById('overlay');
+  const cap = document.getElementById('zoomcapture');
+  let z = 1;
+  const MIN = 0.4, MAX = 3;
+  // Change the frame's internal size inversely (both dims by the same factor →
+  // aspect preserved) and scale it back. Net: frame stays full-bleed, but the
+  // overlay's canvas is larger (z<1) so characters render smaller, or smaller
+  // (z>1) so they render bigger. The scene keeps filling the window.
+  const applyZoom = () => {
+    ov.style.width = ov.style.height = (100 / z) + '%';
+    ov.style.transform = `scale(${z})`;
+  };
+  cap.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    z = Math.min(MAX, Math.max(MIN, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
+    applyZoom();
+  }, { passive: false });
+  cap.addEventListener('dblclick', () => { z = 1; applyZoom(); });
+
+  // ---- stats modal: load + refresh ----
+  async function loadStats() {
+    try {
+      const r = await fetch('/api/me').then(r => r.json());
+      document.getElementById('hname').textContent = r.name;
+      // just the archetype — dust/sand already appear in the rows below
+      document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
+      const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
+        `${r.autoRepairTip ? ` data-tip="${r.autoRepairTip.replace(/"/g, '&quot;')}"` : ''}>` +
+        `<span class="l">🔧 Auto-repair</span><span class="v">${r.autoRepair ? 'On' : 'Off'}</span></div>`;
+      document.getElementById('rows').innerHTML = arRow + r.stats.map(s =>
+        `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
+        `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
+      document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
+    } catch {
+      document.getElementById('rows').innerHTML = '<p class="muted">Bridge offline — run server.mjs</p>';
+    }
+  }
+  loadStats();
+  setInterval(loadStats, 3000);
+
+  // ---- new-item notifications ----
+  // Known-item ids persist so a page reload doesn't re-toast the whole bag.
+  // First successful poll seeds silently; only ids new after that pop a toast.
+  const KEY = 'knownBagItems';
+  let known = new Set(JSON.parse(localStorage.getItem(KEY) || '[]'));
+  let seeded = known.size > 0;
+  const saveKnown = () => localStorage.setItem(KEY, JSON.stringify([...known]));
+
+  async function pollBag() {
+    let bag;
+    try { bag = await fetch('/api/bag').then(r => r.json()); }
+    catch { return; } // bridge offline — try again next tick
+    const ids = new Set(bag.items.map(i => i.id));
+    if (!seeded) { known = ids; seeded = true; saveKnown(); return; } // silent seed
+    for (const item of bag.items) {
+      if (!known.has(item.id)) { known.add(item.id); toast(item); }
+    }
+    // forget ids no longer in the bag so they'd re-notify if they come back
+    known = new Set([...known].filter(id => ids.has(id)));
+    saveKnown();
+  }
+  setInterval(pollBag, 3000);
+  pollBag();
+
+  // Event-driven refresh: the server pushes to /ws whenever something happens
+  // (fights, drops). Refresh stats+bag on push (debounced) so changes show
+  // near-instantly without polling harder. Falls back to the idle poll above.
+  function watchEvents() {
+    let ws, t = null;
+    try { ws = new WebSocket('wss://adventure.lokati.net/ws'); } catch { return; }
+    ws.onmessage = () => { clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700); };
+    ws.onclose = () => setTimeout(watchEvents, 3000);
+    ws.onerror = () => ws.close();
+  }
+  watchEvents();
+
+  async function action(endpoint, fields) {
+    return fetch('/api/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, fields }),
+    }).then(r => r.json());
+  }
+
+  function toast(item) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span data-tip="${(m.tip || '').replace(/"/g, '&quot;')}">${m.t}</span>`).join('')}</div>` : '';
+    el.innerHTML = `
+      <div class="th"><span class="tn">${item.name}</span>
+        <span class="ts">${item.slot} · ${item.tier} · ${item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${item.quality}</span>` : item.quality}</span></div>
+      ${mods}
+      <div class="tacts">
+        <button class="danger" data-act="dis">Disenchant</button>
+        <button data-act="lock">🔒 Lock</button>
+        <button data-act="bag">Bag</button>
+        <button data-act="x">Dismiss</button>
+      </div>`;
+    const close = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="x"]').onclick = close;
+    el.querySelector('[data-act="bag"]').onclick = () => openWin('/bag.html', 'bag');
+    el.querySelector('[data-act="lock"]').onclick = async (e) => {
+      e.target.disabled = true;
+      await action('toggle-disenchant-protect', { item_id: item.id, protect: 'on' });
+      e.target.textContent = '🔒 Locked';
+    };
+    el.querySelector('[data-act="dis"]').onclick = async (e) => {
+      if (!confirm(`Disenchant ${item.name}? This can't be undone.`)) return;
+      e.target.disabled = true;
+      await action('disenchant', { item_id: item.id });
+      close();
+    };
+    const dismissAll = document.getElementById('dismissAll');
+    dismissAll.after(el); // newest just below the dismiss-all bar
+    updateDismissAll();
+  }
+
+  // show "Dismiss all" only when more than 2 notifications are stacked
+  function updateDismissAll() {
+    const n = document.querySelectorAll('#toasts .toast').length;
+    document.getElementById('dismissAll').style.display = n > 2 ? 'block' : 'none';
+  }
+  document.getElementById('dismissAll').onclick = () => {
+    document.querySelectorAll('#toasts .toast').forEach(t => t.remove());
+    updateDismissAll();
+  };
+
+  // ---- Reforge Gear reminder: the channel reward is only available at the top
+  // of each hour and doesn't stack. Fire a reminder at each :00 (and once now).
+  // Its button opens the in-app Twitch chat panel, where the channel-points
+  // button lets you redeem the reward. Only one reforge toast at a time.
+  function showReforge() {
+    document.querySelectorAll('.toast.reforge').forEach(t => t.remove()); // no stack
+    const el = document.createElement('div');
+    el.className = 'toast reforge';
+    el.innerHTML = `
+      <div class="th"><span class="tn">⚒️ Reforge Gear ready</span><span class="ts">top of the hour</span></div>
+      <div class="tmods"><span>Free reforge available — doesn't stack, use before the next hour.</span></div>
+      <div class="tacts">
+        <button data-act="redeem">Open chat to redeem</button>
+        <button data-act="x">Dismiss</button>
+      </div>`;
+    el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="redeem"]').onclick = () => toggleChat(true);
+    document.getElementById('dismissAll').after(el);
+    updateDismissAll();
+  }
+  function scheduleReforge() {
+    const now = new Date();
+    const msToTop = (3600 - (now.getMinutes() * 60 + now.getSeconds())) * 1000 - now.getMilliseconds();
+    setTimeout(() => { showReforge(); setInterval(showReforge, 3600 * 1000); }, msToTop);
+  }
+  showReforge();      // it's available this hour until used
+  scheduleReforge();  // and refresh at every top-of-hour
+
+  // ---- collapse ----
+  const stats = document.getElementById('stats'), toggle = document.getElementById('toggle');
+  toggle.onclick = () => {
+    stats.classList.toggle('collapsed');
+    toggle.textContent = stats.classList.contains('collapsed') ? '▸' : '▾';
+  };
+
+  // ---- drag by the bar ----
+  const bar = document.getElementById('statsbar');
+  let dragging = false, dx = 0, dy = 0;
+  bar.addEventListener('pointerdown', (e) => {
+    if (e.target === toggle) return;
+    dragging = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
+    const r = stats.getBoundingClientRect();
+    dx = e.clientX - r.left; dy = e.clientY - r.top;
+    stats.style.right = 'auto'; // switch to left-anchored
+  });
+  bar.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const x = Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dx));
+    const y = Math.max(44, Math.min(window.innerHeight - 40, e.clientY - dy));
+    stats.style.left = x + 'px'; stats.style.top = y + 'px';
+  });
+  bar.addEventListener('pointerup', (e) => { dragging = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); });
+</script>
+<script src="/tooltip.js"></script>
+</body>
+</html>

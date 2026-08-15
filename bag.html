@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Bag — Kibukah</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: "Segoe UI", Arial, sans-serif;
+    background: #0c0a16; color: #eae6f5; }
+  h1 { font-size: 1.2rem; margin: 0 0 4px; }
+  h2 { font-size: 1rem; color: #c9bdf0; margin: 18px 0 8px; }
+  .bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px; padding: 4px 10px; font-size: 0.85rem; color: #eae6f5; }
+  .chip.repair { cursor: pointer; }
+  .chip.repair.on { border-color: #4a8a5a; background: rgba(120,255,160,0.12); }
+  .chip.repair.off { border-color: #a04a4a; background: rgba(200,70,70,0.12); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .item { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 10px; }
+  .item .n { font-weight: 700; }
+  .item .s { font-size: 0.72rem; color: #b0a2d9; }
+  .perfect { color: #ffcf5a; font-weight: 700; } /* Perfect Quality → gold */
+  .item .m { font-size: 0.8rem; color: #c9bdf0; margin: 6px 0; }
+  .grouphdr { font-size: 0.9rem; color: #b0a2d9; margin: 14px 0 6px; }
+  select { background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; padding: 3px 6px; }
+  .mline { display: flex; align-items: center; gap: 6px; }
+  .roll { font-size: 0.68rem; font-weight: 700; padding: 0 5px; border-radius: 4px;
+    border: 1px solid currentColor; white-space: nowrap; }
+  .roll.gold { color: #ffcf5a; }
+  .roll.t1 { color: #ffcf5a; } .roll.t2 { color: #ffb347; } .roll.t3 { color: #c792ea; }
+  .roll.t4 { color: #82aaff; } .roll.t5 { color: #7fdba3; } .roll.t6 { color: #5fb3b3; }
+  .roll.t7 { color: #9aa0b5; } .roll.t8 { color: #6b6f80; }
+  .hint { cursor: help; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  button { border-radius: 7px; padding: 5px 10px; font-size: 0.8rem; cursor: pointer;
+    border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.18); color: #eae6f5; }
+  button:hover { background: rgba(120,90,255,0.34); }
+  button.danger { border-color: #a04a4a; background: rgba(200,70,70,0.18); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .locked { color: #ffd479; font-size: 0.72rem; }
+  .craft { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 12px; }
+  .craft select { width: 100%; margin: 4px 0 8px; padding: 6px; background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; }
+  .craft label { font-size: 0.85rem; display: block; margin-bottom: 8px; }
+  .muted { color: #8a7fb0; }
+  #err { color: #ff8080; }
+</style>
+</head>
+<body>
+  <h1>🎒 Bag &amp; Crafting <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
+  <div class="bar" id="cur"></div>
+  <div id="err"></div>
+
+  <h2>Crafting</h2>
+  <div class="craft" id="craft"></div>
+
+  <h2>Equipped</h2>
+  <div class="grid" id="equipped"></div>
+
+  <div class="bar" style="justify-content:space-between; width:100%">
+    <h2 id="bagh" style="margin:0">Bag</h2>
+    <label>Sort <select id="sortBy">
+      <option value="tier">Tier</option>
+      <option value="quality">Quality</option>
+      <option value="roll">Best roll</option>
+      <option value="name">Name</option>
+      <option value="slot">Slot</option>
+    </select></label>
+    <label>Group <select id="groupBy">
+      <option value="">None</option>
+      <option value="slot">Slot</option>
+    </select></label>
+    <button id="disAll" class="danger" title="Disenchant every unlocked bag item. Krangled and 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All (unlocked)</button>
+  </div>
+  <div id="bag"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  async function api(endpoint, fields) {
+    const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
+    if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
+    return r;
+  }
+  const esc = (s) => (s || '').replace(/"/g, '&quot;');
+  const tip = (s) => s ? ` data-tip="${esc(s)}"` : '';
+  const SLOT_EMOJI = { weapon: '⚔️', helm: '🪖', body: '🛡️', gloves: '🧤', boots: '🥾' };
+  const title = (s) => (s || '').charAt(0).toUpperCase() + (s || '').slice(1).toLowerCase();
+  const slotOf = (s) => `${SLOT_EMOJI[(s || '').toLowerCase()] || ''} ${title(s)}`.trim();
+  const qual = (it) => {
+    const q = it.quality || '';
+    const inner = q.includes('Perfect') ? `<span class="perfect">${q}</span>` : q;
+    return it.qtip ? `<span class="hint"${tip(it.qtip)}>${inner}</span>` : inner;
+  };
+  // Roll % → tier (T1 best). Percentile-from-top: T1 95-100, T2 90-94, T3 75-89,
+  // T4 50-74, T5 35-49, T6 25-34, T7 15-24, T8 0-14. Gold when roll > 90.
+  const rollOf = (t) => { const m = (t || '').match(/(\d+(?:\.\d+)?)\s*%/); return m ? +m[1] : null; };
+  const tierOf = (r) => r >= 95 ? 1 : r >= 90 ? 2 : r >= 75 ? 3 : r >= 50 ? 4 : r >= 35 ? 5 : r >= 25 ? 6 : r >= 15 ? 7 : 8;
+  const modLine = (m) => {
+    const r = rollOf(m.tip);
+    if (r == null) return `<div class="mline"><span class="mt">${m.t}</span></div>`;
+    const t = tierOf(r);
+    return `<div class="mline"><span class="mt">${m.t}</span>` +
+      `<span class="roll t${t}${r > 90 ? ' gold' : ''}">T${t} · ${r}%</span></div>`;
+  };
+  const itemCard = (it, acts) => `
+    <div class="item">
+      <div class="n">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
+      <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}</div>
+      <div class="m">${(it.mods || []).map(modLine).join('')}</div>
+      <div class="acts">${acts}</div>
+    </div>`;
+
+  async function load() {
+    $('err').textContent = '';
+    let inv, meData;
+    try { [inv, meData] = await Promise.all([
+      fetch('/api/inventory').then(r => r.json()),
+      fetch('/api/me').then(r => r.json()).catch(() => ({})),
+    ]); }
+    catch { $('err').textContent = 'Bridge offline — run server.mjs'; return; }
+
+    const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
+    $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
+      inv.tokens.map(t => `<span class="chip">${t}</span>`).join('') +
+      `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-repair: ${meData.autoRepair ? 'On' : 'Off'}</button>`;
+    $('autoRep').onclick = async () => { await api('toggle-auto-repair', {}); refresh(); };
+
+    $('equipped').innerHTML = inv.equipped.map(it =>
+      itemCard(it, `<button data-un="${it.slot}">Unequip</button> ${shareBtn(it)}`)).join('') || '<p class="muted">Nothing equipped.</p>';
+
+    lastBag = inv.bag;
+    renderBag();
+
+    // crafting form — keep the current selection across the post-craft reload
+    const prevA = $('itemA')?.value, prevB = $('itemB')?.value;
+    const opt = (o) => `<option value="${o.id}">${o.label}</option>`;
+    $('craft').innerHTML = `
+      <label>Item A <select id="itemA">${inv.craft.options.map(opt).join('')}</select></label>
+      <label>Item B (recombine) <select id="itemB"><option value="">None</option>${inv.craft.options.map(opt).join('')}</select></label>
+      <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"> Veil this craft (+500 dust; Recombine also +500 per combined modifier)</label>
+      <div class="acts">${inv.craft.actions.map(a =>
+        `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}</div>`;
+    const keep = (sel, v) => { if (v && [...sel.options].some(o => o.value === v)) sel.value = v; };
+    keep($('itemA'), prevA); keep($('itemB'), prevB);
+
+    lastCraft = inv.craft;
+    updateCosts();
+    $('itemA').onchange = () => { updateCosts(); };
+    $('itemB').onchange = updateCosts;
+    $('veil').onchange = updateCosts;
+
+    wire();
+  }
+
+  // Replicate the live site's per-item cost calc so button costs are correct
+  // for the selected item (base + 3*tier; veil extras; reforge 30*tier; polish
+  // by quality). Token-based buttons (Regal/Krangle) keep the server label.
+  let lastCraft = { options: [], actions: [] };
+  function updateCosts() {
+    const byId = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
+    const A = byId[$('itemA')?.value], B = byId[$('itemB')?.value];
+    const tierA = A?.tier || 0, qualA = A?.quality || 0, perfA = !!A?.perfect;
+    const pool = (A?.affixes || 0) + (B?.affixes || 0);
+    const veiled = $('veil')?.checked;
+    for (const a of lastCraft.actions || []) {
+      const btn = document.querySelector(`[data-craft="${a.action}"]`);
+      if (!btn) continue;
+      if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s)`; btn.disabled = (a.sand ?? 0) < c; continue; }
+      if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d)`; btn.disabled = (a.dust ?? 0) < c; continue; }
+      if (a.base == null) { btn.textContent = a.label; btn.disabled = false; continue; } // Regal/Krangle: token label
+      let cost = a.recombine ? a.base : a.base + 3 * tierA;
+      if (veiled && a.veilExtra != null) { cost += a.veilExtra; if (a.recombine) cost += 500 * pool; }
+      btn.textContent = `${a.dataLabel} (${cost > 0 ? cost + 'd' : 'Free'})`;
+      btn.disabled = false;
+    }
+  }
+
+  // Refresh now, then once more after the server settles the action.
+  const refresh = () => { load(); setTimeout(load, 800); };
+
+  // Bag rendering with sort/group (applied to the cached bag; no refetch).
+  let lastBag = [];
+  const numTier = (i) => +(i.tier?.match(/\d+/) || [0])[0];
+  const numQual = (i) => i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
+  const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
+  // chat-ready one-liner, e.g.
+  // "✨ Ascended Hood 【Helm · T17 · ⭐92%】 +80 dps ➤ +50% dmg dealt (T5·45%)"
+  const shareText = (it) => {
+    const t = (it.tier || '').replace('Tier ', 'T');
+    const q = it.quality?.includes('Perfect') ? '🌟Perfect' : `⭐${(it.quality || '').replace('Quality ', '')}`;
+    const mods = (it.mods || []).map(m => {
+      const r = rollOf(m.tip);
+      return r != null ? `${m.t} (T${tierOf(r)}·${r}%)` : m.t;
+    }).join('  |  ');
+    return `✨ ${it.name} 【${slotOf(it.slot)} · ${t} · ${q}】${it.primary ? ` ${it.primary}` : ''}${mods ? `  ➤  ${mods}` : ''}`;
+  };
+  const shareBtn = (it) => `<button data-share="${esc(shareText(it))}" title="Copy for chat">Share</button>`;
+  const bagCard = (it) => itemCard(it,
+    `<button data-eq="${it.id}">Equip</button>
+     <button data-lock="${it.id}">${it.protected ? 'Unlock' : '🔒 Lock'}</button>
+     <button class="danger" data-dis="${it.id}" data-name="${it.name}">Disenchant</button>
+     ${shareBtn(it)}`);
+  function renderBag() {
+    const items = [...lastBag];
+    const cmp = { tier: (a, b) => numTier(b) - numTier(a), quality: (a, b) => numQual(b) - numQual(a),
+      roll: (a, b) => bestRoll(b) - bestRoll(a), name: (a, b) => a.name.localeCompare(b.name),
+      slot: (a, b) => a.slot.localeCompare(b.slot) }[$('sortBy').value] || (() => 0);
+    items.sort(cmp);
+    $('bagh').textContent = `Bag (${items.length})`;
+    if (!items.length) { $('bag').innerHTML = '<p class="muted">Empty.</p>'; return; }
+    if ($('groupBy').value === 'slot') {
+      const g = {};
+      for (const it of items) (g[it.slot] ||= []).push(it);
+      $('bag').innerHTML = Object.keys(g).sort().map(s =>
+        `<h3 class="grouphdr">${slotOf(s)} (${g[s].length})</h3><div class="grid">${g[s].map(bagCard).join('')}</div>`).join('');
+    } else {
+      $('bag').innerHTML = `<div class="grid">${items.map(bagCard).join('')}</div>`;
+    }
+    wire();
+  }
+  document.getElementById('sortBy').onchange = renderBag;
+  document.getElementById('groupBy').onchange = renderBag;
+
+  function wire() {
+    document.querySelectorAll('[data-un]').forEach(b => b.onclick = async () => { await api('unequip', { slot: b.dataset.un }); refresh(); });
+    document.querySelectorAll('[data-eq]').forEach(b => b.onclick = async () => { await api('equip', { item_id: b.dataset.eq }); refresh(); });
+    document.querySelectorAll('[data-lock]').forEach(b => b.onclick = async () => { await api('toggle-disenchant-protect', { item_id: b.dataset.lock, protect: 'on' }); refresh(); });
+    document.querySelectorAll('[data-dis]').forEach(b => b.onclick = async () => {
+      if (!confirm(`Disenchant ${b.dataset.name}? Can't be undone.`)) return;
+      await api('disenchant', { item_id: b.dataset.dis }); refresh();
+    });
+    document.querySelectorAll('[data-share]').forEach(b => b.onclick = async () => {
+      try { await navigator.clipboard.writeText(b.dataset.share); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
+      catch { $('err').textContent = 'Clipboard blocked'; }
+    });
+    document.querySelectorAll('[data-craft]').forEach(b => b.onclick = async () => {
+      const action = b.dataset.craft;
+      const fields = { action, item_a: $('itemA').value };
+      if (action === 'recombine' && $('itemB').value) fields.item_b = $('itemB').value;
+      if ($('veil').checked) fields.veiled = '1';
+      if ((action === 'scour' || action === 'krangle') && !confirm(`${action} this item? Can't be undone.`)) return;
+      await api('craft', fields); refresh();
+    });
+  }
+
+  // Disenchant every unlocked bag item (server skips Krangled + 🔒 Keep items).
+  document.getElementById('disAll').onclick = async () => {
+    if (!confirm(`Disenchant ALL unlocked bag items? Krangled and 🔒 Keep-marked items are skipped. Can't be undone.`)) return;
+    await api('disenchant-all', {});
+    refresh();
+  };
+
+  load();
+</script>
+<script src="/tooltip.js"></script>
+</body>
+</html>

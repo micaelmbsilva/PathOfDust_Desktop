@@ -1,0 +1,173 @@
+// Local bridge: serves our custom pages and holds the session so the browser
+// (which can't touch the httpOnly cookie) can read our stats and fire actions.
+// No deps. Run: node server.mjs   ->   http://localhost:8787
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname } from 'node:path';
+import { post, getAuthed } from './actions.mjs';
+
+const PORT = 8787;
+const ROOT = new URL('./', import.meta.url);
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
+
+// Pull our character sheet and extract name + stat rows. Regex over the site's
+// own markup — brittle-by-design is fine, it's one page we control the read of.
+async function me() {
+  const { text } = await getAuthed('/');
+  const name = (text.match(/<h1>([^<]*)<\/h1>/) || [])[1] || 'Character';
+  const nav = (text.match(/top-nav-stats">([^<]*)</) || [])[1] || '';
+  const stats = [];
+  const re = /class="stat-label"([^>]*)>(.*?)<\/div><div class="stat-value"[^>]*>(.*?)<\/div>/g;
+  for (let m; (m = re.exec(text)); ) stats.push({ label: strip(m[2]), value: strip(m[3]), tip: tipOf(m[1]) });
+  const autoRepair = /name="auto_repair"[^>]*checked/.test(text);
+  const autoRepairTip = strip((text.match(/name="auto_repair"[^>]*>([^<]*)</) || [])[1] || '')
+    || 'Auto-repair gear with dust after every boss fight';
+  return { name, nav, stats, autoRepair, autoRepairTip };
+}
+const strip = (s) => s.replace(/<[^>]*>/g, '')
+  .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#?\w+;/g, '').trim();
+
+// data-tip (the site's hover text) out of an element's attribute string.
+const tipOf = (attrs) => strip((attrs.match(/data-tip="([^"]*)"/) || [])[1] || '');
+// modifiers with their roll-% tooltip: [{ t: "+5 max hp", tip: "Roll: 30%" }]
+const modsOf = (chunk) => [...chunk.matchAll(/class="mod-roll"([^>]*)>([^<]*)</g)]
+  .map(m => ({ t: strip(m[2]), tip: tipOf(m[1]) }));
+// the gear-quality element's tooltip (Perfect Quality etc.)
+const qtipOf = (chunk) => tipOf((chunk.match(/class="gear-quality[^"]*"([^>]*)>/) || [])[1] || '');
+
+// Scrape the bag (unequipped items) from the inventory page. Each item's id is
+// the item_id its equip/disenchant forms carry; `protected` = the Keep checkbox.
+async function bag() {
+  const { text } = await getAuthed('/inventory');
+  const card = (text.split('class="card bag-card"')[1] || '').split('</div>\n</body>')[0];
+  const items = [];
+  for (const chunk of card.split('class="gear-slot"').slice(1)) {
+    const id = (chunk.match(/name="item_id"\s+value="([^"]+)"/) || [])[1];
+    if (!id || items.some(i => i.id === id)) continue; // dedupe (equip+disenchant forms repeat id)
+    const grab = (cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+    items.push({
+      id, name: grab('gear-name'), slot: grab('gear-slot-label'),
+      quality: grab('gear-quality'), qtip: qtipOf(chunk), tier: grab('gear-tier'),
+      primary: grab('gear-primary'), mods: modsOf(chunk),
+      protected: /name="protect"[^>]*checked/.test(chunk),
+    });
+  }
+  return { items };
+}
+
+// Full inventory: currencies, tokens, equipped gear, bag, and the craft form's
+// item options + action buttons. Enough to drive a custom Bag page.
+async function inventory() {
+  const { text } = await getAuthed('/inventory');
+  const nav = (text.match(/top-nav-stats">([^<]*)</) || [])[1] || '';
+  // Exact balances live in the craft buttons' data-dust / data-sand attributes
+  // (used for affordability checks); the nav only carries the abbreviated form.
+  const dust = (text.match(/data-dust="(\d+)"/) || [])[1]
+    ?? (nav.match(/💰\s*([\d.KM]+)/) || [])[1] ?? '?';
+  const sand = (text.match(/data-sand="(\d+)"/) || [])[1]
+    ?? (nav.match(/🪵\s*([\d.KM]+)/) || [])[1] ?? '?';
+  const tokens = [...text.matchAll(/class="token-pill">([^<]*)</g)].map(m => strip(m[1]));
+
+  // Equipped: gear-slots inside the "Equipped Items" card (before bag-card).
+  const equippedRegion = (text.split('Equipped Items')[1] || '').split('bag-card')[0];
+  const equipped = [];
+  for (const chunk of equippedRegion.split('class="gear-slot"').slice(1)) {
+    const slot = (chunk.match(/name="slot"\s+value="([^"]+)"/) || [])[1];
+    if (!slot) continue;
+    const grab = (cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+    equipped.push({
+      slot, name: grab('gear-name'), quality: grab('gear-quality'), qtip: qtipOf(chunk),
+      tier: grab('gear-tier'), primary: grab('gear-primary'), mods: modsOf(chunk),
+    });
+  }
+
+  // Craft form: item_a options + action buttons.
+  const craftForm = (text.split('action="/craft"')[1] || '').split('</form>')[0];
+  const selA = (craftForm.match(/<select name="item_a">([\s\S]*?)<\/select>/) || [])[1] || '';
+  const options = [...selA.matchAll(/<option value="([^"]*)"[^>]*data-affixes="(\d+)"[^>]*data-tier="(\d+)"[^>]*data-quality="(\d+)"[^>]*data-perfect="(\d)"[^>]*>([^<]*)</g)]
+    .map(m => ({ id: m[1], affixes: +m[2], tier: +m[3], quality: +m[4], perfect: m[5] === '1', label: strip(m[6]) }));
+  // Capture each button's cost data so the client can replicate the live
+  // per-item cost calc (base + 3*tier, veil extras, reforge 30*tier, polish).
+  const actions = [...craftForm.matchAll(/name="action" value="([^"]+)"([^>]*)>([^<]*)</g)]
+    .map(m => {
+      const a = m[2];
+      const num = (n) => { const v = (a.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
+      return {
+        action: m[1], label: strip(m[3]), tip: tipOf(a),
+        base: num('data-base'), veilExtra: num('data-veil-extra'),
+        dataLabel: (a.match(/data-label="([^"]*)"/) || [])[1] || strip(m[3]).replace(/\s*\(.*\)\s*$/, ''),
+        recombine: /data-recombine/.test(a), polish: /data-polish/.test(a), reforge: /data-reforge/.test(a),
+        dust: num('data-dust'), sand: num('data-sand'),
+      };
+    });
+  const veilTip = tipOf((craftForm.match(/class="veil-check"([^>]*)>/) || [])[1] || '');
+
+  return { dust, sand, tokens, equipped, bag: (await bag()).items, craft: { options, actions, veilTip } };
+}
+
+// Passive tree: points chip, respec/save availability, and every node.
+async function passives() {
+  const { text } = await getAuthed('/passives');
+  const points = strip((text.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || '');
+  const respecLabel = strip((text.match(/action="\/passives\/respec">\s*<button[^>]*>([^<]*)</) || [])[1] || 'Respec');
+  const canSave = /action="\/passives\/save">\s*<button(?![^>]*disabled)/.test(text);
+  // The live tree is an absolute canvas; grab its size + the SVG connectors
+  // verbatim so we can reproduce the exact layout and dependency lines.
+  const svg = (text.match(/<svg class="connectors"[\s\S]*?<\/svg>/) || [])[0] || '';
+  const stage = { w: +(svg.match(/width="(\d+)"/) || [])[1] || 1180,
+                  h: +(svg.match(/height="(\d+)"/) || [])[1] || 463 };
+  const nodes = [];
+  for (const chunk of text.split('class="node ').slice(1)) {
+    const head = chunk.slice(0, chunk.indexOf('</form>') + 7);
+    const key = (head.match(/name="node_key"\s+value="([^"]+)"/) || [])[1];
+    if (!key) continue;
+    const grab = (cls) => strip((head.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+    nodes.push({
+      key, name: grab('node-name'), tier: grab('node-kind'), rank: grab('node-rank'),
+      desc: strip((head.match(/data-tip="([^"]*)"/) || [])[1] || ''),
+      cls: head.slice(0, head.indexOf('"')),
+      x: +(head.match(/left:\s*(\d+)px/) || [])[1] || 0, // tree column position
+      y: +(head.match(/top:\s*(\d+)px/) || [])[1] || 0,  // tree row position
+      w: +(head.match(/width:\s*(\d+)px/) || [])[1] || 140,
+      canInc: /value="1"(?![^>]*disabled)/.test(head),
+      canDec: /value="-1"(?![^>]*disabled)/.test(head),
+    });
+  }
+  return { points, respecLabel, canSave, stage, connectors: svg, nodes };
+}
+
+createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url, `http://localhost:${PORT}`);
+    if (url.pathname === '/api/me') {
+      return json(res, await me());
+    }
+    if (url.pathname === '/api/bag') {
+      return json(res, await bag());
+    }
+    if (url.pathname === '/api/inventory') {
+      return json(res, await inventory());
+    }
+    if (url.pathname === '/api/passives') {
+      return json(res, await passives());
+    }
+    if (url.pathname === '/api/action' && req.method === 'POST') {
+      const { endpoint, fields } = JSON.parse(await body(req));
+      return json(res, await post(endpoint, fields || {}));
+    }
+    // static
+    let p = url.pathname === '/' ? '/index.html' : url.pathname;
+    const file = new URL('.' + p, ROOT);
+    const data = await readFile(file);
+    res.writeHead(200, { 'Content-Type': MIME[extname(p)] || 'application/octet-stream' });
+    res.end(data);
+  } catch (e) {
+    res.writeHead(e.code === 'ENOENT' ? 404 : 500);
+    res.end(String(e.message || e));
+  }
+}).listen(PORT, () => console.log(`bridge on http://localhost:${PORT}`));
+
+const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+const body = (req) => new Promise((r) => { let b = ''; req.on('data', c => b += c); req.on('end', () => r(b)); });

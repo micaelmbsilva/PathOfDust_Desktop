@@ -1,0 +1,23 @@
+# deps & build output
+node_modules/
+dist/
+
+# secrets — per-user sessions, never commit
+auth.json
+twitch.json
+
+# local browser profiles (login state)
+.chrome/
+.profile/
+.appchrome/
+
+# dev-only scraping / scanning tools + captured site pages (not shipped)
+harvest.mjs
+twitch-login.mjs
+capture.mjs
+check.mjs
+run.txt
+authed/
+
+# internal doc describing the reverse-engineered endpoints — keep private
+README-actions.md
