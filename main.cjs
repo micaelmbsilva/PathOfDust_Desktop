@@ -11,6 +11,31 @@ const http = require('node:http');
 const PORT = 8787;
 const SITE = 'https://adventure.lokati.net';
 const SEVENTV_ID = 'lppmekppnliemjclknbagdhoocikieoi';
+const RAW = 'https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/main';
+
+// Self-update: the app's web/bridge files (server.mjs, actions.mjs, *.html,
+// tooltip.js) are plain text served from disk, so we can refresh just those
+// from the repo without reinstalling the Electron shell. Downloads a newer set
+// into userData/app and returns the dir to load from (bundled copy otherwise).
+// The Electron shell (main.cjs/Chromium) still needs a full reinstall to change.
+async function resolveAppDir() {
+  const appDir = require('node:path').join(app.getPath('userData'), 'app');
+  const readVer = (dir) => { try { return JSON.parse(fs.readFileSync(path.join(dir, 'version.json'), 'utf8')).version || 0; } catch { return 0; } };
+  const bundledVer = readVer(__dirname);
+  let localVer = readVer(appDir);
+  try {
+    const get = async (u) => { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return r.text(); };
+    const manifest = JSON.parse(await get(`${RAW}/version.json`));
+    if (manifest.version > Math.max(bundledVer, localVer)) {
+      const files = await Promise.all(manifest.files.map(f => get(`${RAW}/${f}`).then(t => [f, t])));
+      fs.mkdirSync(appDir, { recursive: true });
+      for (const [f, t] of files) fs.writeFileSync(path.join(appDir, f), t); // all-or-nothing: fetched before writing
+      fs.writeFileSync(path.join(appDir, 'version.json'), JSON.stringify(manifest));
+      localVer = manifest.version;
+    }
+  } catch { /* offline / fetch failed — use what we already have */ }
+  return localVer > bundledVer ? appDir : __dirname;
+}
 
 // Load the 7TV extension (for custom emotes in the chat) from the user's own
 // Chrome install if it's there. Its content script matches *.twitch.tv/*, so it
@@ -66,8 +91,9 @@ async function relaxTwitchCookies() {
 
 async function start() {
   await load7tv(); // custom emotes in chat, if 7TV is installed
-  await import(pathToFileURL(path.join(__dirname, 'server.mjs')).href); // starts bridge on :8787
-  const actions = await import(pathToFileURL(path.join(__dirname, 'actions.mjs')).href);
+  const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
+  await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
+  const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   await waitForPort();
 
   const win = new BrowserWindow({
