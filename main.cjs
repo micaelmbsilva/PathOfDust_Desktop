@@ -151,6 +151,7 @@ async function start() {
 
   actions.setCookie(`adv_session=${advSession}`); // the bridge now acts as this user
   await relaxTwitchCookies();                     // make the chat embed see the login
+  await session.defaultSession.clearCache().catch(() => {}); // drop stale cached app files
   win.loadURL(`http://localhost:${PORT}/${updatedTo ? `?updated=${updatedTo}` : ''}`);
 }
 

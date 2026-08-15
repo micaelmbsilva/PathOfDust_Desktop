@@ -194,6 +194,7 @@ async function passives() {
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://localhost:${PORT}`);
+    res.setHeader('Cache-Control', 'no-store'); // never cache app files — always serve the current (updated) version
     if (url.pathname === '/config.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
       return res.end(`window.GAME_NAME=${JSON.stringify(GAME_NAME)};`);
