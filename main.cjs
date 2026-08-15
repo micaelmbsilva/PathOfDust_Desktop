@@ -108,7 +108,7 @@ async function start() {
   await waitForPort();
 
   const win = new BrowserWindow({
-    width: 1440, height: 900, backgroundColor: '#0c0a16', autoHideMenuBar: true, title: 'Adventure',
+    width: 1440, height: 900, backgroundColor: '#0c0a16', autoHideMenuBar: true, title: 'Path Of Dust',
   });
   win.webContents.setWindowOpenHandler(() => ({
     action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16' },
