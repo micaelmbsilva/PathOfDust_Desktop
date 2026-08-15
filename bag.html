@@ -22,6 +22,7 @@
   .item .n { font-weight: 700; }
   .item .s { font-size: 0.72rem; color: #b0a2d9; }
   .perfect { color: #ffcf5a; font-weight: 700; } /* Perfect Quality → gold */
+  .item .n.krangled { color: #b23a3a; } /* Krangled (locked) — matches the site */
   .item .m { font-size: 0.8rem; color: #c9bdf0; margin: 6px 0; }
   .veilbox { background: rgba(60,44,20,0.6); border: 1px solid #d9a441; border-radius: 10px; padding: 14px; margin-bottom: 16px; }
   .veilbox h2 { color: #ffcf5a; margin: 0 0 4px; }
@@ -118,7 +119,7 @@
   };
   const itemCard = (it, acts) => `
     <div class="item">
-      <div class="n">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
+      <div class="n${it.krangled ? ' krangled' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
       <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}</div>
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
       <div class="acts">${acts}</div>
