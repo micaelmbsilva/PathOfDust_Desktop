@@ -23,7 +23,8 @@
     display: flex; align-items: center; gap: 8px; padding: 0 12px;
     background: linear-gradient(#1c1830ee, #1c183099); backdrop-filter: blur(4px);
     border-bottom: 1px solid rgba(160,140,255,0.25); }
-  #topbar .title { font-weight: 600; color: #c9bdf0; margin-right: auto; font-size: 0.95rem; }
+  #topbar .title { font-weight: 600; color: #c9bdf0; font-size: 0.95rem; }
+  #topbar .ver { color: #8a7fb0; font-size: 0.72rem; margin-right: auto; }
   .tbtn { background: rgba(120,90,255,0.18); color: #eae6f5; border: 1px solid rgba(160,140,255,0.35);
     border-radius: 8px; padding: 6px 14px; font-size: 0.9rem; cursor: pointer; }
   .tbtn:hover { background: rgba(120,90,255,0.34); }
@@ -103,6 +104,7 @@
 
 <div id="topbar">
   <span class="title">Adventure</span>
+  <span class="ver" id="ver" title="App version — updates automatically on launch"></span>
   <button class="tbtn" onclick="openWin('/bag.html','bag',1140,880)">🎒 Bag</button>
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
@@ -372,6 +374,22 @@
     stats.style.left = x + 'px'; stats.style.top = y + 'px';
   });
   bar.addEventListener('pointerup', (e) => { dragging = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); });
+
+  // ---- version + auto-update feedback ----
+  fetch('/api/version').then(r => r.json()).then(v => { document.getElementById('ver').textContent = 'v' + v.version; }).catch(() => {});
+  const _upd = new URLSearchParams(location.search).get('updated');
+  if (_upd) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = `<div class="th"><span class="tn">✅ Updated to v${_upd}</span></div>` +
+      `<div class="tmods"><span>You're on the latest — the app updates itself on launch.</span></div>` +
+      `<div class="tacts"><button data-act="x">Dismiss</button></div>`;
+    const close = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="x"]').onclick = close;
+    document.getElementById('dismissAll').after(el);
+    updateDismissAll();
+    setTimeout(close, 12000);
+  }
 </script>
 <script src="/tooltip.js"></script>
 </body>
