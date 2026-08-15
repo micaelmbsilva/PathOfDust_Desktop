@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Passives — Kibukah</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 10px 12px; font-family: "Segoe UI", Arial, sans-serif;
+    background: #0c0a16; color: #eae6f5; }
+  h1 { font-size: 1.1rem; margin: 0 0 6px; }
+  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px; padding: 4px 10px; font-size: 0.85rem; }
+
+  /* absolute tree canvas, mirrors the live site's coordinate space */
+  #stage { position: relative; margin: 0 auto; }
+  /* left/top only — NOT inset:0, which would stretch the SVG to the whole
+     stage and break the connector-to-node alignment. Its width/height are set
+     in JS to match the node coordinate scale exactly. */
+  #stage svg.connectors { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .node { position: absolute; background: rgba(24,20,40,0.95);
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 8px; padding: 5px 7px;
+    display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+  .node.maxed { border-color: rgba(120,255,160,0.55); }
+  .node.locked { opacity: 0.45; }
+  .node .nm { font-weight: 700; font-size: 0.82rem; line-height: 1.05; }
+  .node .tr { font-size: 0.62rem; color: #8a7fb0; }
+  .node .acts { display: flex; align-items: center; gap: 6px; margin-top: auto; }
+  .node .rk { font-size: 0.78rem; color: #c9bdf0; min-width: 26px; text-align: center; }
+  button { border-radius: 6px; padding: 2px 9px; font-size: 0.95rem; cursor: pointer;
+    border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.2); color: #eae6f5; }
+  button:hover { background: rgba(120,90,255,0.36); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .bar .btn-save { background: rgba(120,255,160,0.18); border-color: #4a8a5a; padding: 5px 12px; }
+  .bar .btn-respec { background: rgba(255,180,80,0.16); border-color: #a0824a; padding: 5px 12px; }
+  .muted { color: #8a7fb0; } #err { color: #ff8080; }
+</style>
+</head>
+<body>
+  <h1>🌳 Passives <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
+  <div class="bar" id="bar"></div>
+  <div id="err"></div>
+  <div id="stage"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const NODE_H = 84;   // compact, a touch taller than the live node
+  const TARGET_W = Math.min(1780, screen.availWidth - 60); // fit the tree in-window
+
+  // Orthogonal bracket connectors, drawn in scaled px so they always meet cards.
+  // Each child (next row down) attaches to its nearest node in the row above.
+  function connectorsSVG(nodes, S, offY, SW, SH) {
+    const rows = [...new Set(nodes.map(n => n.y))].sort((a, b) => a - b);
+    const cx = (n) => (n.x + n.w / 2) * S, top = (n) => (n.y - offY) * S, bot = (n) => top(n) + NODE_H;
+    const L = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#7a6ba8" stroke-width="2"/>`;
+    let out = '';
+    for (let r = 0; r < rows.length - 1; r++) {
+      const parents = nodes.filter(n => n.y === rows[r]);
+      const children = nodes.filter(n => n.y === rows[r + 1]);
+      const nearest = (c) => parents.reduce((a, b) => Math.abs(cx(b) - cx(c)) < Math.abs(cx(a) - cx(c)) ? b : a);
+      for (const p of parents) {
+        const kids = children.filter(c => nearest(c) === p);
+        if (!kids.length) continue;
+        const busY = (bot(p) + Math.min(...kids.map(top))) / 2;
+        out += L(cx(p), bot(p), cx(p), busY);
+        out += L(Math.min(...kids.map(cx)), busY, Math.max(...kids.map(cx)), busY);
+        for (const c of kids) out += L(cx(c), busY, cx(c), top(c));
+      }
+    }
+    return `<svg class="connectors" width="${SW}" height="${SH}">${out}</svg>`;
+  }
+  async function api(endpoint, fields) {
+    const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
+    if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
+    return r;
+  }
+  // refresh now, then again once the server settles the action
+  const refresh = () => { load(); setTimeout(load, 800); };
+
+  async function load() {
+    $('err').textContent = '';
+    let p;
+    try { p = await fetch('/api/passives').then(r => r.json()); }
+    catch { $('err').textContent = 'Bridge offline — run server.mjs'; return; }
+
+    $('bar').innerHTML =
+      `<span class="chip">🪓 ${p.points}</span>
+       <button class="btn-save" id="save" ${p.canSave ? '' : 'disabled'}>Save Changes</button>
+       <button class="btn-respec" id="respec">${p.respecLabel}</button>`;
+    $('save').onclick = async () => { await api('passives/save', {}); refresh(); };
+    $('respec').onclick = async () => { if (confirm('Respec — reset all points?')) { await api('passives/respec', {}); refresh(); } };
+
+    const stage = $('stage');
+    const offY = Math.max(0, Math.min(...p.nodes.map(n => n.y)) - 30); // trim empty top band
+    // Scale to fit the whole tree in TARGET_W. Some nodes overhang the native
+    // SVG width, so size the canvas off the real content extent, but keep the
+    // SVG's own scale = S (viewBox stays native) so lines stay aligned to nodes.
+    const contentW = Math.max(p.stage.w, ...p.nodes.map(n => n.x + n.w));
+    const maxY = Math.max(...p.nodes.map(n => n.y));
+    const S = Math.min(1.6, Math.max(1.05, TARGET_W / contentW));
+    const SW = contentW * S;
+    const SH = Math.max((p.stage.h - offY) * S, (maxY - offY) * S + NODE_H + 14);
+    stage.style.width = SW + 'px';
+    stage.style.height = SH + 'px';
+    // Draw our own connectors from the real node positions — the site's SVG
+    // stops short of the cards by non-constant offsets, so it can't be reused.
+    stage.innerHTML = connectorsSVG(p.nodes, S, offY, SW, SH) + p.nodes.map(n => {
+      const maxed = n.cls.includes('maxed') || n.cls.includes('specialized');
+      const locked = n.cls.includes('locked');
+      return `<div class="node ${maxed ? 'maxed' : ''} ${locked ? 'locked' : ''}"
+        style="left:${n.x * S}px;top:${(n.y - offY) * S}px;width:${n.w * S}px;height:${NODE_H}px;"
+        data-tip="${n.desc.replace(/"/g, '&quot;')}">
+        <div class="nm">${n.name}</div>
+        <div class="tr">${n.tier || ''}</div>
+        <div class="acts">
+          <button data-dec="${n.key}" ${n.canDec ? '' : 'disabled'}>−</button>
+          <span class="rk">${n.rank}</span>
+          <button data-inc="${n.key}" ${n.canInc ? '' : 'disabled'}>+</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    stage.querySelectorAll('[data-inc]').forEach(b => b.onclick = async () => { await api('passives/allocate', { node_key: b.dataset.inc, delta: '1' }); refresh(); });
+    stage.querySelectorAll('[data-dec]').forEach(b => b.onclick = async () => { await api('passives/allocate', { node_key: b.dataset.dec, delta: '-1' }); refresh(); });
+
+    // size the popup to the tree once — only when standalone, not as an SPA panel
+    if (!window._sized && window.top === window) {
+      window._sized = true;
+      const w = Math.min(screen.availWidth, SW + 48);
+      const h = Math.min(screen.availHeight, SH + 130);
+      try { window.resizeTo(w, h); } catch {}
+    }
+  }
+  load();
+</script>
+<script src="/tooltip.js"></script>
+</body>
+</html>
