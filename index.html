@@ -115,7 +115,7 @@
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight me</button>
   <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag()">🔄 Refresh</button>
-  <button class="tbtn" title="Check for updates" onclick="checkUpdate(true)">⬆️ Update</button>
+  <button class="tbtn" id="updateBtn" title="Check for updates" onclick="updateAction()">Check for Updates</button>
 </div>
 
 <div id="chatpanel">
@@ -435,12 +435,27 @@
     el.querySelector('[data-act="restart"]').onclick = () => fetch('/api/restart', { method: 'POST' });
     document.getElementById('dismissAll').after(el); updateDismissAll();
   }
-  let _notifiedVer = 0;
+  let _notifiedVer = 0, pendingUpdate = 0;
+  // Button click: if we know an update is ready, prompt to restart; else check.
+  function updateAction() { if (pendingUpdate) promptRestart(); else checkUpdate(true); }
+  function setPending(v) {
+    pendingUpdate = v;
+    const b = document.getElementById('updateBtn');
+    b.textContent = `⬆️ Update to v${v}`;
+    b.classList.add('active');
+  }
+  function promptRestart() {
+    if (confirm(`Update v${pendingUpdate} is ready.\n\nRestart now to apply it? Your login and layout are kept.`))
+      fetch('/api/restart', { method: 'POST' });
+  }
   async function checkUpdate(manual) {
     let r;
     try { r = await fetch('/api/check-update').then(r => r.json()); } catch { if (manual) infoToast('Update check failed'); return; }
-    if (r.updateAvailable) { if (manual || r.latest !== _notifiedVer) { _notifiedVer = r.latest; showUpdateToast(r.latest); } }
-    else if (manual && r.error) infoToast('Update check failed');
+    if (r.updateAvailable) {
+      setPending(r.latest);
+      if (manual) promptRestart();                                      // manual check → popup now
+      else if (r.latest !== _notifiedVer) { _notifiedVer = r.latest; showUpdateToast(r.latest); } // background → toast
+    } else if (manual && r.error) infoToast('Update check failed');
     else if (manual) infoToast(`✅ Up to date (v${r.current})`);
   }
   setTimeout(() => checkUpdate(false), 15000);        // shortly after launch
