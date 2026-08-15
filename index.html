@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Adventure — Kibukah</title>
+<title>Path Of Dust</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -219,6 +219,7 @@
     try {
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
+      if (r.name) document.title = 'Path Of Dust — ' + r.name;
       if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); } // enable highlight once we know the name
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
@@ -229,6 +230,7 @@
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
+      reconcileReforge(r.reforge);
     } catch {
       document.getElementById('rows').innerHTML = '<p class="muted">Bridge offline — run server.mjs</p>';
     }
@@ -322,33 +324,35 @@
     updateDismissAll();
   };
 
-  // ---- Reforge Gear reminder: the channel reward is only available at the top
-  // of each hour and doesn't stack. Fire a reminder at each :00 (and once now).
-  // Its button opens the in-app Twitch chat panel, where the channel-points
-  // button lets you redeem the reward. Only one reforge toast at a time.
-  function showReforge() {
-    document.querySelectorAll('.toast.reforge').forEach(t => t.remove()); // no stack
+  // ---- Reforge Gear reminder: once per hour, shared between a 1k-dust option
+  // and the 1k channel-points redemption. Driven by the live card state from
+  // /api/me (see reconcileReforge) — shown while available, one at a time.
+  function showReforge(rf) {
+    document.querySelectorAll('.toast.reforge').forEach(t => t.remove());
     const el = document.createElement('div');
     el.className = 'toast reforge';
+    const dustBtn = (rf.canDust && rf.action) ? `<button data-act="dust">${rf.label || 'Reforge (1k dust)'}</button>` : '';
     el.innerHTML = `
-      <div class="th"><span class="tn">⚒️ Reforge Gear ready</span><span class="ts">top of the hour</span></div>
-      <div class="tmods"><span>Free reforge available — doesn't stack, use before the next hour.</span></div>
+      <div class="th"><span class="tn">⚒️ Reforge Gear ready</span><span class="ts">once per hour</span></div>
+      <div class="tmods"><span>Upgrade a random equipped item 2–4 tiers — 1k dust or 1k channel points.</span></div>
       <div class="tacts">
-        <button data-act="redeem">Open chat to redeem</button>
+        ${dustBtn}
+        <button data-act="chat">Redeem (points)</button>
         <button data-act="x">Dismiss</button>
       </div>`;
     el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
-    el.querySelector('[data-act="redeem"]').onclick = () => toggleChat(true);
+    el.querySelector('[data-act="chat"]').onclick = () => toggleChat(true);
+    const db = el.querySelector('[data-act="dust"]');
+    if (db) db.onclick = async () => { db.disabled = true; await action(rf.action, {}); loadStats(); };
     document.getElementById('dismissAll').after(el);
     updateDismissAll();
   }
-  function scheduleReforge() {
-    const now = new Date();
-    const msToTop = (3600 - (now.getMinutes() * 60 + now.getSeconds())) * 1000 - now.getMilliseconds();
-    setTimeout(() => { showReforge(); setInterval(showReforge, 3600 * 1000); }, msToTop);
+  // Show the reforge toast while available; remove it once used/on cooldown.
+  function reconcileReforge(rf) {
+    const cur = document.querySelector('.toast.reforge');
+    if (rf && rf.available) { if (!cur) showReforge(rf); }
+    else if (cur) { cur.remove(); updateDismissAll(); }
   }
-  showReforge();      // it's available this hour until used
-  scheduleReforge();  // and refresh at every top-of-hour
 
   // ---- collapse ----
   const stats = document.getElementById('stats'), toggle = document.getElementById('toggle');

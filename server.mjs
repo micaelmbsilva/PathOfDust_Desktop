@@ -23,7 +23,20 @@ async function me() {
   const autoRepair = /name="auto_repair"[^>]*checked/.test(text);
   const autoRepairTip = strip((text.match(/name="auto_repair"[^>]*>([^<]*)</) || [])[1] || '')
     || 'Auto-repair gear with dust after every boss fight';
-  return { name, nav, stats, autoRepair, autoRepairTip };
+
+  // Reforge Gear card: once/hour, shared between 1k-dust and channel-points.
+  // Parse availability + reset + (when available) the dust form's endpoint.
+  let reforge = { available: false, resetMs: 0, action: null, label: null, canDust: false };
+  const ci = text.indexOf('Reforge Gear');
+  if (ci > 0) {
+    const s = text.lastIndexOf('data-reset-ms', ci);
+    const card = text.slice(s - 40, ci + 700);
+    reforge.resetMs = +(card.match(/data-reset-ms="(\d+)"/) || [])[1] || 0;
+    reforge.available = !/reforge-pill[^"]*reforge-used/.test(card);
+    const f = card.match(/<form[^>]*action="([^"]+)"[^>]*>\s*<button([^>]*)>([^<]*)<\/button>/);
+    if (f) { reforge.action = f[1]; reforge.canDust = !/disabled/.test(f[2]); reforge.label = strip(f[3]); }
+  }
+  return { name, nav, stats, autoRepair, autoRepairTip, reforge };
 }
 const strip = (s) => s.replace(/<[^>]*>/g, '')
   .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')

@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Passives — Kibukah</title>
+<title>Path Of Dust — Passives</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -172,6 +172,7 @@
     }
   }
   load();
+  fetch('/api/me').then(r => r.json()).then(me => { if (me.name) document.title = `Path Of Dust — Passives — ${me.name}`; }).catch(() => {});
 </script>
 <script src="/tooltip.js"></script>
 </body>
