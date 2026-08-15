@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Ensure Electron binary
+        run: node node_modules/electron/install.js
+
+      - name: Package app
+        run: npm run dist
+
+      - name: Zip build
+        shell: pwsh
+        run: Compress-Archive -Path dist/LokatiOverlay-win32-x64 -DestinationPath PathOfDust.zip -Force
+
+      - name: Publish "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          body: |
+            Latest PathOfDust desktop build.
+            Download PathOfDust.zip, extract, run LokatiOverlay.exe.
+            The app self-updates its content from the repo on launch; re-download only for a new shell version.
+          files: PathOfDust.zip
