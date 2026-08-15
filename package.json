@@ -1,5 +1,6 @@
 {
   "name": "lokati_overlay",
+  "productName": "Path of Dust",
   "version": "1.0.0",
   "description": "Custom overlay + dashboard app for adventure.lokati.net",
   "main": "main.cjs",
@@ -8,7 +9,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-packager . LokatiOverlay --platform=win32 --arch=x64 --out=dist --overwrite --prune=true --ignore=\"(\\.profile|\\.chrome|\\.appchrome|authed|dist|auth\\.json|twitch\\.json|node_modules/.cache)\""
+    "dist": "electron-packager . \"Path of Dust\" --platform=win32 --arch=x64 --out=dist --overwrite --prune=true --ignore=\"(\\.profile|\\.chrome|\\.appchrome|authed|dist|auth\\.json|twitch\\.json|node_modules/.cache)\""
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",

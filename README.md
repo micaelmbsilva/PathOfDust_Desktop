@@ -36,10 +36,10 @@ your character and watch the action without juggling browser tabs.
 1. Go to the [**latest release**](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/tag/latest).
 2. Download **`PathOfDust.zip`**.
 3. **Extract** it anywhere (right-click → Extract All).
-4. Open the extracted folder and run **`LokatiOverlay.exe`**.
+4. Open the extracted folder and run **`Path of Dust.exe`**.
    - Windows SmartScreen may warn on an unsigned app → *More info → Run anyway*.
 
-> **Tip:** right-click `LokatiOverlay.exe` → *Send to → Desktop (create shortcut)* for one-click launch.
+> **Tip:** right-click `Path of Dust.exe` → *Send to → Desktop (create shortcut)* for one-click launch.
 
 ### First launch — log in
 

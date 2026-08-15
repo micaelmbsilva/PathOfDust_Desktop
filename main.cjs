@@ -124,10 +124,11 @@ async function start() {
   const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
   await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
+  const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);
   await waitForPort();
 
   const win = new BrowserWindow({
-    width: 1440, height: 900, backgroundColor: '#0c0a16', autoHideMenuBar: true, title: 'Path Of Dust',
+    width: 1440, height: 900, backgroundColor: '#0c0a16', autoHideMenuBar: true, title: GAME_NAME,
   });
   win.webContents.setWindowOpenHandler(() => ({
     action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16' },
