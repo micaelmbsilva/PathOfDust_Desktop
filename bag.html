@@ -21,6 +21,10 @@
   .item .s { font-size: 0.72rem; color: #b0a2d9; }
   .perfect { color: #ffcf5a; font-weight: 700; } /* Perfect Quality → gold */
   .item .m { font-size: 0.8rem; color: #c9bdf0; margin: 6px 0; }
+  .veilbox { background: rgba(60,44,20,0.6); border: 1px solid #d9a441; border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  .veilbox h2 { color: #ffcf5a; margin: 0 0 4px; }
+  .veilbox .acts { margin-top: 10px; }
+  .veilbox button { font-size: 0.95rem; padding: 8px 14px; }
   .grouphdr { font-size: 0.9rem; color: #b0a2d9; margin: 14px 0 6px; }
   select { background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; padding: 3px 6px; }
   .mline { display: flex; align-items: center; gap: 6px; }
@@ -50,6 +54,8 @@
   <h1>🎒 Bag &amp; Crafting <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
   <div class="bar" id="cur"></div>
   <div id="err"></div>
+
+  <div id="veilChoice"></div>
 
   <h2>Crafting</h2>
   <div class="craft" id="craft"></div>
@@ -128,6 +134,16 @@
 
     $('equipped').innerHTML = inv.equipped.map(it =>
       itemCard(it, `<button data-un="${it.slot}">Unequip</button> ${shareBtn(it)}`)).join('') || '<p class="muted">Nothing equipped.</p>';
+
+    // pending veil/token choice: show the 3 outcomes to pick from (tier the roll if present)
+    if (inv.veil) {
+      $('veilChoice').innerHTML = `<div class="veilbox"><h2>${inv.veil.title}</h2>` +
+        `<p class="muted">Pick one — the other two are discarded.</p><div class="acts">` +
+        // NOTE: the option's % is the stat value, not a roll — the site doesn't
+        // expose the roll here, so no tier badge (would be misleading).
+        inv.veil.options.map(o => `<button data-veilpick="${o.index}">${o.text}</button>`).join('') +
+        `</div></div>`;
+    } else { $('veilChoice').innerHTML = ''; }
 
     lastBag = inv.bag;
     renderBag();
@@ -230,6 +246,7 @@
       if (!confirm(`Disenchant ${b.dataset.name}? Can't be undone.`)) return;
       await api('disenchant', { item_id: b.dataset.dis }); refresh();
     });
+    document.querySelectorAll('[data-veilpick]').forEach(b => b.onclick = async () => { await api('craft/choose-veil', { index: b.dataset.veilpick }); refresh(); });
     document.querySelectorAll('[data-share]').forEach(b => b.onclick = async () => {
       try { await navigator.clipboard.writeText(b.dataset.share); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
       catch { $('err').textContent = 'Clipboard blocked'; }

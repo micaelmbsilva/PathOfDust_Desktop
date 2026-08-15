@@ -104,7 +104,18 @@ async function inventory() {
     });
   const veilTip = tipOf((craftForm.match(/class="veil-check"([^>]*)>/) || [])[1] || '');
 
-  return { dust, sand, tokens, equipped, bag: (await bag()).items, craft: { options, actions, veilTip } };
+  // Pending veil/token choice: a veiled or token craft rolls 3 outcomes and the
+  // site waits for the user to pick one (POST /craft/choose-veil, index 0-2).
+  let veil = null;
+  const vcRegion = (text.split('id="veil-choice"')[1] || '').split('bag-card')[0];
+  if (vcRegion) {
+    const title = strip((vcRegion.match(/<h2>([^<]*)<\/h2>/) || [])[1] || 'Choose your outcome');
+    const options = [...vcRegion.matchAll(/name="index" value="(\d+)"[\s\S]*?<button[^>]*>([^<]*)</g)]
+      .map(m => ({ index: +m[1], text: strip(m[2]).replace(/^Option \d+:\s*/, '') }));
+    if (options.length) veil = { title, options };
+  }
+
+  return { dust, sand, tokens, equipped, bag: (await bag()).items, craft: { options, actions, veilTip }, veil };
 }
 
 // Passive tree: points chip, respec/save availability, and every node.
