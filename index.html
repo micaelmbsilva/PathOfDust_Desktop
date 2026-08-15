@@ -34,7 +34,9 @@
   #stats { position: fixed; top: 64px; left: 16px; z-index: 30; width: 260px;
     background: rgba(24,20,40,0.92); border: 1px solid rgba(160,140,255,0.3);
     border-radius: 12px; backdrop-filter: blur(6px); box-shadow: 0 8px 30px #0008;
-    user-select: none; }
+    user-select: none; resize: both; overflow: hidden; min-width: 200px; min-height: 110px;
+    display: flex; flex-direction: column; }
+  #stats.collapsed { height: auto !important; resize: none; }
   #stats .bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: grab;
     border-bottom: 1px solid rgba(160,140,255,0.2); }
   #stats.collapsed .bar { border-bottom: 0; }
@@ -43,7 +45,7 @@
   #stats .hsub { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; white-space: nowrap; }
   #stats .toggle { background: none; border: 0; color: #c9bdf0; cursor: pointer; font-size: 1rem;
     line-height: 1; padding: 2px 4px; }
-  #stats .rows { max-height: 60vh; overflow-y: auto; padding: 6px 10px 10px; }
+  #stats .rows { flex: 1; min-height: 0; max-height: 70vh; overflow-y: auto; padding: 6px 10px 10px; }
   #stats.collapsed .rows { display: none; }
   .srow { display: flex; justify-content: space-between; gap: 10px; font-size: 0.83rem; padding: 2px 0; }
   .srow .l { color: #b0a2d9; } .srow .v { font-weight: 600; }
@@ -80,10 +82,10 @@
 
   /* Twitch chat — draggable/collapsible modal, like the stats modal.
      The embed includes the channel-points redeem button. */
-  #chatpanel { position: fixed; top: 60px; right: 16px; z-index: 36; width: 360px;
+  #chatpanel { position: fixed; top: 60px; right: 16px; z-index: 36; width: 360px; height: 560px;
     display: none; flex-direction: column; background: rgba(24,20,40,0.96);
     border: 1px solid rgba(160,140,255,0.3); border-radius: 12px; overflow: hidden;
-    box-shadow: 0 8px 30px #0009; }
+    box-shadow: 0 8px 30px #0009; resize: both; min-width: 280px; min-height: 260px; }
   #chatpanel.open { display: flex; }
   #chatpanel .cbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
     cursor: grab; user-select: none; border-bottom: 1px solid rgba(160,140,255,0.2); }
@@ -93,7 +95,8 @@
   #chatpanel .cbtns { margin-left: auto; display: flex; gap: 2px; }
   #chatpanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
     font-size: 1rem; line-height: 1; padding: 2px 6px; }
-  #chatpanel .cwrap { height: 520px; }
+  #chatpanel .cwrap { flex: 1; min-height: 0; }
+  #chatpanel.collapsed { height: auto !important; }
   #chatpanel.collapsed .cwrap { display: none; }
   #chatpanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
@@ -111,12 +114,14 @@
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight me</button>
   <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag()">🔄 Refresh</button>
+  <button class="tbtn" title="Check for updates" onclick="checkUpdate(true)">⬆️ Update</button>
 </div>
 
 <div id="chatpanel">
   <div class="cbar" id="chatbar">
     <span class="ctitle">💬 Twitch Chat</span>
     <span class="cbtns">
+      <button id="chatPop" title="pop out to its own window">⧉</button>
       <button id="chatCollapse" title="collapse">▾</button>
       <button id="chatCloseBtn" title="close" onclick="toggleChat(false)">✕</button>
     </span>
@@ -180,6 +185,11 @@
     cbtn.onclick = () => {
       panel.classList.toggle('collapsed');
       cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+    };
+    // pop out into a real window — fully interactive Twitch chat, no iframe quirks
+    document.getElementById('chatPop').onclick = () => {
+      window.open(`https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`, 'pdchat', 'width=420,height=640');
+      toggleChat(false);
     };
     let drag = false, dx = 0, dy = 0;
     bar.addEventListener('pointerdown', (e) => {
@@ -386,6 +396,36 @@
 
   // ---- version + auto-update feedback ----
   fetch('/api/version').then(r => r.json()).then(v => { document.getElementById('ver').textContent = 'v' + v.version; }).catch(() => {});
+
+  function infoToast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = `<div class="th"><span class="tn">${msg}</span></div><div class="tacts"><button data-act="x">OK</button></div>`;
+    const close = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="x"]').onclick = close;
+    document.getElementById('dismissAll').after(el); updateDismissAll(); setTimeout(close, 8000);
+  }
+  function showUpdateToast(latest) {
+    document.querySelectorAll('.toast.update').forEach(t => t.remove());
+    const el = document.createElement('div');
+    el.className = 'toast update';
+    el.innerHTML = `<div class="th"><span class="tn">⬆️ Update v${latest} available</span></div>` +
+      `<div class="tmods"><span>Restart to apply — your login and layout are kept.</span></div>` +
+      `<div class="tacts"><button data-act="restart">Restart &amp; update</button><button data-act="x">Later</button></div>`;
+    el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="restart"]').onclick = () => fetch('/api/restart', { method: 'POST' });
+    document.getElementById('dismissAll').after(el); updateDismissAll();
+  }
+  let _notifiedVer = 0;
+  async function checkUpdate(manual) {
+    let r;
+    try { r = await fetch('/api/check-update').then(r => r.json()); } catch { if (manual) infoToast('Update check failed'); return; }
+    if (r.updateAvailable) { if (manual || r.latest !== _notifiedVer) { _notifiedVer = r.latest; showUpdateToast(r.latest); } }
+    else if (manual && r.error) infoToast('Update check failed');
+    else if (manual) infoToast(`✅ Up to date (v${r.current})`);
+  }
+  setTimeout(() => checkUpdate(false), 15000);        // shortly after launch
+  setInterval(() => checkUpdate(false), 20 * 60000);  // and every 20 min
   const _upd = new URLSearchParams(location.search).get('updated');
   if (_upd) {
     const el = document.createElement('div');
