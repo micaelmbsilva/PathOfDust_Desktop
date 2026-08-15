@@ -163,7 +163,8 @@
           f = document.getElementById('chatFrame');
     const open = show === undefined ? !p.classList.contains('open') : show;
     if (open && !f.getAttribute('src'))
-      f.src = `https://www.twitch.tv/embed/${TWITCH_LOGIN}/chat?parent=${location.hostname}&darkpopout`;
+      // full popout chat (send-capable) — the app strips Twitch's frame headers so it loads
+      f.src = `https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`;
     p.classList.toggle('open', open);
     b.classList.toggle('active', open);
   }
