@@ -49,23 +49,62 @@
 
   // Orthogonal bracket connectors, drawn in scaled px so they always meet cards.
   // Each child (next row down) attaches to its nearest node in the row above.
-  function connectorsSVG(nodes, S, offY, SW, SH) {
-    const rows = [...new Set(nodes.map(n => n.y))].sort((a, b) => a - b);
+  // Real parent→child topology from the site's own connector SVG (per bus:
+  // the up-stub picks the parent, the down-stubs pick the children — nearest
+  // node by centre-x, which survives the site's fixed coordinate offset). Works
+  // for any archetype; falls back to nearest-row-x if no SVG edges are found.
+  function deriveEdges(nodes, connectors) {
+    const rowYs = [...new Set(nodes.map(n => n.y))].sort((a, b) => a - b);
+    const cxN = (n) => n.x + n.w / 2;
+    const nearest = (x, cand) => cand.reduce((a, b) => Math.abs(cxN(b) - x) < Math.abs(cxN(a) - x) ? b : a);
+    const lines = [...(connectors || '').matchAll(/x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)"/g)]
+      .map(m => ({ x1: +m[1], y1: +m[2], x2: +m[3], y2: +m[4] }));
+    const horiz = lines.filter(l => Math.abs(l.y1 - l.y2) < 0.5);
+    const vert = lines.filter(l => Math.abs(l.x1 - l.x2) < 0.5);
+    const kids = new Map(), seen = new Set();
+    for (const bus of horiz) {
+      const B = bus.y1, xL = Math.min(bus.x1, bus.x2) - 1, xR = Math.max(bus.x1, bus.x2) + 1;
+      const above = rowYs.filter(y => y < B), below = rowYs.filter(y => y > B);
+      if (!above.length || !below.length) continue;
+      const parents = nodes.filter(n => n.y === Math.max(...above));
+      const children = nodes.filter(n => n.y === Math.min(...below));
+      const inR = (v) => v.x1 >= xL && v.x1 <= xR;
+      const ups = vert.filter(v => inR(v) && Math.min(v.y1, v.y2) < B - 0.5);
+      const downs = vert.filter(v => inR(v) && Math.max(v.y1, v.y2) > B + 0.5);
+      if (!ups.length || !downs.length) continue;
+      const parent = nearest(ups[0].x1, parents);
+      for (const d of downs) {
+        const child = nearest(d.x1, children);
+        const k = parent.key + '>' + child.key;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (!kids.has(parent)) kids.set(parent, []);
+        kids.get(parent).push(child);
+      }
+    }
+    if (kids.size) return kids;
+    // fallback: nearest-x per consecutive row
+    for (let r = 0; r < rowYs.length - 1; r++) {
+      const parents = nodes.filter(n => n.y === rowYs[r]);
+      const children = nodes.filter(n => n.y === rowYs[r + 1]);
+      for (const c of children) {
+        const p = parents.reduce((a, b) => Math.abs(cxN(b) - cxN(c)) < Math.abs(cxN(a) - cxN(c)) ? b : a);
+        if (!kids.has(p)) kids.set(p, []);
+        kids.get(p).push(c);
+      }
+    }
+    return kids;
+  }
+
+  function connectorsSVG(nodes, S, offY, SW, SH, connectors) {
     const cx = (n) => (n.x + n.w / 2) * S, top = (n) => (n.y - offY) * S, bot = (n) => top(n) + NODE_H;
     const L = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#7a6ba8" stroke-width="2"/>`;
     let out = '';
-    for (let r = 0; r < rows.length - 1; r++) {
-      const parents = nodes.filter(n => n.y === rows[r]);
-      const children = nodes.filter(n => n.y === rows[r + 1]);
-      const nearest = (c) => parents.reduce((a, b) => Math.abs(cx(b) - cx(c)) < Math.abs(cx(a) - cx(c)) ? b : a);
-      for (const p of parents) {
-        const kids = children.filter(c => nearest(c) === p);
-        if (!kids.length) continue;
-        const busY = (bot(p) + Math.min(...kids.map(top))) / 2;
-        out += L(cx(p), bot(p), cx(p), busY);
-        out += L(Math.min(...kids.map(cx)), busY, Math.max(...kids.map(cx)), busY);
-        for (const c of kids) out += L(cx(c), busY, cx(c), top(c));
-      }
+    for (const [p, kids] of deriveEdges(nodes, connectors)) {
+      const busY = (bot(p) + Math.min(...kids.map(top))) / 2;
+      out += L(cx(p), bot(p), cx(p), busY);
+      out += L(Math.min(...kids.map(cx)), busY, Math.max(...kids.map(cx)), busY);
+      for (const c of kids) out += L(cx(c), busY, cx(c), top(c));
     }
     return `<svg class="connectors" width="${SW}" height="${SH}">${out}</svg>`;
   }
@@ -105,7 +144,7 @@
     stage.style.height = SH + 'px';
     // Draw our own connectors from the real node positions — the site's SVG
     // stops short of the cards by non-constant offsets, so it can't be reused.
-    stage.innerHTML = connectorsSVG(p.nodes, S, offY, SW, SH) + p.nodes.map(n => {
+    stage.innerHTML = connectorsSVG(p.nodes, S, offY, SW, SH, p.connectors) + p.nodes.map(n => {
       const maxed = n.cls.includes('maxed') || n.cls.includes('specialized');
       const locked = n.cls.includes('locked');
       return `<div class="node ${maxed ? 'maxed' : ''} ${locked ? 'locked' : ''}"
