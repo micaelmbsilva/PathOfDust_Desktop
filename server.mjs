@@ -152,6 +152,11 @@ async function passives() {
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://localhost:${PORT}`);
+    if (url.pathname === '/api/version') {
+      let version = 0;
+      try { version = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
+      return json(res, { version });
+    }
     if (url.pathname === '/api/me') {
       return json(res, await me());
     }

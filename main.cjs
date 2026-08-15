@@ -12,6 +12,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net';
 const SEVENTV_ID = 'lppmekppnliemjclknbagdhoocikieoi';
 const REPO = 'micaelmbsilva/PathOfDust_Desktop';
+let updatedTo = 0; // set by resolveAppDir when it pulls a newer version this launch
 
 // Self-update: the app's web/bridge files (server.mjs, actions.mjs, *.html,
 // tooltip.js) are plain text served from disk, so we refresh just those from
@@ -41,6 +42,7 @@ async function resolveAppDir() {
       for (const [f, t] of files) fs.writeFileSync(path.join(appDir, f), t); // all fetched before writing
       fs.writeFileSync(path.join(appDir, 'version.json'), JSON.stringify(manifest));
       localVer = manifest.version;
+      updatedTo = manifest.version; // pulled a newer version this launch
     }
   } catch { /* offline / fetch failed — use what we already have */ }
   return localVer > bundledVer ? appDir : __dirname;
@@ -118,7 +120,7 @@ async function start() {
 
   actions.setCookie(`adv_session=${advSession}`); // the bridge now acts as this user
   await relaxTwitchCookies();                     // make the chat embed see the login
-  win.loadURL(`http://localhost:${PORT}/`);
+  win.loadURL(`http://localhost:${PORT}/${updatedTo ? `?updated=${updatedTo}` : ''}`);
 }
 
 app.whenReady().then(start);
