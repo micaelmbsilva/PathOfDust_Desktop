@@ -33,8 +33,8 @@ your character and watch the action without juggling browser tabs.
 
 ## Install
 
-1. Go to the [**latest release**](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/tag/latest).
-2. Download **`PathOfDust.zip`**.
+1. Go to the [**latest release**](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest) — this link always points to the newest version.
+2. Download **`PathOfDust.zip`** (or grab it directly: [**download latest**](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest/download/PathOfDust.zip)).
 3. **Extract** it anywhere (right-click → Extract All).
 4. Open the extracted folder and run **`Path of Dust.exe`**.
    - Windows SmartScreen may warn on an unsigned app → *More info → Run anyway*.
