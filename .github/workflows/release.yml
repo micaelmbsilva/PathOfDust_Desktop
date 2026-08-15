@@ -19,6 +19,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Read version
+        id: ver
+        shell: bash
+        run: echo "v=$(node -p "require('./version.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Install deps
         run: npm ci
 
@@ -30,13 +35,14 @@ jobs:
 
       - name: Zip build
         shell: pwsh
-        run: Compress-Archive -Path dist/LokatiOverlay-win32-x64 -DestinationPath PathOfDust.zip -Force
+        run: Compress-Archive -Path dist/LokatiOverlay-win32-x64 -DestinationPath "PathOfDust-v${{ steps.ver.outputs.v }}.zip" -Force
 
-      - name: Publish "latest" release
+      - name: Publish versioned release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Path of Dust — Desktop (latest)
+          tag_name: v${{ steps.ver.outputs.v }}
+          name: Path of Dust — Desktop v${{ steps.ver.outputs.v }}
+          make_latest: true
           body: |
             **Path of Dust — Desktop** · companion app for the Twitch RPG *Path of Dust* by
             [Lokati_Gaming](https://www.twitch.tv/lokati_gaming).
@@ -45,7 +51,7 @@ jobs:
             plus in-app Twitch chat with 7TV emotes — all driven by your own Twitch login.
 
             ### Install
-            1. Download **`PathOfDust.zip`** below.
+            1. Download the **`PathOfDust-v${{ steps.ver.outputs.v }}.zip`** below.
             2. Extract it anywhere.
             3. Run **`LokatiOverlay.exe`** and log in with Twitch on first launch.
 
@@ -55,4 +61,4 @@ jobs:
             here when the app shell itself changes.
 
             See the [README](https://github.com/micaelmbsilva/PathOfDust_Desktop#readme) for the full guide.
-          files: PathOfDust.zip
+          files: PathOfDust-v${{ steps.ver.outputs.v }}.zip
