@@ -66,8 +66,9 @@ function initAutoUpdate() {
   // toast — "downloading" when found, "ready" once staged.
   autoUpdater.on('update-available', (i) => { global.__update = { status: 'downloading', version: i.version }; });
   autoUpdater.on('update-downloaded', (i) => { global.__update = { status: 'ready', version: i.version }; });
-  autoUpdater.on('error', () => {}); // offline / feed hiccup — try again next launch
+  autoUpdater.on('error', () => {}); // offline / feed hiccup — retried by the interval below
   autoUpdater.checkForUpdates().catch(() => {});
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 15 * 60000); // keep long-running sessions current
 }
 
 // Load the 7TV extension (for custom emotes in the chat) from the user's own
