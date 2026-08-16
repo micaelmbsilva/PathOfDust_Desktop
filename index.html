@@ -198,6 +198,13 @@
   table.lb td:first-child, table.lb th:first-child { text-align: left; }
   table.lb tr.mme td { color: #ffcf5a; }
   .bloot { font-size: 0.8rem; color: #c9bdf0; margin-top: 6px; }
+  /* current-fight panel: leaderboard section + scrolling personal combat log */
+  .fhead { font-size: 0.85rem; font-weight: 600; color: #c9bdf0; }
+  .flb { max-height: 45%; overflow-y: auto; flex: none; }
+  .ffeed { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid rgba(160,140,255,0.18); padding-top: 4px; }
+  .fl { font-size: 0.76rem; padding: 1px 0; }
+  .fl .ft { color: #8a7fb0; font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .fl.taken { color: #ff9d9d; } .fl.healed { color: #7fdba3; } .fl.death { color: #ff8080; font-weight: 700; }
 
   /* stream picture-in-picture — same panel pattern as the chat */
   #streampanel { position: fixed; bottom: 16px; right: 16px; z-index: 35; width: 480px; height: 302px;
@@ -238,6 +245,7 @@
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
   <button class="tbtn" id="partyBtn" title="Who's fighting right now — DPS/Heal/Tank, status" onclick="toggleModal('party')">👥 Party</button>
+  <button class="tbtn" id="fightBtn" title="Live leaderboard + your combat log for the fight in progress" onclick="toggleModal('fight')">🗡️ Fight</button>
   <button class="tbtn" id="battlesBtn" title="Your saved battle reports + per-fight leaderboards" onclick="toggleModal('battles')">⚔️ Battles</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight Me</button>
@@ -277,6 +285,17 @@
       <button title="close" onclick="toggleModal('party', false)">✕</button></span>
   </div>
   <div class="abody" id="partyBody"><p class="muted">Waiting for battle data…</p></div>
+</div>
+
+<div class="apanel" id="fightpanel" style="top:90px;left:60px;width:440px;height:540px">
+  <div class="cbar" id="fightbar">
+    <span class="ctitle">🗡️ Current Fight</span>
+    <span class="cbtns"><button id="fightCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('fight', false)">✕</button></span>
+  </div>
+  <div class="abody" id="fightBody" style="display:flex;flex-direction:column;gap:6px">
+    <p class="muted">No fight yet — data arrives when the next boss battle starts.</p>
+  </div>
 </div>
 
 <div class="apanel" id="battlespanel" style="top:80px;left:340px;width:460px">
@@ -556,8 +575,9 @@
     const open = show === undefined ? !p.classList.contains('open') : show;
     p.classList.toggle('open', open);
     document.getElementById(which + 'Btn').classList.toggle('active', open);
+    if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (open) {
-      (which === 'party' ? renderParty : renderBattles)();
+      ({ party: renderParty, battles: renderBattles, fight: renderFight })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
       const r = p.getBoundingClientRect();
@@ -725,6 +745,93 @@
     });
   }
 
+  // ---- Current Fight: live replay. The WS broadcasts the whole fight (events
+  // with sim-time atMs) the moment it starts; the overlay then plays it back
+  // over displayDurationMs. We replay the same log in sync: a climbing
+  // leaderboard plus a personal combat log (grouped into 1s sim-time buckets).
+  // Raw events live in memory only, for the latest fight.
+  let fight = null, fightTimer = null;
+  const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  function startFight(d) {
+    const players = {}, names = {};
+    for (const u of d.units || []) { names[u.id] = u.displayName || u.id; if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName; }
+    const myId = Object.keys(players).find(id => players[id].toLowerCase() === myName.toLowerCase());
+    const evs = [...(d.events || [])].sort((a, b) => (a.atMs || 0) - (b.atMs || 0));
+    const maxAt = evs.length ? evs[evs.length - 1].atMs || 1 : 1;
+    // group my events into 1s sim-time buckets so the log reads, not spams
+    const groups = new Map();
+    const G = (key, mk) => { let g = groups.get(key); if (!g) { g = mk(); groups.set(key, g); } return g; };
+    for (const ev of evs) {
+      const b = Math.floor((ev.atMs || 0) / 1000);
+      if (ev.kind === 'attack' && ev.attacker === myId) {
+        if (ev.evaded) G('e' + ev.target + b, () => ({ at: ev.atMs, kind: 'myevaded', tgt: names[ev.target], n: 0 })).n++;
+        else { const g = G('a' + ev.target + b, () => ({ at: ev.atMs, kind: 'hit', tgt: names[ev.target], n: 0, dmg: 0, crits: 0 })); g.n++; g.dmg += ev.damage || 0; if (ev.isCrit) g.crits++; }
+      } else if (ev.kind === 'attack' && ev.target === myId) {
+        if (ev.evaded) G('g' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'dodged', src: names[ev.attacker], n: 0 })).n++;
+        else { const g = G('t' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'taken', src: names[ev.attacker], n: 0, dmg: 0 })); g.n++; g.dmg += ev.damage || 0; }
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.target === myId && ev.healer !== myId) {
+        G('h' + ev.healer + b, () => ({ at: ev.atMs, kind: 'healed', src: names[ev.healer], amt: 0 })).amt += ev.amount || 0;
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.healer === myId && ev.target !== myId) {
+        G('o' + ev.target + b, () => ({ at: ev.atMs, kind: 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
+      } else if (ev.kind === 'defeat' && ev.unit === myId) {
+        groups.set('d' + b, { at: ev.atMs, kind: 'death' });
+      }
+    }
+    const dur = d.displayDurationMs || maxAt;
+    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, agg: {},
+      players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind };
+    if (document.getElementById('fightpanel').classList.contains('open')) startFightTimer();
+  }
+  function startFightTimer() {
+    clearInterval(fightTimer); fightTimer = null;
+    renderFight();
+    if (fight && Date.now() - fight.t0 < fight.dur) fightTimer = setInterval(renderFight, 900);
+  }
+  const FLINE = {
+    hit: (g) => `⚔️ You → ${esc(g.tgt)}: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits${g.crits ? `, ${g.crits} crit` : ''})` : g.crits ? ' (crit)' : ''}`,
+    myevaded: (g) => `🌫️ ${esc(g.tgt)} evaded you${g.n > 1 ? ` ×${g.n}` : ''}`,
+    dodged: (g) => `🌀 You evaded ${esc(g.src)}${g.n > 1 ? ` ×${g.n}` : ''}`,
+    taken: (g) => `🩸 ${esc(g.src)} → you: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits)` : ''}`,
+    healed: (g) => `💚 ${esc(g.src)} healed you <b>${fmtN(g.amt)}</b>`,
+    healout: (g) => `💚 You healed ${esc(g.tgt)} <b>${fmtN(g.amt)}</b>`,
+    death: () => `💀 You were defeated`,
+  };
+  function renderFight() {
+    const body = document.getElementById('fightBody');
+    if (!fight) return; // placeholder stays
+    const elapsed = Date.now() - fight.t0;
+    const cursor = Math.min(fight.maxAt, elapsed / fight.scale); // sim-time position
+    const over = elapsed >= fight.dur;
+    if (over && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
+    const A = (id) => fight.agg[id] || (fight.agg[id] = { d: 0, h: 0, t: 0 });
+    while (fight.idx < fight.evs.length && (fight.evs[fight.idx].atMs || 0) <= cursor) {
+      const ev = fight.evs[fight.idx++];
+      if (ev.kind === 'attack' && !ev.evaded) {
+        if (fight.players[ev.attacker]) A(ev.attacker).d += ev.damage || 0;
+        if (fight.players[ev.target]) A(ev.target).t += ev.damage || 0;
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && fight.players[ev.healer]) A(ev.healer).h += ev.amount || 0;
+    }
+    const metric = localStorage.getItem('lbMetric') || 'd';
+    const cols = { d: 'DPS', h: 'Heal', t: 'Tank' };
+    const keys = metric === 'all' ? ['d', 'h', 't'] : [metric];
+    const secs = Math.max(1, cursor / 1000);
+    const rows = Object.entries(fight.agg).map(([id, a]) => ({ n: fight.players[id], ...a }))
+      .sort((a, b) => b[keys[0]] - a[keys[0]]);
+    const feedShown = fight.feed.filter(g => g.at <= cursor);
+    const atBottom = (el) => !el || el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    const keepScroll = atBottom(body.querySelector('.ffeed'));
+    body.innerHTML =
+      `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${over ? '' : ' · live'}</div>
+      <div class="btabs">${['d', 'h', 't', 'all'].map(k => `<button class="${metric === k ? 'on' : ''}" data-lbf="${k}">${cols[k] || 'All'}</button>`).join('')}</div>
+      <div class="flb"><table class="lb"><tr><th>#</th><th style="text-align:left">Player</th>${keys.map(k => `<th>${cols[k]}</th>`).join('')}${metric === 'd' ? '<th>/s</th>' : ''}</tr>
+        ${rows.map((r, i) => `<tr class="${r.n.toLowerCase() === myName.toLowerCase() ? 'mme' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(r.n)}</td>` +
+          keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table></div>
+      <div class="ffeed">${feedShown.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * fight.scale)}</span>${FLINE[g.kind](g)}</div>`).join('') || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
+    body.querySelectorAll('[data-lbf]').forEach(b => b.onclick = () => { localStorage.setItem('lbMetric', b.dataset.lbf); renderFight(); });
+    const fe = body.querySelector('.ffeed');
+    if (keepScroll) fe.scrollTop = fe.scrollHeight;
+  }
+
   let bagBusy = false;
   async function pollBag() {
     if (bagBusy) return;
@@ -777,9 +884,12 @@
           lastRoster = d;
           if (document.getElementById('partypanel').classList.contains('open')) renderParty();
         }
-        if (d.type === 'encounter' && myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
-          battleAt = Date.now(); battleWon = !!d.won;
-          try { saveBattle(buildReport(d)); } catch {}
+        if (d.type === 'encounter') {
+          try { startFight(d); } catch {} // live replay — even if we're not in it
+          if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
+            battleAt = Date.now(); battleWon = !!d.won;
+            try { saveBattle(buildReport(d)); } catch {}
+          }
         }
       } catch {}
       clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700);
