@@ -434,14 +434,28 @@ async function advisor(name) {
 
     // t100 projection: 5 slots × 4 base mods (one of each top-4 priority per slot),
     // average rolls from live data, no crit-bonus mods, + maxed Sacred implicit
-    // (~2× an average roll) on the biggest-impact stat.
+    // (~2× an average roll) on the biggest-impact stat. Attack speed is NOT a
+    // rollable affix — it's the gloves' primary stat (≈1.3%/tier; t100 Perfect
+    // = 130%), so it projects off gloves alone. Sheet columns approximate the
+    // player-sheet stat as now + gear delta.
     const T = 100, SLOTS = 5;
+    const SHEET = { 'Block': 'Block', 'Evasion': 'Evasion', 'Crit Chance': 'Crit Chance',
+      'Increased Crit Dmg Dealt': 'Increased Crit Dmg Dealt', 'Increased Dmg Dealt': 'Increased Dmg Dealt',
+      'Splash': 'Splash', 'Healing Power': 'Healing Power', 'Intervene': 'Intervene',
+      'Lingering Effect': 'Lingering Effect', 'Reduced Dmg Taken': 'Reduced Dmg Taken' };
+    const stats = (b.stats && typeof b.stats === 'object') ? b.stats : {};
     const projRows = arr(best && best.build.rolls).slice(0, 4).map((roll) => {
+      if (roll.s === 'Attack Speed') {
+        const glove = arr(b.equipped).find(it => /glove/i.test(str(it.slot)));
+        return { s: 'Attack Speed (gloves primary)', top: roll.top,
+          cur: glove ? num(str(glove.primary).match(/[\d.]+/)?.[0]) : 0, proj: 1.3 * T, sheetNow: null };
+      }
       const kws = ROLL_KW[roll.s] || [str(roll.s).toLowerCase()];
       const rate = rateOf(kws);
       const cur = modValsOf(kws);
       const proj = rate ? SLOTS * rate * T + (roll.top ? 2 * rate * T : 0) : null;
-      return { s: roll.s, top: roll.top, cur, proj };
+      const sheetNow = SHEET[roll.s] != null && stats[SHEET[roll.s]] != null ? num(stats[SHEET[roll.s]]) : null;
+      return { s: roll.s, top: roll.top, cur, proj, sheetNow };
     });
 
     // Per-item crafting advice against the pick's priorities
@@ -484,15 +498,19 @@ async function advisor(name) {
             el('div', { class: 'chips' }, toGet.map(t => el('span', { class: 'chip' }, t)))] : el('p', { style: 'margin:0' }, 'Tree already matches this build.'),
           toDrop.length ? [el('p', { class: 'sub', style: 'margin:12px 0 6px' }, 'Respec out (off-build):'),
             el('div', { class: 'chips' }, toDrop.map(t => el('span', { class: 'chip' }, t)))] : null),
-        el('h2', null, 'Stat preview at the t100 target'),
-        el('p', { class: 'sub' }, 'Assumes 5 slots × 4 average-rolled t100 mods (one of each priority per slot, no crit-bonus mods) + a maxed Sacred implicit on the biggest-impact stat. Rates come from all scraped gear.'),
+        el('h2', null, 'Your stats at the t100 target'),
+        el('p', { class: 'sub' }, 'Assumes 5 slots × 4 average-rolled t100 mods (one of each priority per slot, no crit-bonus mods) + a maxed Sacred implicit on the biggest-impact stat; attack speed comes from the gloves’ primary. "Sheet" columns approximate your character sheet as now + the gear delta (tree/archetype multipliers not re-simulated). Rates come from all scraped gear.'),
         el('table', null,
-          el('thead', null, el('tr', null, el('th', null, 'Stat'), el('th', { class: 'r' }, 'On gear now'), el('th', { class: 'r' }, 'At t100 target'), el('th', { class: 'r' }, 'Δ'))),
-          el('tbody', null, projRows.map(p => el('tr', null,
-            el('td', null, str(p.s), p.top ? el('span', { class: 'badge top' }, 'sacred here') : null),
-            el('td', { class: 'r' }, p.cur ? fmt(p.cur) + '%' : '—'),
-            el('td', { class: 'r' }, p.proj ? fmt(p.proj) + '%' : 'no data yet'),
-            el('td', { class: 'r' }, p.proj ? '+' + fmt(Math.max(0, p.proj - p.cur)) + '%' : '—'))))),
+          el('thead', null, el('tr', null, el('th', null, 'Stat'), el('th', { class: 'r' }, 'Sheet now'), el('th', { class: 'r' }, 'Sheet at t100'), el('th', { class: 'r' }, 'Gear now'), el('th', { class: 'r' }, 'Gear at t100'))),
+          el('tbody', null, projRows.map(p => {
+            const delta = p.proj != null ? Math.max(0, p.proj - p.cur) : null;
+            return el('tr', null,
+              el('td', null, str(p.s), p.top ? el('span', { class: 'badge top' }, 'sacred here') : null),
+              el('td', { class: 'r' }, p.sheetNow != null ? fmt(p.sheetNow) + '%' : '—'),
+              el('td', { class: 'r' }, p.sheetNow != null && delta != null ? '≈' + fmt(p.sheetNow + delta) + '%' : '—'),
+              el('td', { class: 'r' }, p.cur ? fmt(p.cur) + '%' : '—'),
+              el('td', { class: 'r' }, p.proj != null ? fmt(p.proj) + '%' : 'no data yet'));
+          }))),
         craftRows.length ? [el('h2', null, 'Crafting worklist'),
           el('ul', { class: 'rolls' }, craftRows)] : null,
       ] : null);
