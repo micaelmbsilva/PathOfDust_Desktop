@@ -406,6 +406,15 @@
     updateDismissAll();
   };
 
+  // Clicking a toast strands keyboard focus in the parent page — the cross-origin
+  // chat iframe then ignores typing until refocused. Hand focus back after any
+  // toast interaction while the chat panel is open.
+  document.getElementById('toasts').addEventListener('click', () => setTimeout(() => {
+    const p = document.getElementById('chatpanel');
+    if (p.classList.contains('open') && !p.classList.contains('collapsed'))
+      document.getElementById('chatFrame').focus();
+  }, 50));
+
   // ---- Reforge Gear reminder: once per hour, shared between a 1k-dust option
   // and the 1k channel-points redemption. Driven by the live card state from
   // /api/me (see reconcileReforge) — shown while available, one at a time.
