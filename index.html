@@ -64,23 +64,11 @@
     border-radius: 8px; padding: 6px 14px; font-size: 0.9rem; cursor: pointer; }
   .tbtn:hover { background: rgba(120,90,255,0.34); }
 
-  /* draggable stats modal */
-  #stats { position: fixed; top: 64px; left: 16px; z-index: 30; width: 260px;
-    background: rgba(24,20,40,0.92); border: 1px solid rgba(160,140,255,0.3);
-    border-radius: 12px; backdrop-filter: blur(6px); box-shadow: 0 8px 30px #0008;
-    user-select: none; resize: both; overflow: hidden; min-width: 200px; min-height: 110px;
-    display: flex; flex-direction: column; }
-  #stats.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
-  #stats .bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: grab;
-    border-bottom: 1px solid rgba(160,140,255,0.2); }
-  #stats.collapsed .bar { border-bottom: 0; }
-  #stats .bar.grabbing { cursor: grabbing; }
+  /* stats panel — shares the .apanel shell; stays open by default */
+  #stats { top: 64px; left: 16px; z-index: 30; width: 260px; height: auto; max-height: 70vh;
+    min-width: 200px; min-height: 110px; user-select: none; }
   #stats .hname { font-weight: 700; }
   #stats .hsub { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; white-space: nowrap; }
-  #stats .toggle { background: none; border: 0; color: #c9bdf0; cursor: pointer; font-size: 1rem;
-    line-height: 1; padding: 2px 4px; }
-  #stats .rows { flex: 1; min-height: 0; max-height: 70vh; overflow-y: auto; padding: 6px 10px 10px; }
-  #stats.collapsed .rows { display: none; }
   .srow { display: flex; justify-content: space-between; gap: 10px; font-size: 0.83rem; padding: 2px 0; }
   .srow .l { color: #b0a2d9; } .srow .v { font-weight: 600; }
   .srow[title] { cursor: help; } .tmods span[title] { cursor: help; }
@@ -128,29 +116,16 @@
     border-radius: 8px; padding: 5px 12px; font-size: 0.8rem; }
   #dismissAll:hover { background: rgba(200,70,70,0.36); }
 
-  /* Twitch chat — draggable/collapsible modal, like the stats modal.
-     The embed includes the channel-points redeem button. */
-  #chatpanel { position: fixed; top: 60px; right: 16px; z-index: 36; width: 360px; height: 560px;
-    display: none; flex-direction: column; background: rgba(24,20,40,0.96);
-    border: 1px solid rgba(160,140,255,0.3); border-radius: 12px; overflow: hidden;
-    box-shadow: 0 8px 30px #0009; resize: both; min-width: 280px; min-height: 260px; }
-  #chatpanel.open { display: flex; }
-  #chatpanel .cbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-    cursor: grab; user-select: none; border-bottom: 1px solid rgba(160,140,255,0.2); }
-  #chatpanel .cbar.grabbing { cursor: grabbing; }
-  #chatpanel.collapsed .cbar { border-bottom: 0; }
-  #chatpanel .ctitle { font-weight: 700; font-size: 0.9rem; }
-  #chatpanel .cbtns { margin-left: auto; display: flex; gap: 2px; }
-  #chatpanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
-    font-size: 1rem; line-height: 1; padding: 2px 6px; }
+  /* Twitch chat — .apanel shell; the embed includes the channel-points redeem button */
+  #chatpanel { top: 60px; right: 16px; z-index: 36; width: 360px; height: 560px;
+    min-width: 280px; min-height: 260px; }
   #chatpanel .cwrap { flex: 1; min-height: 0; }
-  #chatpanel.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
-  #chatpanel.collapsed .cwrap { display: none; }
-  #chatpanel iframe { width: 100%; height: 100%; border: 0; }
+  .apanel.collapsed .cwrap, .apanel.collapsed .swrap { display: none; }
+  .apanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
 
-  /* Party / Battles — draggable, resizable, collapsible panels like the chat
-     and stream ones. Sized to fit small windows too (mobile-ish). */
+  /* Shared panel shell — draggable, resizable, collapsible; sized to fit small
+     (mobile-ish) windows too. Per-panel ids override position/size/z-index. */
   .apanel { position: fixed; z-index: 37; width: 400px; height: 480px;
     max-width: calc(100vw - 20px); max-height: calc(100vh - 60px);
     display: none; flex-direction: column; background: rgba(24,20,40,0.96);
@@ -210,29 +185,30 @@
   /* current-fight panel: leaderboard section + scrolling personal combat log */
   .fhead { font-size: 0.85rem; font-weight: 600; color: #c9bdf0; }
   .flb { max-height: 45%; overflow-y: auto; flex: none; }
+  .flb .btabs { position: sticky; top: 0; background: rgba(24,20,40,0.96); margin-top: 0; }
   .ffeed { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid rgba(160,140,255,0.18); padding-top: 4px; }
   .fl { font-size: 0.76rem; padding: 1px 0; }
   .fl .ft { color: #8a7fb0; font-variant-numeric: tabular-nums; margin-right: 6px; }
   .fl.taken { color: #ff9d9d; } .fl.healed { color: #7fdba3; } .fl.death { color: #ff8080; font-weight: 700; }
 
-  /* stream picture-in-picture — same panel pattern as the chat */
-  #streampanel { position: fixed; bottom: 16px; right: 16px; z-index: 35; width: 480px; height: 302px;
-    display: none; flex-direction: column; background: rgba(24,20,40,0.96);
-    border: 1px solid rgba(160,140,255,0.3); border-radius: 12px; overflow: hidden;
-    box-shadow: 0 8px 30px #0009; resize: both; min-width: 240px; min-height: 160px; }
-  #streampanel.open { display: flex; }
-  #streampanel .cbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-    cursor: grab; user-select: none; border-bottom: 1px solid rgba(160,140,255,0.2); }
-  #streampanel .cbar.grabbing { cursor: grabbing; }
-  #streampanel .ctitle { font-weight: 700; font-size: 0.85rem; }
-  #streampanel .cbtns { margin-left: auto; display: flex; gap: 2px; }
-  #streampanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
-    font-size: 1rem; line-height: 1; padding: 2px 6px; }
+  /* stream picture-in-picture — .apanel shell */
+  #streampanel { top: auto; bottom: 16px; right: 16px; z-index: 35; width: 480px; height: 302px;
+    min-width: 240px; min-height: 160px; }
   #streampanel .swrap { flex: 1; min-height: 0; background: #000; }
-  #streampanel.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
-  #streampanel.collapsed .swrap { display: none; }
-  #streampanel.collapsed .cbar { border-bottom: 0; }
-  #streampanel iframe { width: 100%; height: 100%; border: 0; }
+
+  /* topbar dropdown menus */
+  .tmenu { position: fixed; top: 46px; z-index: 50; display: none; flex-direction: column;
+    min-width: 180px; background: rgba(24,20,40,0.98); border: 1px solid rgba(160,140,255,0.35);
+    border-radius: 10px; padding: 4px; box-shadow: 0 8px 30px #0009; }
+  .tmenu.open { display: flex; }
+  .tmenu button { background: none; border: 0; color: #eae6f5; text-align: left; padding: 8px 12px;
+    border-radius: 7px; font-size: 0.88rem; cursor: pointer; white-space: nowrap; }
+  .tmenu button:hover { background: rgba(120,90,255,0.25); }
+  .tmenu button.active { background: rgba(120,90,255,0.4); }
+
+  /* saved fight log inside a Combat History entry */
+  .flog summary { cursor: pointer; font-size: 0.8rem; color: #c9bdf0; margin: 6px 0 2px; }
+  .flog .ffeed { max-height: 180px; }
 </style>
 </head>
 <body>
@@ -252,21 +228,28 @@
   <button class="tbtn" onclick="openWin('/bag.html','bag',1140,880)">🎒 Bag</button>
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
-  <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
-  <button class="tbtn" title="Open the game's patch notes in your browser" onclick="fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'patch-notes'})})">📜 Patch Notes</button>
-  <button class="tbtn" id="partyBtn" title="Who's fighting right now — DPS/Heal/Tank, status" onclick="toggleModal('party')">👥 Party</button>
-  <button class="tbtn" id="buffsBtn" title="Active buffs/debuffs — channel-point events and your in-fight buffs" onclick="toggleModal('buffs')">✨ Buffs</button>
-  <button class="tbtn" id="fightBtn" title="Live leaderboard + your combat log for the fight in progress" onclick="toggleModal('fight')">🗡️ Fight</button>
-  <button class="tbtn" id="battlesBtn" title="Your saved battle reports + per-fight leaderboards" onclick="toggleModal('battles')">⚔️ Battles</button>
+  <button class="tbtn" data-menu="combatMenu" title="Combat panels — party, buffs, live fight, history">⚔️ Combat ▾</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight Me</button>
   <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop">🔒 Auto-Lock ✨</button>
-  <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag(); pullInterface(false)">🔄 Refresh</button>
-  <button class="tbtn" id="updateBtn" title="Check for updates" onclick="updateAction()">Check for Updates</button>
-  <button class="tbtn" title="Send feedback / report a bug" onclick="sendFeedback()">🐛 Feedback</button>
+  <button class="tbtn" data-menu="moreMenu" title="Wiki, patch notes, refresh, updates, feedback">⋯ More ▾</button>
 </div>
 
-<div id="chatpanel">
+<div class="tmenu" id="combatMenu">
+  <button data-m="party" title="Who's fighting right now — DPS/Heal/Tank, status">👥 Party</button>
+  <button data-m="buffs" title="Active buffs/debuffs — channel-point events and your in-fight buffs">✨ Buffs &amp; Debuffs</button>
+  <button data-m="fight" title="Live leaderboard + your combat log for the fight in progress">🗡️ Live Fight</button>
+  <button data-m="battles" title="Your saved battle reports, fight logs, and per-fight leaderboards">⚔️ Combat History</button>
+</div>
+<div class="tmenu" id="moreMenu">
+  <button data-mm="wiki" title="Open the game wiki in your browser">📖 Wiki</button>
+  <button data-mm="patch-notes" title="Open the game's patch notes in your browser">📜 Patch Notes</button>
+  <button data-mm="refresh" title="Refresh now">🔄 Refresh</button>
+  <button data-mm="update" title="Check for updates">⬆️ Check for Updates</button>
+  <button data-mm="feedback" title="Send feedback / report a bug">🐛 Feedback</button>
+</div>
+
+<div class="apanel" id="chatpanel">
   <div class="cbar" id="chatbar">
     <span class="ctitle">💬 Twitch Chat</span>
     <span class="cbtns">
@@ -278,7 +261,7 @@
   <div class="cwrap"><iframe id="chatFrame" title="Twitch chat"></iframe></div>
 </div>
 
-<div id="streampanel">
+<div class="apanel" id="streampanel">
   <div class="cbar" id="streambar">
     <span class="ctitle">📺 Stream</span>
     <span class="cbtns">
@@ -309,7 +292,7 @@
 
 <div class="apanel" id="fightpanel" style="top:90px;left:60px;width:440px;height:540px">
   <div class="cbar" id="fightbar">
-    <span class="ctitle">🗡️ Current Fight</span>
+    <span class="ctitle">🗡️ Live Fight</span>
     <span class="cbtns"><button id="fightCollapse" title="collapse">▾</button>
       <button title="close" onclick="toggleModal('fight', false)">✕</button></span>
   </div>
@@ -327,13 +310,13 @@
   <div class="abody" id="battlesBody"><p class="muted">No battles recorded yet — reports appear after each boss fight.</p></div>
 </div>
 
-<div id="stats">
-  <div class="bar" id="statsbar">
+<div class="apanel open" id="stats">
+  <div class="cbar" id="statsbar">
     <span class="hname" id="hname">Character</span>
     <span class="hsub" id="hsub"></span>
-    <button class="toggle" id="toggle" title="collapse">▾</button>
+    <span class="cbtns"><button id="toggle" title="collapse">▾</button></span>
   </div>
-  <div class="rows" id="rows"><p class="muted">Loading…</p></div>
+  <div class="abody" id="rows"><p class="muted">Loading…</p></div>
 </div>
 
 <div id="toasts"><button id="dismissAll">✕ Dismiss All</button></div>
@@ -428,7 +411,6 @@
     b.classList.toggle('active', open);
   }
   wirePanel('streampanel', 'streambar', 'streamCollapse', 'lay.stream');
-
   wirePanel('chatpanel', 'chatbar', 'chatCollapse', 'lay.chat');
   // pop out into a real window — fully interactive Twitch chat, no iframe quirks
   document.getElementById('chatPop').onclick = () => {
@@ -557,7 +539,7 @@
     const p = document.getElementById(which + 'panel');
     const open = show === undefined ? !p.classList.contains('open') : show;
     p.classList.toggle('open', open);
-    document.getElementById(which + 'Btn').classList.toggle('active', open);
+    document.querySelector(`.tmenu [data-m="${which}"]`)?.classList.toggle('active', open);
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
@@ -598,6 +580,29 @@
   wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
   wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
+
+  // ---- topbar dropdown menus (⚔️ Combat / ⋯ More) ----
+  const closeMenus = () => document.querySelectorAll('.tmenu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('[data-menu]').forEach(btn => btn.onclick = () => {
+    const m = document.getElementById(btn.dataset.menu);
+    const wasOpen = m.classList.contains('open');
+    closeMenus();
+    if (!wasOpen) {
+      m.classList.add('open'); // open first so offsetWidth is real
+      m.style.left = Math.max(4, Math.min(btn.getBoundingClientRect().left, innerWidth - m.offsetWidth - 8)) + 'px';
+    }
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.tmenu') && !e.target.closest('[data-menu]')) closeMenus(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
+  document.querySelectorAll('#combatMenu [data-m]').forEach(b => b.onclick = () => { toggleModal(b.dataset.m); closeMenus(); });
+  const MORE = {
+    'wiki': () => fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: 'wiki' }) }),
+    'patch-notes': () => fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: 'patch-notes' }) }),
+    'refresh': () => { loadStats(); pollBag(); pullInterface(false); },
+    'update': () => updateAction(),
+    'feedback': () => sendFeedback(),
+  };
+  document.querySelectorAll('#moreMenu [data-mm]').forEach(b => b.onclick = () => { MORE[b.dataset.mm](); closeMenus(); });
 
   // ---- Buffs & Debuffs: the site's channel-point activity table (scraped
   // generically via /api/me) + my own in-fight buffs from the replay's
@@ -663,12 +668,13 @@
     for (const c of cs) c.retreated ? retreated++ : counts[of(c)]++;
     const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
     const pf = (k) => `class="chip pf${partyFilter === k ? ' on' : ''}" data-pf="${k}"`;
-    const shown = cs.filter(c => !partyFilter
-      || (partyFilter === 'ret' ? c.retreated : !c.retreated && of(c) === partyFilter));
+    // retreated are hidden by default; the Retreated pip is the only way to see them
+    const shown = cs.filter(c => partyFilter === 'ret' ? c.retreated
+      : partyFilter ? !c.retreated && of(c) === partyFilter : !c.retreated);
     document.getElementById('partyBody').innerHTML =
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
       ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)}>${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
-      `<span class="chip" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
+      `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
       `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}">
         <div class="pn">${CLASS_ICON[of(c)]} ${esc(c.displayName)}</div>
@@ -724,23 +730,26 @@
     if (document.getElementById('battlespanel').classList.contains('open')) renderBattles();
   }
 
-  const fmtN = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+  const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
+    : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
   const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''} ago`; };
+  // Metric-tabbed leaderboard table, shared by Combat History and Live Fight
+  // (attr differs so each panel's tab clicks re-render only itself).
+  function lbTable(board, secs, attr) {
+    const metric = localStorage.getItem('lbMetric') || 'd';
+    const cols = { d: 'DPS', h: 'Heal', t: 'Tank' };
+    const keys = metric === 'all' ? ['d', 'h', 't'] : [metric];
+    const rows = [...board].sort((a, b) => b[keys[0]] - a[keys[0]]);
+    return `<div class="btabs">${['d', 'h', 't', 'all'].map(k =>
+        `<button class="${metric === k ? 'on' : ''}" ${attr}="${k}">${cols[k] || 'All'}</button>`).join('')}</div>
+      <table class="lb"><tr><th>#</th><th style="text-align:left">Player</th>${keys.map(k => `<th>${cols[k]}</th>`).join('')}${metric === 'd' ? '<th>/s</th>' : ''}</tr>
+      ${rows.map((r, i) => `<tr class="${r.n.toLowerCase() === myName.toLowerCase() ? 'mme' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(r.n)}</td>` +
+        keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table>`;
+  }
   function renderBattles() {
     const log = LS.get('battleLog', []);
     if (!log.length) return; // placeholder stays
-    const metric = localStorage.getItem('lbMetric') || 'd';
-    const cols = { d: 'DPS', h: 'Heal', t: 'Tank' };
-    const lb = (rep) => {
-      const secs = Math.max(1, (rep.durMs || 0) / 1000);
-      const keys = metric === 'all' ? ['d', 'h', 't'] : [metric];
-      const rows = [...rep.board].sort((a, b) => b[keys[0]] - a[keys[0]]);
-      return `<div class="btabs">${['d', 'h', 't', 'all'].map(k =>
-          `<button class="${metric === k ? 'on' : ''}" data-lb="${k}">${cols[k] || 'All'}</button>`).join('')}</div>
-        <table class="lb"><tr><th>#</th><th style="text-align:left">Player</th>${keys.map(k => `<th>${cols[k]}</th>`).join('')}${metric === 'd' ? '<th>/s</th>' : ''}</tr>
-        ${rows.map((r, i) => `<tr class="${r.n.toLowerCase() === myName.toLowerCase() ? 'mme' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(r.n)}</td>` +
-          keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table>`;
-    };
+    const lb = (rep) => lbTable(rep.board, Math.max(1, (rep.durMs || 0) / 1000), 'data-lb');
     document.getElementById('battlesBody').innerHTML = log.map((rep, i) => {
       const m = rep.me, secs = Math.max(1, (rep.durMs || 0) / 1000);
       return `<div class="bent" data-i="${i}"><div class="bh">
@@ -759,6 +768,8 @@
             ${rep.deaths.length ? `<span><span class="l">Deaths</span> <b>${rep.deaths.length}</b>${rep.deaths.some(n => n.toLowerCase() === myName.toLowerCase()) ? ' (incl. you)' : ''}</span>` : ''}
           </div>
           ${rep.myLoot.length ? `<div class="bloot">🎁 ${rep.myLoot.map(l => `${esc(l.item)} (${esc(l.slot)}, ${esc(l.outcome)})`).join(' · ')}</div>` : ''}
+          ${rep.feed?.length ? `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length})</summary><div class="ffeed">${
+            rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * (rep.feedScale || 1))}</span>${FLINE[g.kind](g)}</div>`).join('')}</div></details>` : ''}
           ${lb(rep)}
         </div></div>`;
     }).join('');
@@ -841,21 +852,13 @@
         if (fight.players[ev.target]) A(ev.target).t += ev.damage || 0;
       } else if ((ev.kind === 'heal' || ev.kind === 'shield') && fight.players[ev.healer]) A(ev.healer).h += ev.amount || 0;
     }
-    const metric = localStorage.getItem('lbMetric') || 'd';
-    const cols = { d: 'DPS', h: 'Heal', t: 'Tank' };
-    const keys = metric === 'all' ? ['d', 'h', 't'] : [metric];
-    const secs = Math.max(1, cursor / 1000);
-    const rows = Object.entries(fight.agg).map(([id, a]) => ({ n: fight.players[id], ...a }))
-      .sort((a, b) => b[keys[0]] - a[keys[0]]);
+    const board = Object.entries(fight.agg).map(([id, a]) => ({ n: fight.players[id], ...a }));
     const feedShown = fight.feed.filter(g => g.at <= cursor);
     const atBottom = (el) => !el || el.scrollHeight - el.scrollTop - el.clientHeight < 30;
     const keepScroll = atBottom(body.querySelector('.ffeed'));
     body.innerHTML =
       `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${over ? '' : ' · live'}</div>
-      <div class="btabs">${['d', 'h', 't', 'all'].map(k => `<button class="${metric === k ? 'on' : ''}" data-lbf="${k}">${cols[k] || 'All'}</button>`).join('')}</div>
-      <div class="flb"><table class="lb"><tr><th>#</th><th style="text-align:left">Player</th>${keys.map(k => `<th>${cols[k]}</th>`).join('')}${metric === 'd' ? '<th>/s</th>' : ''}</tr>
-        ${rows.map((r, i) => `<tr class="${r.n.toLowerCase() === myName.toLowerCase() ? 'mme' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(r.n)}</td>` +
-          keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table></div>
+      <div class="flb">${lbTable(board, Math.max(1, cursor / 1000), 'data-lbf')}</div>
       <div class="ffeed">${feedShown.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * fight.scale)}</span>${FLINE[g.kind](g)}</div>`).join('') || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
     body.querySelectorAll('[data-lbf]').forEach(b => b.onclick = () => { localStorage.setItem('lbMetric', b.dataset.lbf); renderFight(); });
     const fe = body.querySelector('.ffeed');
@@ -915,10 +918,15 @@
           if (document.getElementById('partypanel').classList.contains('open')) renderParty();
         }
         if (d.type === 'encounter') {
-          try { startFight(d); } catch {} // live replay — even if we're not in it
+          let replayOk = false;
+          try { startFight(d); replayOk = true; } catch {} // live replay — even if we're not in it
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
             battleAt = Date.now(); battleWon = !!d.won;
-            try { saveBattle(buildReport(d)); } catch {}
+            try {
+              const rep = buildReport(d);
+              if (replayOk) { rep.feed = fight.feed.slice(-400); rep.feedScale = fight.scale; } // personal log, capped
+              saveBattle(rep);
+            } catch {}
           }
         }
       } catch {}
@@ -1065,17 +1073,7 @@
   }
   // Distinct class from the reminder toast: reconcileReforge reaps `.toast.reforge`
   // on cooldown, which would delete this result the instant loadStats() runs.
-  function reforgeToast(title, body, slot) {
-    const el = document.createElement('div');
-    el.className = 'toast reforge-result';
-    el.innerHTML = `
-      <div class="th"><span class="tn">${title}</span>${slot ? `<span class="ts">${slot}</span>` : ''}</div>
-      <div class="tmods"><span>${body}</span></div>
-      <div class="tacts"><button data-act="x">Dismiss</button></div>`;
-    el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
-    document.getElementById('dismissAll').after(el);
-    updateDismissAll();
-  }
+  const reforgeToast = (title, body, slot) => mkToast(title, body, [], { cls: 'reforge-result', sub: slot });
   // Show the reforge toast while available; remove it once used/on cooldown.
   function reconcileReforge(rf) {
     const cur = document.querySelector('.toast.reforge');
@@ -1083,8 +1081,7 @@
     else { reforgeDismissed = false; if (cur) { cur.remove(); updateDismissAll(); } } // window over — arm the next one
   }
 
-  // ---- collapse + drag: same constructor as every other panel ----
-  wirePanel('stats', 'statsbar', 'toggle', 'lay.stats');
+  wirePanel('stats', 'statsbar', 'toggle', 'lay.stats'); // stats shares the panel shell (no close button — always open)
 
   // ---- version + auto-update feedback ----
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
@@ -1093,34 +1090,65 @@
     const n = document.getElementById('hname').textContent;
     setTitle(n && n !== 'Character' ? n : '');
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
+    // Hot-pulled pages running against an older in-process bridge: some features
+    // won't work until the app is closed and reopened. Clears itself on restart.
+    if (!v.bridgeRev || v.bridgeRev < 71) showRestartBanner();
   }).catch(() => {});
 
+  // Full-width system banner across the top; one per id. Used for restart
+  // notices, the legacy-shell warning, and operator broadcasts.
+  function sysBanner(id, bg, fg, html, onDismiss) {
+    if (document.getElementById(id)) return;
+    const el = document.createElement('div');
+    el.id = id;
+    el.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:2000;background:${bg};color:${fg};` +
+      'font-weight:700;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.5)';
+    el.innerHTML = html +
+      ` <button style="margin-left:10px;background:${fg};color:${bg};border:0;border-radius:4px;padding:3px 9px;cursor:pointer;font-weight:700">Dismiss</button>`;
+    el.querySelector('button').onclick = () => { el.remove(); if (onDismiss) onDismiss(); };
+    document.body.appendChild(el);
+  }
+  const showRestartBanner = () => sysBanner('restartBanner', '#c0392b', '#fff',
+    '⚠️ RESTART YOUR CLIENT — this update needs a full restart to finish. Close the app and reopen it.');
   // Old portable builds still hot-update their web UI but can't update the app
   // shell (this bridge doesn't report autoUpdate). Warn them to install the new
   // one, or they're frozen on this shell forever.
-  function showLegacyBanner() {
-    if (document.getElementById('legacyBanner')) return;
-    const el = document.createElement('div');
-    el.id = 'legacyBanner';
-    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#d9a441;color:#1a1205;' +
-      'font-weight:700;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.5)';
-    el.innerHTML = '⚠️ This version no longer receives updates. ' +
-      '<a href="https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest" target="_blank" ' +
-      'style="color:#1a1205;text-decoration:underline">Download the new installer</a> ' +
-      '— install once, then updates are automatic. ' +
-      '<button id="legacyX" style="margin-left:10px;background:#1a1205;color:#ffcf5a;border:0;border-radius:4px;padding:3px 9px;cursor:pointer">Dismiss</button>';
-    document.body.appendChild(el);
-    document.getElementById('legacyX').onclick = () => el.remove();
-  }
+  const showLegacyBanner = () => sysBanner('legacyBanner', '#d9a441', '#1a1205',
+    '⚠️ This version no longer receives updates. ' +
+    '<a href="https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest" target="_blank" ' +
+    'style="color:#1a1205;text-decoration:underline">Download the new installer</a> ' +
+    '— install once, then updates are automatic.');
 
-  function infoToast(msg) {
-    const el = document.createElement('div');
-    el.className = 'toast';
-    el.innerHTML = `<div class="th"><span class="tn">${msg}</span></div><div class="tacts"><button data-act="x">OK</button></div>`;
-    const close = () => { el.remove(); updateDismissAll(); };
-    el.querySelector('[data-act="x"]').onclick = close;
-    document.getElementById('dismissAll').after(el); updateDismissAll(); setTimeout(close, 8000);
+  // ---- operator broadcast: a message posted to the telemetry backend shows as
+  // a banner on every running client within a minute. Dismiss remembers the
+  // message id, so each broadcast is seen once.
+  const TELEMETRY = 'https://pathofdustdesktop-production.up.railway.app';
+  async function checkBroadcast() {
+    try {
+      const b = await fetch(TELEMETRY + '/broadcast', { cache: 'no-store' }).then(r => r.json());
+      if (b.id && localStorage.getItem('bcSeen') !== b.id)
+        sysBanner('bc-' + b.id, '#7c5cff', '#fff', '📢 ' + esc(b.message), () => localStorage.setItem('bcSeen', b.id));
+    } catch {} // backend down / offline — try next tick
   }
+  setTimeout(checkBroadcast, 5000);
+  setInterval(checkBroadcast, 60000);
+
+  // Generic simple toast: title, optional body/sub, action buttons. The loot
+  // toast and the reforge reminder stay bespoke (richer markup + arming logic).
+  function mkToast(title, body, actions = [], opts = {}) {
+    if (opts.dedupe) document.querySelectorAll(opts.dedupe).forEach(t => t.remove());
+    const el = document.createElement('div');
+    el.className = 'toast' + (opts.cls ? ' ' + opts.cls : '');
+    el.innerHTML = `<div class="th"><span class="tn">${title}</span>${opts.sub ? `<span class="ts">${opts.sub}</span>` : ''}</div>` +
+      (body ? `<div class="tmods"><span>${body}</span></div>` : '') +
+      `<div class="tacts">${actions.map((a, i) => `<button data-mk="${i}">${a.label}</button>`).join('')}<button data-mk="x">${opts.dismissLabel || 'Dismiss'}</button></div>`;
+    const close = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-mk="x"]').onclick = close;
+    actions.forEach((a, i) => el.querySelector(`[data-mk="${i}"]`).onclick = a.onClick);
+    document.getElementById('dismissAll').after(el); updateDismissAll();
+    if (opts.timeout) setTimeout(close, opts.timeout);
+  }
+  const infoToast = (msg) => mkToast(msg, '', [], { dismissLabel: 'OK', timeout: 8000 });
   // Pull newer interface files through the bridge and reload to show them —
   // no app restart needed (bridge-code changes still arrive via restart).
   async function pullInterface(manual) {
@@ -1149,17 +1177,10 @@
   let _shellSeen = '';
   // Raw updater semver -> displayed style: major 29 reads as "2.9", 30 as "3.0".
   const fmtV = (v) => { const m = +String(v).split('.')[0]; return m ? `${Math.floor(m / 10)}.${m % 10}` : v; };
-  function showShellUpdateToast(v) {
-    document.querySelectorAll('.toast.update').forEach(t => t.remove());
-    const el = document.createElement('div');
-    el.className = 'toast update';
-    el.innerHTML = `<div class="th"><span class="tn">⬆️ Update v${fmtV(v)} Ready</span></div>` +
-      `<div class="tmods"><span>Restart to install — your login and layout are kept.</span></div>` +
-      `<div class="tacts"><button data-act="restart">Restart &amp; Update</button><button data-act="x">Later</button></div>`;
-    el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
-    el.querySelector('[data-act="restart"]').onclick = () => fetch('/api/apply-update', { method: 'POST' });
-    document.getElementById('dismissAll').after(el); updateDismissAll();
-  }
+  const showShellUpdateToast = (v) => mkToast(`⬆️ Update v${fmtV(v)} Ready`,
+    'Restart to install — your login and layout are kept.',
+    [{ label: 'Restart &amp; Update', onClick: () => fetch('/api/apply-update', { method: 'POST' }) }],
+    { cls: 'update', dedupe: '.toast.update', dismissLabel: 'Later' });
   async function checkShellUpdate() {
     let u; try { u = await fetch('/api/update-status', { cache: 'no-store' }).then(r => r.json()); } catch { return; }
     if (!u || !u.version) return;
@@ -1201,6 +1222,8 @@
   }
   window.addEventListener('error', (e) => logRemote('error', `${e.message} @ ${e.filename}:${e.lineno}`));
   window.addEventListener('unhandledrejection', (e) => logRemote('error', 'unhandled: ' + (e.reason && e.reason.message || e.reason)));
+  if (new URLSearchParams(location.search).get('updated'))
+    mkToast('✨ Interface Updated', "You're on the latest — the app updates itself on launch.", [], { timeout: 12000 });
 </script>
 <script src="/tooltip.js"></script>
 </body>
