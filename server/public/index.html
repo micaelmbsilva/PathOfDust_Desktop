@@ -388,41 +388,116 @@ const ROLL_KW = { 'Block': ['block'], 'Evasion': ['evasion'], 'Attack Speed': ['
   'Crit Chance': ['crit chance'], 'Increased Crit Dmg Dealt': ['crit dmg'], 'Increased Dmg Dealt': ['dmg dealt'],
   'Max HP': ['max hp'], 'Healing Power': ['healing power'], 'Splash': ['splash'], 'Intervene': ['intervene'],
   'Lingering Effect': ['lingering'], 'Leech': ['leech'], 'Reduced Dmg Taken': ['dmg taken reduction', 'reduced dmg'] };
+const rankNum = (r) => +(String(r == null ? '' : r).match(/^\d+/) || [0])[0];
+
 async function advisor(name) {
-  // Same key gate as the watchlist — validated against the server, not just presence.
-  if ((await fetch('api/watchlist?key=' + encodeURIComponent(siteKey()))).status === 403) return keyDenied();
-  const [r, { builds, passives }] = await Promise.all([fetch('api/build/' + encodeURIComponent(name)), staticData()]);
+  const key = encodeURIComponent(siteKey());
+  if ((await fetch('api/watchlist?key=' + key)).status === 403) return keyDenied();
+  const [r, { builds, passives }, ratesR] = await Promise.all([
+    fetch('api/build/' + encodeURIComponent(name)), staticData(), fetch('api/affix-rates?key=' + key)]);
   if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
   const b = await r.json();
-  const corpus = arr(b.equipped).flatMap(it => [...arr(it.mods).map(m => str(m && m.t)), str(it.implicit)])
-    .join(' | ').toLowerCase();
+  const rates = ratesR.ok ? arr((await ratesR.json()).rates) : [];
+  const rateOf = (kws) => { // exact affix name first, substring fallback
+    for (const kw of kws) { const x = rates.find(q => str(q.affix) === kw); if (x) return +x.per_tier; }
+    for (const kw of kws) { const x = rates.find(q => str(q.affix).includes(kw)); if (x) return +x.per_tier; }
+    return 0;
+  };
+  const mods = arr(b.equipped).flatMap(it => arr(it.mods).map(m => str(m && m.t).toLowerCase()));
+  const corpus = mods.concat(arr(b.equipped).map(it => str(it.implicit).toLowerCase())).join(' | ');
   const count = (kw) => corpus.split(kw).length - 1;
-  const ranked = Object.entries(builds.classes).map(([cls, cb]) => {
-    const build = arr(cb.builds)[0];
-    let score = 0; const hits = [];
-    arr(build && build.rolls).forEach((roll, i) => {
-      let n = Math.max(...(ROLL_KW[roll.s] || [str(roll.s).toLowerCase()]).map(count), 0);
-      if (roll.s === 'Increased Dmg Dealt') n = Math.max(0, n - count('crit dmg dealt')); // don't double-count crit dmg
-      if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${n}`); }
+  const modValsOf = (kws) => mods.filter(t => kws.some(kw => t.includes(kw))
+    && !(kws[0] === 'dmg dealt' && t.includes('crit dmg'))).reduce((s, t) => s + num(t.match(/[\d.]+/)?.[0]), 0);
+
+  let role = null; // null = auto; 'dps' | 'tank' | 'healer'
+  function render() {
+    const ranked = Object.entries(builds.classes)
+      .filter(([cls]) => !role || roleOf(cls, passives) === role)
+      .map(([cls, cb]) => {
+        const build = arr(cb.builds)[0];
+        let score = 0; const hits = [];
+        arr(build && build.rolls).forEach((roll, i) => {
+          let n = Math.max(...(ROLL_KW[roll.s] || [str(roll.s).toLowerCase()]).map(count), 0);
+          if (roll.s === 'Increased Dmg Dealt') n = Math.max(0, n - count('crit dmg dealt'));
+          if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${n}`); }
+        });
+        return { cls, build, score, hits };
+      }).filter(x => x.build).sort((a, z) => z.score - a.score);
+    const best = ranked[0];
+
+    // Passive respec plan vs the pick's tree order
+    const alloc = new Map(arr(b.passives && b.passives.nodes).filter(n => rankNum(n.rank) > 0)
+      .map(n => [str(n.name), rankNum(n.rank)]));
+    const target = new Map(arr(best && best.build.order).map(o => [str(o.n), +o.r]));
+    const toGet = [...target].filter(([n, tr]) => (alloc.get(n) || 0) < tr).map(([n, tr]) => `${n} ${alloc.get(n) || 0}→${tr}`);
+    const toDrop = [...alloc].filter(([n]) => !target.has(n)).map(([n, tr]) => `${n} ${tr}`);
+
+    // t100 projection: 5 slots × 4 base mods (one of each top-4 priority per slot),
+    // average rolls from live data, no crit-bonus mods, + maxed Sacred implicit
+    // (~2× an average roll) on the biggest-impact stat.
+    const T = 100, SLOTS = 5;
+    const projRows = arr(best && best.build.rolls).slice(0, 4).map((roll) => {
+      const kws = ROLL_KW[roll.s] || [str(roll.s).toLowerCase()];
+      const rate = rateOf(kws);
+      const cur = modValsOf(kws);
+      const proj = rate ? SLOTS * rate * T + (roll.top ? 2 * rate * T : 0) : null;
+      return { s: roll.s, top: roll.top, cur, proj };
     });
-    return { cls, build, score, hits };
-  }).filter(x => x.build).sort((a, z) => z.score - a.score);
-  const best = ranked[0];
-  view(
-    el('p', null, el('a', { href: '#/' }, '← Ladder')),
-    el('h1', null, 'Gear advisor'),
-    el('p', { class: 'sub' }, `What ${str(b.name)}'s current gear wants to be — scored against every class build's roll priorities.`),
-    el('div', { class: 'card' },
-      el('div', { class: 'bname' }, best.score ? `Play ${best.cls} — ${str(best.build.name)}` : 'No clear signal from this gear'),
-      best.score ? el('div', { class: 'btag' }, `Gear matches: ${best.hits.join(' · ')}`) : null,
-      best.score ? el('p', null, str(best.build.why)) : el('p', null, 'No rolled mods matched any build priority — level up or roll gear first.'),
-      best.score ? el('p', null, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} build + tree order →`)) : null),
-    ranked.filter(x => x.score && x !== best).length ? [
-      el('h2', null, 'Runners-up'),
-      el('div', { class: 'stack' }, ranked.filter(x => x.score && x !== best).slice(0, 3).map(x =>
+
+    // Per-item crafting advice against the pick's priorities
+    const wanted = (t) => arr(best && best.build.rolls).some(roll =>
+      (ROLL_KW[roll.s] || [str(roll.s).toLowerCase()]).some(kw => str(t).toLowerCase().includes(kw)));
+    const craftRows = arr(b.equipped).map(it => {
+      const tier = +str(it.tier).replace(/\D/g, '') || 0;
+      const junk = arr(it.mods).filter(m => !wanted(m && m.t)).map(m => str(m && m.t));
+      const tips = [
+        tier < 85 && `Reforge toward t100 (t${tier} now)`,
+        junk.length && `re-roll off-build mods: ${junk.join(', ')}`,
+        !/perfect/i.test(str(it.quality)) && 'Polish to Perfect',
+        !it.sacred && 'upgrade to a Sacred base at stage 200+',
+      ].filter(Boolean);
+      return tips.length ? el('li', null, el('b', null, str(it.slot) || 'item'), ` (${str(it.name)}): ${tips.join(' · ')}`) : null;
+    }).filter(Boolean);
+
+    const roleChip = (rv, label) => {
+      const e = el('span', { class: 'chip' + (role === rv ? ' on' : '') }, label);
+      e.onclick = () => { role = rv; render(); };
+      return e;
+    };
+    view(
+      el('p', null, el('a', { href: '#/' }, '← Ladder')),
+      el('h1', null, 'Advisor'),
+      el('p', { class: 'sub' }, `${str(b.name)} · ${str(b.archetype)} Lv ${str(b.level)} — full-loadout suggestions from live data.`),
+      el('div', { class: 'chips', style: 'margin:0 0 14px' },
+        'Role: ', roleChip(null, 'Auto'), roleChip('dps', '🗡️ DPS'), roleChip('tank', '🛡️ Tank'), roleChip('healer', '🩹 Healer')),
+      !best ? el('p', { class: 'status' }, 'No builds for this role.') : el('div', { class: 'card' },
+        el('div', { class: 'bname' }, best.score ? `Play ${best.cls} — ${str(best.build.name)}` : `${best.cls} — ${str(best.build.name)} (best fit for this role)`),
+        el('div', { class: 'btag' }, `score ${best.score}${best.hits.length ? ' · gear matches: ' + best.hits.join(' · ') : ' · no matching mods on current gear yet'}`),
+        el('p', null, str(best.build.why)),
+        el('p', null, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} build + tree order →`))),
+      best && ranked.length > 1 ? el('div', { class: 'chips', style: 'margin:10px 0 0' }, ranked.slice(1, 4).map(x =>
+        el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(x.cls) }, `${x.cls} · ${x.score}`))) : null,
+      best ? [
+        el('h2', null, 'Passives plan'),
         el('div', { class: 'card' },
-          el('div', { class: 'bname' }, el('a', { href: '#/class/' + encodeURIComponent(x.cls) }, x.cls), ` — ${str(x.build.name)}`),
-          el('div', { class: 'btag' }, `score ${x.score} · ${x.hits.join(' · ')}`))))] : null);
+          toGet.length ? [el('p', { class: 'sub', style: 'margin:0 0 6px' }, 'Allocate:'),
+            el('div', { class: 'chips' }, toGet.map(t => el('span', { class: 'chip' }, t)))] : el('p', { style: 'margin:0' }, 'Tree already matches this build.'),
+          toDrop.length ? [el('p', { class: 'sub', style: 'margin:12px 0 6px' }, 'Respec out (off-build):'),
+            el('div', { class: 'chips' }, toDrop.map(t => el('span', { class: 'chip' }, t)))] : null),
+        el('h2', null, 'Stat preview at the t100 target'),
+        el('p', { class: 'sub' }, 'Assumes 5 slots × 4 average-rolled t100 mods (one of each priority per slot, no crit-bonus mods) + a maxed Sacred implicit on the biggest-impact stat. Rates come from all scraped gear.'),
+        el('table', null,
+          el('thead', null, el('tr', null, el('th', null, 'Stat'), el('th', { class: 'r' }, 'On gear now'), el('th', { class: 'r' }, 'At t100 target'), el('th', { class: 'r' }, 'Δ'))),
+          el('tbody', null, projRows.map(p => el('tr', null,
+            el('td', null, str(p.s), p.top ? el('span', { class: 'badge top' }, 'sacred here') : null),
+            el('td', { class: 'r' }, p.cur ? fmt(p.cur) + '%' : '—'),
+            el('td', { class: 'r' }, p.proj ? fmt(p.proj) + '%' : 'no data yet'),
+            el('td', { class: 'r' }, p.proj ? '+' + fmt(Math.max(0, p.proj - p.cur)) + '%' : '—'))))),
+        craftRows.length ? [el('h2', null, 'Crafting worklist'),
+          el('ul', { class: 'rolls' }, craftRows)] : null,
+      ] : null);
+  }
+  render();
 }
 
 function treeSection(archetype, passives) {

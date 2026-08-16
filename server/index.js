@@ -187,6 +187,23 @@ app.get('/api/watchlist', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'watchlist.json'));
 });
 
+// Empirical affix rates for the advisor's t100 projection: average mod value per
+// item tier, per affix type, across all scraped gear. Same key as the watchlist.
+app.get('/api/affix-rates', h(async (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!pool) return res.sendStatus(503);
+  const { rows } = await pool.query(`
+    SELECT trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')) AS affix,
+           round(avg((substring(m->>'t' from '([0-9]+\\.?[0-9]*)'))::numeric
+                     / NULLIF((substring(it->>'tier' from '\\d+'))::int, 0)), 4) AS per_tier,
+           count(*)::int AS samples
+    FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m
+    WHERE data ? 'equipped' AND m->>'t' ~ '[0-9]' AND it->>'tier' ~ '\\d'
+    GROUP BY 1 HAVING count(*) >= 3 ORDER BY 3 DESC`);
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ rates: rows });
+}));
+
 // Freshly scraped class trees win over the static public/passives.json snapshot
 // (which stays as the fallback until the first wiki scrape lands).
 app.get('/passives.json', (_req, res, next) => {
