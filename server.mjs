@@ -221,13 +221,15 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/version') {
       let webRev = 0;
       try { webRev = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
-      // Displayed version = shell major.minor + interface revision in the patch
-      // slot (e.g. shell 29.0.0 + interface 36 -> "29.0.36"), so silent interface
-      // updates are visible without looking like an app update. Convention: shell
-      // releases bump major/minor only, keeping the patch slot free for this.
+      // Displayed version is derived, not the raw semver: the shell major splits
+      // into major.minor (29 -> "2.9", 30 -> "3.0") and the patch slot shows the
+      // interface revision — e.g. shell 29.0.0 + interface 38 -> "2.9.38". The
+      // real semver keeps rising 29.x/30.x so electron-updater ordering and
+      // release tags are untouched; this is purely the user-facing number.
       // Old shells without global.__version fall back to the bare revision.
-      const semver = globalThis.__version;
-      return json(res, { version: semver ? semver.replace(/\d+$/, String(webRev)) : String(webRev), autoUpdate: !!globalThis.__autoUpdate });
+      const maj = +((globalThis.__version || '').split('.')[0]);
+      const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${webRev}` : String(webRev);
+      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate });
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {
