@@ -183,8 +183,12 @@
     $('bar').innerHTML =
       `<span class="chip">🪓 <strong>${p.points}</strong></span>
        <button class="btn-save" id="save" ${p.canSave ? '' : 'disabled'}>Save Changes</button>
-       <button class="btn-respec" id="respec">${p.respecLabel}</button>`;
+       ${p.canReset ? '<button class="btn-respec" id="reset">Reset Preview</button>' : ''}
+       <button class="btn-respec" id="respec">${p.respecLabel}</button>
+       ${p.dirty ? '<span class="chip" style="color:#ffd76b;border-color:rgba(255,215,107,0.4)">Unsaved changes</span>' : ''}`;
     $('save').onclick = async () => { await api('passives/save', {}); refresh(); };
+    const rst = $('reset');
+    if (rst) rst.onclick = async () => { await api('passives/reset', {}); refresh(); }; // discard unsaved allocations
     $('respec').onclick = async () => { if (confirm('Respec — reset all points?')) { await api('passives/respec', {}); refresh(); } };
 
     const stage = $('stage');
