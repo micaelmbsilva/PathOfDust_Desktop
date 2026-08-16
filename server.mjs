@@ -53,6 +53,9 @@ async function ping() {
 }
 
 const PORT = 8787;
+// Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
+// The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
+const BRIDGE_REV = 71;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -273,7 +276,7 @@ const srv = createServer(async (req, res) => {
       // Old shells without global.__version fall back to the bare revision.
       const maj = +((globalThis.__version || '').split('.')[0]);
       const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${webRev}` : String(webRev);
-      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate });
+      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV });
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {
