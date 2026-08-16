@@ -12,8 +12,9 @@
   h1 { font-size: 1.2rem; margin: 0 0 4px; }
   h2 { font-size: 1rem; color: #c9bdf0; margin: 18px 0 8px; }
   .bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  #cur { position: sticky; top: 0; z-index: 10; background: #0c0a16;
-    margin: 0 -16px 4px; padding: 10px 16px; border-bottom: 1px solid rgba(160,140,255,0.15); }
+  #hdr { position: sticky; top: 0; z-index: 10; background: #0c0a16;
+    margin: 0 -16px 4px; padding: 8px 16px 10px; border-bottom: 1px solid rgba(160,140,255,0.15); }
+  #hdr h1 { margin-bottom: 8px; }
   .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px; padding: 4px 10px; font-size: 0.85rem; color: #eae6f5; }
   .chip.repair { cursor: pointer; }
   .chip.repair.on { border-color: #4a8a5a; background: rgba(120,255,160,0.12); }
@@ -66,8 +67,10 @@
 </style>
 </head>
 <body>
-  <h1>🎒 Bag &amp; Crafting <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
-  <div class="bar" id="cur"></div>
+  <div id="hdr">
+    <h1>🎒 Bag &amp; Crafting <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
+    <div class="bar" id="cur"></div>
+  </div>
   <div id="err"></div>
 
   <div id="veilChoice"></div>
