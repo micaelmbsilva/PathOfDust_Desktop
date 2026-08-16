@@ -38,7 +38,8 @@ async function ping() {
       const inv = await inventory();
       snap.dust = inv.dust; snap.sand = inv.sand; snap.tokens = inv.tokens;
       const gear = (it) => ({ slot: it.slot, name: it.name, tier: it.tier, quality: it.quality,
-        primary: it.primary, mods: it.mods, krangled: it.krangled, protected: it.protected });
+        primary: it.primary, mods: it.mods, sacred: it.sacred, implicit: it.implicit,
+        krangled: it.krangled, protected: it.protected });
       snap.equipped = (inv.equipped || []).map(gear);
       snap.bag = (inv.bag || []).map(gear);
     } catch {}
@@ -93,6 +94,9 @@ const modsOf = (chunk) => [...chunk.matchAll(/class="mod-roll"([^>]*)>([^<]*)</g
   .map(m => ({ t: strip(m[2]), tip: tipOf(m[1]) }));
 // the gear-quality element's tooltip (Perfect Quality etc.)
 const qtipOf = (chunk) => tipOf((chunk.match(/class="gear-quality[^"]*"([^>]*)>/) || [])[1] || '');
+// Sacred/unique implicit callout ("✦ Sacred: +224% splash" / the gold unique line).
+// One per item; implicitGold marks the unique (gold) variant for styling.
+const implicitOf = (chunk) => strip((chunk.match(/class="gear-(?:sacred|unique)"[^>]*>([^<]*)</) || [])[1] || '');
 
 // Scrape the bag (unequipped items) from the inventory page. Each item's id is
 // the item_id its equip/disenchant forms carry; `protected` = the Keep checkbox.
@@ -108,6 +112,8 @@ async function bag(pageText) {
       id, name: grab('gear-name'), slot: grab('gear-slot-label'),
       quality: grab('gear-quality'), qtip: qtipOf(chunk), tier: grab('gear-tier'),
       primary: grab('gear-primary'), mods: modsOf(chunk),
+      sacred: /gear-name-sacred/.test(chunk),
+      implicit: implicitOf(chunk), implicitGold: /class="gear-unique"/.test(chunk),
       krangled: /gear-name-locked/.test(chunk),
       protected: /name="protect"[^>]*checked/.test(chunk),
     });
@@ -138,6 +144,8 @@ async function inventory() {
     equipped.push({
       slot, name: grab('gear-name'), quality: grab('gear-quality'), qtip: qtipOf(chunk),
       tier: grab('gear-tier'), primary: grab('gear-primary'), mods: modsOf(chunk),
+      sacred: /gear-name-sacred/.test(chunk),
+      implicit: implicitOf(chunk), implicitGold: /class="gear-unique"/.test(chunk),
       krangled: /gear-name-locked/.test(chunk),
     });
   }
