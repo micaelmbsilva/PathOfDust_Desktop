@@ -180,6 +180,13 @@ app.get('/api/build/:name', h(async (req, res) => {
   res.json(rows[0]);
 }));
 
+// Private watchlist (OP interactions) — keyed, fail closed. SITE_KEY env gates
+// it; the data lives outside public/ so the static server never exposes it.
+app.get('/api/watchlist', (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  res.sendFile(require('path').join(__dirname, 'watchlist.json'));
+});
+
 // Freshly scraped class trees win over the static public/passives.json snapshot
 // (which stays as the fallback until the first wiki scrape lands).
 app.get('/passives.json', (_req, res, next) => {

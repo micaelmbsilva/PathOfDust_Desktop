@@ -1,0 +1,106 @@
+{
+ "interactions": [
+  {
+   "title": "Lingering Effect ignores every defense",
+   "classes": [
+    "Berserker",
+    "Slayer",
+    "Monk"
+   ],
+   "text": "Lingering applies a DoT worth its % of each hit's PRE-DEFENSE damage — it can't be blocked or evaded, only flat damage reduction applies, and every hit spawns its own independent 4s DoT. Dynamic difficulty pumps boss block/evasion toward the 75% cap as you win — Lingering doesn't care. Multi-hit builds (Frenzy's 4 strikes, attack-speed stackers) each stack their own timers. The single best anti-defense tech in the game."
+  },
+  {
+   "title": "Attack speed is uncapped and compounds",
+   "classes": [
+    "Berserker",
+    "Warlock",
+    "Mage",
+    "Ranger"
+   ],
+   "text": "The old hidden 75% speed ceiling is gone — speed is a real rate with only a 50ms floor, and TREE speed multiplies gear speed independently (all tree stats compound with gear now, not add). Gloves' tier cap is also gone (a t95 Perfect glove ≈ 123%). Mage/Warlock convert everything past 100% into damage and crit on top. Speed is the premium roll almost everywhere."
+  },
+  {
+   "title": "Dynamic difficulty punishes stomping",
+   "classes": [],
+   "text": "Boss power rubber-bands off your last 20 fights toward a ~5:2 win:loss ratio — a DOMINANT win ratchets boss HP/damage/defenses up hard (tuned so the next fight is a likely loss), a close win barely moves it, and losses ease it 15%/loss. Overkill no longer counts as dominance. Efficient play is winning UGLY: barely-won fights farm the same loot at low difficulty. Also: enemies focus above-median-level players first, and catch-up multiplies low-level pity loot — sitting at or below party median means less focus and more loot."
+  },
+  {
+   "title": "The 7-modifier item blueprint",
+   "classes": [],
+   "text": "Hard ceiling per item: 4 base modifiers + at most one each from Reforge's crit, Recombine's crit, and Krangle. Reforge's bonus-modifier crit scales with quality (2.2% on Perfect, once EVER per item, survives Recombine) — so the order is: roll 4 mods, Polish to Perfect, spam targeted Reforge for the crit, Recombine-crit, Krangle last (it locks the item). From stage 200, Sacred bases add a 5th, maxed implicit outside the cap on top. Every craft also bumps tier (+3 under t25) — cheap crafts on low-tier gear are free tier growth."
+  },
+  {
+   "title": "Overflow double-dipping",
+   "classes": [
+    "Rogue",
+    "Monk",
+    "Druid",
+    "Paladin",
+    "Warrior"
+   ],
+   "text": "Every overflow node counts COMBINED gear + tree stat, and four classes have a second, independent conversion channel off the same overflow (Rogue Phantom, Monk Granite Skin, Druid Primal Shift, Paladin Sanctified Armor). Patch-confirmed: node conversions pay out ON TOP of the free baseline overflow-to-damage conversion every character already gets — the same overcapped stat pays two or three times. Gear alone can carry the whole engine."
+  },
+  {
+   "title": "Echo chains snowball",
+   "classes": [
+    "Mage",
+    "Rogue",
+    "Berserker"
+   ],
+   "text": "Mage Spell Echo (75% trigger with Resonance, 80% damage with Echoing Power) re-triggers up to 9 times via Finite Loop; Rogue Twin Strikes re-crits and re-triggers via Double Tap — now also capped at 9 repeats, per the updated wiki text; Berserker Chain Frenzy chains 4-strike Frenzy procs up to 3 deep. Hit-count multiplies with crit stacking — the closer to 100% crit, the closer these get to exponential."
+  },
+  {
+   "title": "The multiplicative club",
+   "classes": [
+    "Warrior",
+    "Berserker",
+    "Warlock"
+   ],
+   "text": "Titan's Grip converts 100% of Juggernaut + Colossus's combined 48% tree HP into increased damage applied MULTIPLICATIVELY — and per the Aug 16 patch, Overwhelming Force, Berserker's Reckless Swing/Death Wish, and Warlock's Life Tap now all stack multiplicatively too, compounding independently instead of blending into the shared additive pool. Points in these out-scale identical-looking additive nodes."
+  },
+  {
+   "title": "Elemental procs — Lightning stacks to +200%",
+   "classes": [
+    "Warrior",
+    "Druid",
+    "Monk"
+   ],
+   "text": "New system (Aug 15-16 patches): Fire/Cold/Lightning/Divine/Chaos rolls give flat damage plus a proc chance (roll ÷ 50) applying stacking 4s effects — Lightning stacks +1% damage taken per proc up to +200%, the biggest team multiplier on gear. And a healer's Fire/Cold/Chaos procs BUFF whoever they heal — pushing an ally's block/evasion past its cap feeds straight into their Unbreakable/Shifting Form overflow conversion. Healer procs literally become tank damage."
+  },
+  {
+   "title": "Volley counts reachable targets — and now boosts everything",
+   "classes": [
+    "Ranger"
+   ],
+   "text": "Volley grants +30% damage per target the attack CAN reach (not per hit), and the reworked Chain Shot adds another +30% per rank to that same per-target bonus for the WHOLE attack, splash included. Splash past 100% grants bonus targets, which raises the reachable count again. Peak case: the Lich raises up to 20 skeletons — every one of them is a Volley multiplier. Rangers should pray for Lich fights."
+  },
+  {
+   "title": "Healing-power flywheel",
+   "classes": [
+    "Druid",
+    "Paladin",
+    "Cleric"
+   ],
+   "text": "Healing power above 100% converts into ACTION FREQUENCY — interval = 1.7s ÷ (1 + excess), so 300% healing power means three actions in the time of one, stacking with glove/archetype speed and the Druid's Wild Surge. Evergrowth converts 9% of total healing power into Lingering, Seed of Life turns ticks into shields, and Divine elemental procs stack +1% healing done per proc up to +200% — the flywheel now feeds itself from gear procs too. Paladin's Holy Fire double-dips the same stat as party-wide damage."
+  },
+  {
+   "title": "Slayer ignores the leech cap",
+   "classes": [
+    "Slayer"
+   ],
+   "text": "Endless Thirst at 3/3 removes the leech-per-second cap entirely during FlickerStrike windows; Hemorrhage explodes for 80% of ALL damage dealt to the wounded target and its Overflow leech explicitly bypasses the cap too. Combined with Bloodpact firing quadruple-damage hits every ~2s (Blood Sacrifice), sustain scales with damage with no ceiling."
+  },
+  {
+   "title": "Party-wide damage-taken amplification",
+   "classes": [
+    "Warlock"
+   ],
+   "text": "Curse of Weakness 20% + Amplify Curse 24% + Hex Mastery 24% = up to +68% damage taken by the target from EVERYONE, spread via Contagious Curse, then Doom detonates for 105% of damage dealt (with Harbinger) and Apocalypse splashes 90% of that. Best force-multiplier in a full party."
+  },
+  {
+   "title": "Fight the right fights",
+   "classes": [],
+   "text": "Cthulhu permanently crushes whoever leads the damage meter by 90% — spread damage, don't carry; helm gear is a STACKING dps buff the longer you survive, and boss HP is 10x, so tanky sustain builds out-damage glass late in long fights. A DPS Celestial Shard wielder gets a 10% replay hit on every landed hit that triggers leech and elemental procs — an extra proc engine, now droppable for everyone. Wings of Flight makes you immune to slam knockback for full attack uptime."
+  }
+ ]
+}

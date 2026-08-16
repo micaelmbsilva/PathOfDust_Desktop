@@ -281,13 +281,22 @@ async function ladder() {
     null); // OP watchlist lives at the unlinked #/watchlist route
 }
 
+// Hidden routes are keyed: append ?key=<SITE_KEY> once (e.g. #/watchlist?key=…),
+// it's remembered locally and stripped from the URL. Server enforces it for the
+// watchlist data; the advisor shares the same gate.
+const siteKey = () => localStorage.getItem('pod.key') || '';
+const keyDenied = () => view(el('p', { class: 'status' }, 'This page needs a key — open it once with ?key=… appended.'));
+
 // Hidden route: #/watchlist — the OP interactions list, no nav links to it.
 async function watchlist() {
-  const { builds } = await staticData();
+  const r = await fetch('api/watchlist?key=' + encodeURIComponent(siteKey()));
+  if (r.status === 403) return keyDenied();
+  if (!r.ok) throw new Error('watchlist ' + r.status);
+  const { interactions } = await r.json();
   view(
     el('p', null, el('a', { href: '#/' }, '← Ladder')),
     el('h1', null, 'OP interactions watchlist'),
-    el('div', { class: 'stack' }, arr(builds && builds.interactions).map(i => el('div', { class: 'card' },
+    el('div', { class: 'stack' }, arr(interactions).map(i => el('div', { class: 'card' },
       el('div', { class: 'bname' }, str(i.title)),
       el('div', { class: 'chips', style: 'margin:6px 0 0' },
         arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
@@ -380,6 +389,8 @@ const ROLL_KW = { 'Block': ['block'], 'Evasion': ['evasion'], 'Attack Speed': ['
   'Max HP': ['max hp'], 'Healing Power': ['healing power'], 'Splash': ['splash'], 'Intervene': ['intervene'],
   'Lingering Effect': ['lingering'], 'Leech': ['leech'], 'Reduced Dmg Taken': ['dmg taken reduction', 'reduced dmg'] };
 async function advisor(name) {
+  // Same key gate as the watchlist — validated against the server, not just presence.
+  if ((await fetch('api/watchlist?key=' + encodeURIComponent(siteKey()))).status === 403) return keyDenied();
   const [r, { builds, passives }] = await Promise.all([fetch('api/build/' + encodeURIComponent(name)), staticData()]);
   if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
   const b = await r.json();
@@ -456,6 +467,9 @@ async function classView(archetype) {
 }
 
 async function route() {
+  // Capture ?key=… from the hash once, remember it, strip it from the URL.
+  const km = location.hash.match(/^(.*?)\?key=([^&]+)$/);
+  if (km) { localStorage.setItem('pod.key', decodeURIComponent(km[2])); location.replace(location.pathname + km[1]); return; }
   if (location.hash === '#/watchlist') { try { await watchlist(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); return; }
   const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
   try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
