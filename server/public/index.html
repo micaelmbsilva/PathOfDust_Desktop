@@ -188,7 +188,8 @@ async function build(name) {
   if (!r.ok) throw new Error('build ' + r.status);
   const b = await r.json();
   const stats = Object.entries(b.stats && typeof b.stats === 'object' ? b.stats : {});
-  const nodes = arr(b.passives && b.passives.nodes);
+  // pings/scrapes send the full tree — show allocated only ("0/4" = unallocated)
+  const nodes = arr(b.passives && b.passives.nodes).filter(n => !/^0/.test(str(n && n.rank)));
   view(
     el('p', null, el('a', { href: '#/' }, '← Ladder')),
     el('h1', null, str(b.name)),
