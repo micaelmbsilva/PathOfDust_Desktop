@@ -614,6 +614,7 @@
     bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); save(); });
   }
   wirePanel('partypanel', 'partybar', 'partyCollapse', 'lay.party');
+  wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
 
   // Party composition classed as DPS / Heal / Tank (not the site's melee/ranged/
