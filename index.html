@@ -155,6 +155,35 @@
     window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`);
   }
 
+  // ---- layout persistence (panel positions/sizes/collapse + overlay zoom) ----
+  const LS = {
+    get: (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch { return d; } },
+    set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+  // Restore a draggable/resizable/collapsible panel's geometry, and return a
+  // save() to call after drags/collapses (resizes autosave via ResizeObserver).
+  function persistPanel(el, key) {
+    const s = LS.get(key, null);
+    if (s) {
+      if (s.left != null) { el.style.left = s.left + 'px'; el.style.right = 'auto'; }
+      if (s.top != null) el.style.top = s.top + 'px';
+      if (s.width) el.style.width = s.width + 'px';
+      if (s.height && !s.collapsed) el.style.height = s.height + 'px';
+      if (s.collapsed) el.classList.add('collapsed');
+    }
+    const save = () => {
+      if (!el.offsetWidth) return; // hidden (e.g. chat closed) — don't store zeros
+      const r = el.getBoundingClientRect(), prev = LS.get(key, {}), collapsed = el.classList.contains('collapsed');
+      LS.set(key, {
+        left: Math.round(r.left), top: Math.round(r.top), width: Math.round(el.offsetWidth),
+        height: collapsed ? (prev.height || 0) : Math.round(el.offsetHeight), // keep expanded height while collapsed
+        collapsed,
+      });
+    };
+    new ResizeObserver(save).observe(el);
+    return save;
+  }
+
   // Overlay source: plain, or ?highlight=<name> to dim other players (lokati's
   // feature). Toggle persists; needs our character name (from /api/me).
   const OVERLAY = 'https://adventure.lokati.net/overlay';
@@ -188,9 +217,12 @@
     const panel = document.getElementById('chatpanel');
     const bar = document.getElementById('chatbar');
     const cbtn = document.getElementById('chatCollapse');
+    const saveChat = persistPanel(panel, 'lay.chat');
+    cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾'; // reflect restored state
     cbtn.onclick = () => {
       panel.classList.toggle('collapsed');
       cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+      saveChat();
     };
     // pop out into a real window — fully interactive Twitch chat, no iframe quirks
     document.getElementById('chatPop').onclick = () => {
@@ -209,7 +241,7 @@
       panel.style.left = Math.max(0, Math.min(innerWidth - 60, e.clientX - dx)) + 'px';
       panel.style.top = Math.max(44, Math.min(innerHeight - 40, e.clientY - dy)) + 'px';
     });
-    bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); });
+    bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); saveChat(); });
   })();
 
   // ---- overlay zoom (wheel) ----
@@ -219,13 +251,17 @@
   const ov = document.getElementById('overlay');
   const cap = document.getElementById('zoomcapture');
   let z = 1, panX = 0, panY = 0;
+  { const s = LS.get('lay.zoom', null); if (s) { z = s.z || 1; panX = s.panX || 0; panY = s.panY || 0; } } // restore
   const MIN = 0.4, MAX = 3;
   // Reflow zoom (internal size inverse + scale back → aspect-preserved, full-bleed),
   // plus a translate so you can hold-drag to move the camera.
+  let zsaveT;
   const applyZoom = () => {
     ov.style.width = ov.style.height = (100 / z) + '%';
     ov.style.transform = `translate(${panX}px,${panY}px) scale(${z})`;
+    clearTimeout(zsaveT); zsaveT = setTimeout(() => LS.set('lay.zoom', { z, panX, panY }), 400);
   };
+  applyZoom(); // apply restored zoom/pan on load
   cap.addEventListener('wheel', (e) => {
     e.preventDefault();
     z = Math.min(MAX, Math.max(MIN, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1)));
@@ -433,9 +469,12 @@
 
   // ---- collapse ----
   const stats = document.getElementById('stats'), toggle = document.getElementById('toggle');
+  const saveStats = persistPanel(stats, 'lay.stats');
+  toggle.textContent = stats.classList.contains('collapsed') ? '▸' : '▾'; // reflect restored state
   toggle.onclick = () => {
     stats.classList.toggle('collapsed');
     toggle.textContent = stats.classList.contains('collapsed') ? '▸' : '▾';
+    saveStats();
   };
 
   // ---- drag by the bar ----
@@ -454,7 +493,7 @@
     const y = Math.max(44, Math.min(window.innerHeight - 40, e.clientY - dy));
     stats.style.left = x + 'px'; stats.style.top = y + 'px';
   });
-  bar.addEventListener('pointerup', (e) => { dragging = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); });
+  bar.addEventListener('pointerup', (e) => { dragging = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); saveStats(); });
 
   // ---- version + auto-update feedback ----
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
@@ -527,6 +566,32 @@
   }
   setTimeout(() => checkUpdate(false), 15000);        // shortly after launch
   setInterval(() => checkUpdate(false), 20 * 60000);  // and every 20 min
+
+  // ---- shell (installer) update via electron-updater: toast when downloading /
+  // ready, and let the user restart to apply.
+  let _shellSeen = '';
+  function showShellUpdateToast(v) {
+    document.querySelectorAll('.toast.update').forEach(t => t.remove());
+    const el = document.createElement('div');
+    el.className = 'toast update';
+    el.innerHTML = `<div class="th"><span class="tn">⬆️ Update v${v} ready</span></div>` +
+      `<div class="tmods"><span>Restart to install — your login and layout are kept.</span></div>` +
+      `<div class="tacts"><button data-act="restart">Restart &amp; update</button><button data-act="x">Later</button></div>`;
+    el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="restart"]').onclick = () => fetch('/api/apply-update', { method: 'POST' });
+    document.getElementById('dismissAll').after(el); updateDismissAll();
+  }
+  async function checkShellUpdate() {
+    let u; try { u = await fetch('/api/update-status', { cache: 'no-store' }).then(r => r.json()); } catch { return; }
+    if (!u || !u.version) return;
+    const tag = u.status + ':' + u.version;
+    if (_shellSeen === tag) return;
+    _shellSeen = tag;
+    if (u.status === 'ready') showShellUpdateToast(u.version);
+    else if (u.status === 'downloading') infoToast(`⬆️ Update v${u.version} downloading…`);
+  }
+  setTimeout(checkShellUpdate, 5000);
+  setInterval(checkShellUpdate, 30000);
 
   // ---- feedback + error reporting (anonymous, to the telemetry backend) ----
   function sendFeedback() {

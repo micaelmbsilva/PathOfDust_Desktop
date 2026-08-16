@@ -20,15 +20,31 @@ async function telemetry(pathname, extra) {
   } catch { /* offline / backend down — ignore */ }
 }
 async function ping() {
-  // Full non-sensitive snapshot: version/platform + class/level + all stats,
-  // record, currency, settings. Never the character/Twitch name (PII).
+  // Full non-sensitive snapshot: everything we can scrape — class/level, all
+  // stats, currencies, tokens, equipped + bag gear (with mods & rolls), and the
+  // passive tree. Never the character/Twitch name (the only PII). The backend
+  // stores level/archetype/version in columns and the rest in a JSONB blob.
   const snap = { platform: process.platform };
   try {
     const m = await me();
     const lv = (m.nav || '').match(/Lv\s*(\d+)\s+([A-Za-z]+)/);
     if (lv) { snap.level = +lv[1]; snap.archetype = lv[2]; }
     snap.autoRepair = m.autoRepair;
-    snap.stats = Object.fromEntries((m.stats || []).map(s => [s.label, s.value])); // Record, Dust, DPS, etc.
+    snap.nav = m.nav; // "Lv 62 Rogue · 💰… · …" summary line — no name
+    snap.stats = Object.fromEntries((m.stats || []).map(s => [s.label, s.value]));
+    if (m.reforge) snap.reforgeAvailable = m.reforge.available;
+    try {
+      const inv = await inventory();
+      snap.dust = inv.dust; snap.sand = inv.sand; snap.tokens = inv.tokens;
+      const gear = (it) => ({ slot: it.slot, name: it.name, tier: it.tier, quality: it.quality,
+        primary: it.primary, mods: it.mods, krangled: it.krangled, protected: it.protected });
+      snap.equipped = (inv.equipped || []).map(gear);
+      snap.bag = (inv.bag || []).map(gear);
+    } catch {}
+    try {
+      const p = await passives();
+      snap.passives = { points: p.points, nodes: (p.nodes || []).map(n => ({ key: n.key, name: n.name, tier: n.tier, rank: n.rank })) };
+    } catch {}
   } catch {}
   telemetry('/ping', snap);
 }
@@ -205,6 +221,13 @@ createServer(async (req, res) => {
       // autoUpdate=true only on the installer shell (sets global.__autoUpdate). Old
       // portable shells never set it, so the UI can warn them to move to the installer.
       return json(res, { version, autoUpdate: !!globalThis.__autoUpdate });
+    }
+    if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
+    if (url.pathname === '/api/apply-update' && req.method === 'POST') {
+      const ok = typeof globalThis.__applyUpdate === 'function';
+      json(res, { ok });
+      if (ok) setTimeout(globalThis.__applyUpdate, 200); // quit + install the staged update
+      return;
     }
     if (url.pathname === '/api/check-update') {
       let current = 0;
