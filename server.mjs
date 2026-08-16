@@ -195,7 +195,9 @@ async function passives() {
     if (!key) continue;
     const grab = (cls) => strip((head.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
     nodes.push({
-      key, name: grab('node-name'), tier: grab('node-kind'), rank: grab('node-rank'),
+      // name: full inner markup stripped, so a nested "(inactive)" span survives
+      key, name: strip((head.match(/class="node-name[^"]*"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || ''),
+      tier: grab('node-kind'), rank: grab('node-rank'),
       desc: strip((head.match(/data-tip="([^"]*)"/) || [])[1] || ''),
       cls: head.slice(0, head.indexOf('"')),
       x: +(head.match(/left:\s*(\d+)px/) || [])[1] || 0, // tree column position
