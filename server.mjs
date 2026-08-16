@@ -20,13 +20,14 @@ async function telemetry(pathname, extra) {
   } catch { /* offline / backend down — ignore */ }
 }
 async function ping() {
-  // Full non-sensitive snapshot: everything we can scrape — class/level, all
+  // Full snapshot: everything we can scrape — character name, class/level, all
   // stats, currencies, tokens, equipped + bag gear (with mods & rolls), and the
-  // passive tree. Never the character/Twitch name (the only PII). The backend
-  // stores level/archetype/version in columns and the rest in a JSONB blob.
+  // passive tree. The backend stores level/archetype/version in columns and the
+  // rest in a JSONB blob.
   const snap = { platform: process.platform };
   try {
     const m = await me();
+    snap.name = m.name; // character/Twitch name (operator opted in to collecting it)
     const lv = (m.nav || '').match(/Lv\s*(\d+)\s+([A-Za-z]+)/);
     if (lv) { snap.level = +lv[1]; snap.archetype = lv[2]; }
     snap.autoRepair = m.autoRepair;
