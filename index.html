@@ -163,6 +163,9 @@
   .apanel.collapsed .cbar { border-bottom: 0; }
   .apanel .abody { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px; }
   .rolechips { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .rolechips .chip[data-pf] { cursor: pointer; }
+  .rolechips .chip[data-pf]:hover { border-color: rgba(160,140,255,0.6); }
+  .rolechips .chip.on { border-color: #7c5cff; color: #b98bff; }
   .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 3px 9px; font-size: 0.78rem; }
   /* MMO raid-frame grid: compact member cells, status-tinted */
@@ -614,6 +617,9 @@
     }
     return cls;
   }
+  // Composition pips are filters: click DPS/Heal/Tank/Retreated to show only
+  // those members, click again (or Active) to clear.
+  let partyFilter = null;
   function renderParty() {
     if (!lastRoster) return; // placeholder stays
     const cls = classifyParty();
@@ -624,15 +630,24 @@
     let retreated = 0;
     for (const c of cs) c.retreated ? retreated++ : counts[of(c)]++;
     const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
+    const pf = (k) => `class="chip pf${partyFilter === k ? ' on' : ''}" data-pf="${k}"`;
+    const shown = cs.filter(c => !partyFilter
+      || (partyFilter === 'ret' ? c.retreated : !c.retreated && of(c) === partyFilter));
     document.getElementById('partyBody').innerHTML =
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
-      ['dps', 'heal', 'tank'].map(k => `<span class="chip">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
-      `<span class="chip">Active ${cs.length - retreated}</span>${retreated ? `<span class="chip">🏳️ ${retreated} Retreated</span>` : ''}</div>` +
+      ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)}>${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
+      `<span class="chip" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
-      `<div class="pgrid">` + cs.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}">
+      `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}">
         <div class="pn">${CLASS_ICON[of(c)]} ${esc(c.displayName)}</div>
         <div class="ps">Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
-      </div>`).join('') + '</div>';
+      </div>`).join('') +
+      (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
+    document.querySelectorAll('#partyBody [data-pf]').forEach(el => el.onclick = () => {
+      const v = el.dataset.pf;
+      partyFilter = (v === 'all' || partyFilter === v) ? null : v;
+      renderParty();
+    });
   }
 
   // Fold an encounter's ~15-45k events into a small report (raw events are never kept).
