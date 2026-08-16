@@ -560,14 +560,16 @@
     if (!lastRoster) return; // placeholder stays
     const cls = classifyParty();
     const of = (c) => cls[c.displayName.toLowerCase()] || (c.role === 'support' ? 'heal' : 'dps');
-    const cs = [...lastRoster.characters].sort((a, b) => b.level - a.level);
+    // retreated players sort last and don't count toward the composition
+    const cs = [...lastRoster.characters].sort((a, b) => (a.retreated - b.retreated) || b.level - a.level);
     const counts = { dps: 0, heal: 0, tank: 0 };
-    for (const c of cs) counts[of(c)]++;
+    let retreated = 0;
+    for (const c of cs) c.retreated ? retreated++ : counts[of(c)]++;
     const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
     document.getElementById('partyBody').innerHTML =
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
       ['dps', 'heal', 'tank'].map(k => `<span class="chip">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
-      `<span class="chip">Total ${cs.length}</span></div>` +
+      `<span class="chip">Active ${cs.length - retreated}</span>${retreated ? `<span class="chip">🏳️ ${retreated} Retreated</span>` : ''}</div>` +
       cs.map(c => `<div class="mrow${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}">
         <span>${CLASS_ICON[of(c)]}</span><span class="nm">${esc(c.displayName)}</span>
         <span class="muted">Lv ${c.level}</span>
