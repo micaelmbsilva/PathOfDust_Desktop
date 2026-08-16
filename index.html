@@ -454,14 +454,32 @@
   let seeded = known.size > 0;
   const saveKnown = () => localStorage.setItem(KEY, JSON.stringify([...known]));
 
+  // Battle-end dust readout: the WS pushes an `encounter` event when a boss
+  // fight we took part in resolves; the next inventory poll's exact dust delta
+  // is then attributed to that battle and toasted. Auto-repair lands in the
+  // same beat, so it's the net change (loot minus repairs).
+  let lastDust = null, battleAt = 0, battleWon = false;
+  function checkBattleDust(dustRaw) {
+    if (!/^\d+$/.test(String(dustRaw))) return; // abbreviated fallback — can't diff
+    const dust = +dustRaw;
+    if (lastDust != null && dust !== lastDust && Date.now() - battleAt < 15000) {
+      const d = dust - lastDust;
+      infoToast(`💰 ${d > 0 ? '+' : ''}${d.toLocaleString()} dust — battle ${battleWon ? 'won' : 'lost'}`);
+      battleAt = 0; // one toast per battle
+    }
+    lastDust = dust;
+  }
+
   let bagBusy = false;
   async function pollBag() {
     if (bagBusy) return;
     bagBusy = true; // held through the whole pass — the loop awaits, and an overlapping poll must not race `known`
     try {
-      let bag;
-      try { bag = await fetch('/api/bag').then(r => r.json()); }
+      let inv;
+      try { inv = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); }
       catch { return; } // bridge offline — try again next tick
+      checkBattleDust(inv.dust);
+      const bag = { items: inv.bag || [] };
       const ids = new Set(bag.items.map(i => i.id));
       if (!seeded) { known = ids; seeded = true; saveKnown(); return; } // silent seed
       for (const item of bag.items) {
@@ -495,7 +513,17 @@
     let ws, t = null;
     try { ws = new WebSocket('wss://adventure.lokati.net/ws'); } catch { return; }
     ws.onopen = () => { wsOk = true; };
-    ws.onmessage = () => { clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700); };
+    ws.onmessage = (e) => {
+      // Battle end: an encounter we took part in just resolved — arm the dust
+      // readout (checkBattleDust) for the refresh below.
+      try {
+        const d = JSON.parse(e.data);
+        if (d.type === 'encounter' && myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
+          battleAt = Date.now(); battleWon = !!d.won;
+        }
+      } catch {}
+      clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700);
+    };
     ws.onclose = () => { wsOk = false; setTimeout(watchEvents, 3000); };
     ws.onerror = () => ws.close();
   }
