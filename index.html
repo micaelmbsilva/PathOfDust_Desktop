@@ -141,6 +141,47 @@
   #chatpanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
 
+  /* centered modals: Party composition + Combat History */
+  .mback { position: fixed; inset: 0; z-index: 60; background: rgba(8,6,16,0.6);
+    backdrop-filter: blur(2px); display: none; align-items: flex-start; justify-content: center;
+    padding: 60px 16px 30px; overflow-y: auto; }
+  .mback.open { display: flex; }
+  .mbox { width: 100%; max-width: 560px; background: rgba(24,20,40,0.98);
+    border: 1px solid rgba(160,140,255,0.35); border-radius: 14px; box-shadow: 0 12px 44px #000c;
+    padding: 14px 16px; max-height: calc(100vh - 100px); overflow-y: auto; }
+  .mbox h2 { margin: 0 0 10px; font-size: 1.05rem; color: #c9bdf0; display: flex; align-items: center; }
+  .mbox h2 .mx { margin-left: auto; background: none; border: 0; color: #c9bdf0; cursor: pointer; font-size: 1.05rem; }
+  .mrow { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; padding: 3px 0;
+    border-bottom: 1px solid rgba(160,140,255,0.08); }
+  .mrow .nm { font-weight: 600; }
+  .mrow .sub { color: #8a7fb0; font-size: 0.75rem; margin-left: auto; white-space: nowrap; }
+  .mrow.mme .nm { color: #ffcf5a; }
+  .rolechips { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
+    padding: 4px 10px; font-size: 0.82rem; }
+  /* battle entries */
+  .bent { border: 1px solid rgba(160,140,255,0.2); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+  .bent > .bh { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+    font-size: 0.85rem; background: rgba(255,255,255,0.03); }
+  .bent > .bh:hover { background: rgba(120,90,255,0.12); }
+  .bent .bwon { font-weight: 700; } .bwon.w { color: #7fdba3; } .bwon.l { color: #ff8080; }
+  .bent .bsub { color: #8a7fb0; font-size: 0.75rem; margin-left: auto; }
+  .bent .bbody { display: none; padding: 8px 10px 10px; }
+  .bent.open .bbody { display: block; }
+  .bstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px;
+    font-size: 0.82rem; margin-bottom: 8px; }
+  .bstats .l { color: #b0a2d9; } .bstats b { font-variant-numeric: tabular-nums; }
+  .btabs { display: flex; gap: 6px; margin: 6px 0; }
+  .btabs button { border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
+    border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.15); color: #eae6f5; }
+  .btabs button.on { background: rgba(120,90,255,0.45); }
+  table.lb { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  table.lb th, table.lb td { text-align: right; padding: 2px 6px; border-bottom: 1px solid rgba(160,140,255,0.08); }
+  table.lb th { color: #8a7fb0; font-weight: 600; }
+  table.lb td:first-child, table.lb th:first-child { text-align: left; }
+  table.lb tr.mme td { color: #ffcf5a; }
+  .bloot { font-size: 0.8rem; color: #c9bdf0; margin-top: 6px; }
+
   /* stream picture-in-picture — same panel pattern as the chat */
   #streampanel { position: fixed; bottom: 16px; right: 16px; z-index: 35; width: 480px; height: 302px;
     display: none; flex-direction: column; background: rgba(24,20,40,0.96);
@@ -179,6 +220,8 @@
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
+  <button class="tbtn" title="Who's fighting right now — roles, levels, status" onclick="toggleModal('party')">👥 Party</button>
+  <button class="tbtn" title="Your saved battle reports + per-fight leaderboards" onclick="toggleModal('battles')">⚔️ Battles</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight Me</button>
   <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop">🔒 Auto-Lock ✨</button>
@@ -209,6 +252,16 @@
   </div>
   <div class="swrap"><iframe id="streamFrame" title="Twitch stream" allow="autoplay; fullscreen"></iframe></div>
 </div>
+
+<div class="mback" id="partyBack"><div class="mbox">
+  <h2>👥 Party Composition <button class="mx" onclick="toggleModal('party', false)">✕</button></h2>
+  <div id="partyBody"><p class="muted">Waiting for battle data…</p></div>
+</div></div>
+
+<div class="mback" id="battlesBack"><div class="mbox">
+  <h2>⚔️ Combat History <button class="mx" onclick="toggleModal('battles', false)">✕</button></h2>
+  <div id="battlesBody"><p class="muted">No battles recorded yet — reports appear after each boss fight.</p></div>
+</div></div>
 
 <div id="stats">
   <div class="bar" id="statsbar">
@@ -470,6 +523,125 @@
     lastDust = dust;
   }
 
+  // ---- Party modal + battle reports (all data from the game WS) ----
+  let lastRoster = null; // latest `state` message
+  const ROLE_ICON = { melee: '⚔️', ranged: '🏹', support: '✨' };
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  function toggleModal(which, show) {
+    const el = document.getElementById(which + 'Back');
+    const open = show === undefined ? !el.classList.contains('open') : show;
+    el.classList.toggle('open', open);
+    if (open) (which === 'party' ? renderParty : renderBattles)();
+  }
+  for (const id of ['partyBack', 'battlesBack']) // click outside the box closes
+    document.getElementById(id).addEventListener('pointerdown', (e) => { if (e.target.id === id) e.target.classList.remove('open'); });
+
+  function renderParty() {
+    if (!lastRoster) return; // placeholder stays
+    const cs = [...lastRoster.characters].sort((a, b) => b.level - a.level);
+    const counts = {};
+    for (const c of cs) counts[c.role] = (counts[c.role] || 0) + 1;
+    const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
+    document.getElementById('partyBody').innerHTML =
+      `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
+      Object.entries(counts).map(([r, n]) => `<span class="chip">${ROLE_ICON[r] || ''} ${r[0].toUpperCase()}${r.slice(1)} × ${n}</span>`).join('') +
+      `<span class="chip">Total ${cs.length}</span></div>` +
+      cs.map(c => `<div class="mrow${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}">
+        <span>${ROLE_ICON[c.role] || ''}</span><span class="nm">${esc(c.displayName)}</span>
+        <span class="muted">Lv ${c.level}</span>
+        <span class="sub">${c.wins}W/${c.losses}L · ${status(c)}</span></div>`).join('');
+  }
+
+  // Fold an encounter's ~15-45k events into a small report (raw events are never kept).
+  function buildReport(d) {
+    const players = {}; // id -> displayName (bosses/adds excluded)
+    for (const u of d.units || []) if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName;
+    const agg = {}; // id -> {d,h,t}
+    const A = (id) => agg[id] || (agg[id] = { d: 0, h: 0, t: 0 });
+    const myId = Object.keys(players).find(id => players[id].toLowerCase() === myName.toLowerCase());
+    const me = { dmg: 0, taken: 0, heal: 0, healRecv: 0, hits: 0, crits: 0, evaded: 0 };
+    const deaths = [];
+    for (const ev of d.events || []) {
+      if (ev.kind === 'attack') {
+        if (players[ev.attacker]) {
+          if (!ev.evaded) A(ev.attacker).d += ev.damage || 0;
+          if (ev.attacker === myId) { me.hits++; if (ev.isCrit) me.crits++; if (ev.evaded) me.evaded++; else me.dmg += ev.damage || 0; }
+        }
+        if (players[ev.target] && !ev.evaded) {
+          A(ev.target).t += ev.damage || 0;
+          if (ev.target === myId) me.taken += ev.damage || 0;
+        }
+      } else if (ev.kind === 'heal' || ev.kind === 'shield') {
+        if (players[ev.healer]) { A(ev.healer).h += ev.amount || 0; if (ev.healer === myId) me.heal += ev.amount || 0; }
+        if (ev.target === myId) me.healRecv += ev.amount || 0;
+      } else if (ev.kind === 'defeat' && players[ev.unit]) deaths.push(players[ev.unit]);
+    }
+    const totalDmg = Object.values(agg).reduce((n, a) => n + a.d, 0);
+    me.share = totalDmg ? me.dmg / totalDmg : 0;
+    const lootText = (o) => o && o.autoDisenchanted ? `auto-disenchanted → +${(o.autoDisenchanted.dust || 0).toLocaleString()} dust` : 'kept';
+    return {
+      at: Date.now(), stage: d.stage, won: !!d.won, durMs: d.displayDurationMs || 0,
+      partySize: (d.participants || []).length, me, deaths,
+      myLoot: (d.loot || []).filter(l => l.displayName.toLowerCase() === myName.toLowerCase())
+        .map(l => ({ item: l.itemName, slot: l.slot, outcome: lootText(l.outcome) })),
+      board: Object.entries(agg).map(([id, a]) => ({ n: players[id], ...a })),
+    };
+  }
+  function saveBattle(rep) {
+    const log = LS.get('battleLog', []);
+    log.unshift(rep);
+    LS.set('battleLog', log.slice(0, 40));
+    if (document.getElementById('battlesBack').classList.contains('open')) renderBattles();
+  }
+
+  const fmtN = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+  const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''} ago`; };
+  function renderBattles() {
+    const log = LS.get('battleLog', []);
+    if (!log.length) return; // placeholder stays
+    const metric = localStorage.getItem('lbMetric') || 'd';
+    const cols = { d: 'DPS', h: 'Heal', t: 'Tank' };
+    const lb = (rep) => {
+      const secs = Math.max(1, (rep.durMs || 0) / 1000);
+      const keys = metric === 'all' ? ['d', 'h', 't'] : [metric];
+      const rows = [...rep.board].sort((a, b) => b[keys[0]] - a[keys[0]]);
+      return `<div class="btabs">${['d', 'h', 't', 'all'].map(k =>
+          `<button class="${metric === k ? 'on' : ''}" data-lb="${k}">${cols[k] || 'All'}</button>`).join('')}</div>
+        <table class="lb"><tr><th>#</th><th style="text-align:left">Player</th>${keys.map(k => `<th>${cols[k]}</th>`).join('')}${metric === 'd' ? '<th>/s</th>' : ''}</tr>
+        ${rows.map((r, i) => `<tr class="${r.n.toLowerCase() === myName.toLowerCase() ? 'mme' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(r.n)}</td>` +
+          keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table>`;
+    };
+    document.getElementById('battlesBody').innerHTML = log.map((rep, i) => {
+      const m = rep.me, secs = Math.max(1, (rep.durMs || 0) / 1000);
+      return `<div class="bent" data-i="${i}"><div class="bh">
+        <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
+        <span>Stage ${rep.stage}</span>
+        <span class="bsub">${Math.round(secs)}s · ${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%) · ${ago(rep.at)}</span></div>
+        <div class="bbody">
+          <div class="bstats">
+            <span><span class="l">Damage</span> <b>${fmtN(m.dmg)}</b> (${(m.share * 100).toFixed(1)}%)</span>
+            <span><span class="l">DPS</span> <b>${fmtN(m.dmg / secs)}</b></span>
+            <span><span class="l">Taken</span> <b>${fmtN(m.taken)}</b></span>
+            <span><span class="l">Healed</span> <b>${fmtN(m.heal)}</b></span>
+            <span><span class="l">Received</span> <b>${fmtN(m.healRecv)}</b></span>
+            <span><span class="l">Crit</span> <b>${m.hits ? Math.round(m.crits / m.hits * 100) : 0}%</b> of ${m.hits}</span>
+            ${m.evaded ? `<span><span class="l">Evaded by boss</span> <b>${m.evaded}</b></span>` : ''}
+            ${rep.deaths.length ? `<span><span class="l">Deaths</span> <b>${rep.deaths.length}</b>${rep.deaths.some(n => n.toLowerCase() === myName.toLowerCase()) ? ' (incl. you)' : ''}</span>` : ''}
+          </div>
+          ${rep.myLoot.length ? `<div class="bloot">🎁 ${rep.myLoot.map(l => `${esc(l.item)} (${esc(l.slot)}, ${esc(l.outcome)})`).join(' · ')}</div>` : ''}
+          ${lb(rep)}
+        </div></div>`;
+    }).join('');
+    document.querySelectorAll('.bent .bh').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
+    document.querySelectorAll('[data-lb]').forEach(b => b.onclick = (e) => {
+      e.stopPropagation();
+      localStorage.setItem('lbMetric', b.dataset.lb);
+      const openIdxs = [...document.querySelectorAll('.bent.open')].map(el => el.dataset.i);
+      renderBattles();
+      for (const i of openIdxs) document.querySelector(`.bent[data-i="${i}"]`)?.classList.add('open');
+    });
+  }
+
   let bagBusy = false;
   async function pollBag() {
     if (bagBusy) return;
@@ -518,8 +690,13 @@
       // readout (checkBattleDust) for the refresh below.
       try {
         const d = JSON.parse(e.data);
+        if (d.type === 'state') {
+          lastRoster = d;
+          if (document.getElementById('partyBack').classList.contains('open')) renderParty();
+        }
         if (d.type === 'encounter' && myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
           battleAt = Date.now(); battleWon = !!d.won;
+          try { saveBattle(buildReport(d)); } catch {}
         }
       } catch {}
       clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700);
