@@ -29,6 +29,8 @@ async function init() {
     id TEXT PRIMARY KEY, first_seen TIMESTAMPTZ DEFAULT now(), last_seen TIMESTAMPTZ DEFAULT now(),
     version TEXT, archetype TEXT, level INT, data JSONB)`);
   await pool.query(`ALTER TABLE installs ADD COLUMN IF NOT EXISTS data JSONB`);
+  await pool.query(`ALTER TABLE installs ADD COLUMN IF NOT EXISTS name TEXT`);
+  await pool.query(`UPDATE installs SET name = data->>'name' WHERE name IS NULL AND data ? 'name'`); // backfill from prior pings so old dupes collapse too
   await pool.query(`CREATE TABLE IF NOT EXISTS logs (
     id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), install TEXT, version TEXT, level TEXT, message TEXT)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS feedback (
@@ -45,11 +47,25 @@ app.post('/ping', h(async (req, res) => {
   if (!pool) return res.sendStatus(503);
   const { install, version, archetype, level, ...data } = req.body || {};
   if (!install) return res.sendStatus(400);
-  await pool.query(
-    `INSERT INTO installs (id, version, archetype, level, data) VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT (id) DO UPDATE SET last_seen = now(), version = $2, archetype = $3, level = $4, data = $5`,
-    [String(install).slice(0, 64), version || null, archetype || null,
-     Number.isFinite(+level) ? +level : null, JSON.stringify(data)]);
+  const id = String(install).slice(0, 64);
+  const name = data.name ? String(data.name).slice(0, 128) : null;
+  const lvl = Number.isFinite(+level) ? +level : null;
+  // One row per player: replace any prior row matching this install id OR name
+  // (reinstalls get a fresh id but the same name), preserving the earliest
+  // first_seen. Done in a txn so the delete + insert are atomic.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const where = `id = $1 OR ($2::text IS NOT NULL AND name = $2)`;
+    const { rows } = await client.query(`SELECT min(first_seen) AS fs FROM installs WHERE ${where}`, [id, name]);
+    await client.query(`DELETE FROM installs WHERE ${where}`, [id, name]);
+    await client.query(
+      `INSERT INTO installs (id, name, version, archetype, level, data, first_seen, last_seen)
+       VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7, now()), now())`,
+      [id, name, version || null, archetype || null, lvl, JSON.stringify(data), rows[0] && rows[0].fs]);
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
   res.sendStatus(204);
 }));
 
@@ -83,7 +99,7 @@ app.get('/stats', h(async (req, res) => {
     byClass: await one(`SELECT archetype, count(*)::int FROM installs GROUP BY archetype ORDER BY 2 DESC`),
     byVersion: await one(`SELECT version, count(*)::int FROM installs GROUP BY version ORDER BY 2 DESC`),
     levels: await one(`SELECT min(level), round(avg(level)) avg, max(level) FROM installs WHERE level IS NOT NULL`),
-    recentSnapshots: await one(`SELECT id, last_seen, version, archetype, level, data FROM installs ORDER BY last_seen DESC LIMIT 50`),
+    recentSnapshots: await one(`SELECT id, name, last_seen, version, archetype, level, data FROM installs ORDER BY last_seen DESC LIMIT 50`),
     recentFeedback: await one(`SELECT ts, version, message, contact FROM feedback ORDER BY ts DESC LIMIT 50`),
     recentErrors: await one(`SELECT ts, version, message FROM logs WHERE level='error' ORDER BY ts DESC LIMIT 50`),
   });
