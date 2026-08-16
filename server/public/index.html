@@ -278,13 +278,20 @@ async function ladder() {
     el('p', { class: 'sub' }, 'Power is role-aware — raw DPS for damage classes, effective HP for tanks, effective HPS for healers. Hover a value for the math. Click headers to sort, chips to filter by class.'),
     playersTable(arr(players), passives),
     advStats(arr(players), passives),
-    builds && arr(builds.interactions).length ? [
-      el('h2', null, 'OP interactions watchlist'),
-      el('div', { class: 'stack' }, arr(builds.interactions).map(i => el('div', { class: 'card' },
-        el('div', { class: 'bname' }, str(i.title)),
-        el('div', { class: 'chips', style: 'margin:6px 0 0' },
-          arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
-        el('p', null, str(i.text)))))] : null);
+    null); // OP watchlist lives at the unlinked #/watchlist route
+}
+
+// Hidden route: #/watchlist — the OP interactions list, no nav links to it.
+async function watchlist() {
+  const { builds } = await staticData();
+  view(
+    el('p', null, el('a', { href: '#/' }, '← Ladder')),
+    el('h1', null, 'OP interactions watchlist'),
+    el('div', { class: 'stack' }, arr(builds && builds.interactions).map(i => el('div', { class: 'card' },
+      el('div', { class: 'bname' }, str(i.title)),
+      el('div', { class: 'chips', style: 'margin:6px 0 0' },
+        arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
+      el('p', null, str(i.text))))));
 }
 
 function itemCard(it) {
@@ -449,6 +456,7 @@ async function classView(archetype) {
 }
 
 async function route() {
+  if (location.hash === '#/watchlist') { try { await watchlist(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); return; }
   const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
   try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
   catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); }
