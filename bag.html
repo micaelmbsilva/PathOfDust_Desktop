@@ -283,7 +283,10 @@
   }
 
   // Refresh now, then once more after the server settles the action.
-  const refresh = () => { load(); setTimeout(load, 800); };
+  // Single coalesced reload shortly after an action (covers post-redirect lag);
+  // rapid actions collapse into one, and out-of-order renders can't happen.
+  let refreshT = null;
+  const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, 500); };
 
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
   let lastBag = [];

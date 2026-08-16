@@ -35,6 +35,10 @@ async function init() {
     id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), install TEXT, version TEXT, level TEXT, message TEXT)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS feedback (
     id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), install TEXT, version TEXT, message TEXT, contact TEXT)`);
+  // /stats orders these by ts — index so that stays cheap as they grow.
+  // ponytail: no retention/pruning — volumes are tiny; add if tables ever matter.
+  await pool.query(`CREATE INDEX IF NOT EXISTS logs_err_ts ON logs (ts DESC) WHERE level = 'error'`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS feedback_ts ON feedback (ts DESC)`);
   console.log('DB ready');
 }
 
@@ -92,17 +96,18 @@ app.get('/stats', h(async (req, res) => {
   if (!pool) return res.sendStatus(503);
   const one = async (q) => (await pool.query(q)).rows;
   const num = async (q) => +(await one(q))[0].count;
-  res.json({
-    totalInstalls: await num(`SELECT count(*) FROM installs`),
-    active24h: await num(`SELECT count(*) FROM installs WHERE last_seen > now() - interval '1 day'`),
-    active7d: await num(`SELECT count(*) FROM installs WHERE last_seen > now() - interval '7 days'`),
-    byClass: await one(`SELECT archetype, count(*)::int FROM installs GROUP BY archetype ORDER BY 2 DESC`),
-    byVersion: await one(`SELECT version, count(*)::int FROM installs GROUP BY version ORDER BY 2 DESC`),
-    levels: await one(`SELECT min(level), round(avg(level)) avg, max(level) FROM installs WHERE level IS NOT NULL`),
-    recentSnapshots: await one(`SELECT id, name, last_seen, version, archetype, level, data FROM installs ORDER BY last_seen DESC LIMIT 50`),
-    recentFeedback: await one(`SELECT ts, version, message, contact FROM feedback ORDER BY ts DESC LIMIT 50`),
-    recentErrors: await one(`SELECT ts, version, message FROM logs WHERE level='error' ORDER BY ts DESC LIMIT 50`),
-  });
+  const [totalInstalls, active24h, active7d, byClass, byVersion, levels, recentSnapshots, recentFeedback, recentErrors] = await Promise.all([
+    num(`SELECT count(*) FROM installs`),
+    num(`SELECT count(*) FROM installs WHERE last_seen > now() - interval '1 day'`),
+    num(`SELECT count(*) FROM installs WHERE last_seen > now() - interval '7 days'`),
+    one(`SELECT archetype, count(*)::int FROM installs GROUP BY archetype ORDER BY 2 DESC`),
+    one(`SELECT version, count(*)::int FROM installs GROUP BY version ORDER BY 2 DESC`),
+    one(`SELECT min(level), round(avg(level)) avg, max(level) FROM installs WHERE level IS NOT NULL`),
+    one(`SELECT id, name, last_seen, version, archetype, level, data FROM installs ORDER BY last_seen DESC LIMIT 50`),
+    one(`SELECT ts, version, message, contact FROM feedback ORDER BY ts DESC LIMIT 50`),
+    one(`SELECT ts, version, message FROM logs WHERE level='error' ORDER BY ts DESC LIMIT 50`),
+  ]);
+  res.json({ totalInstalls, active24h, active7d, byClass, byVersion, levels, recentSnapshots, recentFeedback, recentErrors });
 }));
 
 // Serve regardless of DB state so / always answers; init (and retry) in background.

@@ -96,8 +96,8 @@ const qtipOf = (chunk) => tipOf((chunk.match(/class="gear-quality[^"]*"([^>]*)>/
 
 // Scrape the bag (unequipped items) from the inventory page. Each item's id is
 // the item_id its equip/disenchant forms carry; `protected` = the Keep checkbox.
-async function bag() {
-  const { text } = await getAuthed('/inventory');
+async function bag(pageText) {
+  const text = pageText ?? (await getAuthed('/inventory')).text; // reuse caller's fetch when given
   const card = (text.split('class="card bag-card"')[1] || '').split('</div>\n</body>')[0];
   const items = [];
   for (const chunk of card.split('class="gear-slot"').slice(1)) {
@@ -174,7 +174,7 @@ async function inventory() {
     if (options.length) veil = { title, options };
   }
 
-  return { dust, sand, tokens, equipped, bag: (await bag()).items, craft: { options, actions, veilTip }, veil };
+  return { dust, sand, tokens, equipped, bag: (await bag(text)).items, craft: { options, actions, veilTip }, veil };
 }
 
 // Passive tree: points chip, respec/save availability, and every node.
