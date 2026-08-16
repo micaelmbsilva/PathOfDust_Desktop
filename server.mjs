@@ -2,7 +2,7 @@
 // (which can't touch the httpOnly cookie) can read our stats and fire actions.
 // No deps. Run: node server.mjs   ->   http://localhost:8787
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { post, getAuthed } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL } from './config.mjs';
@@ -266,6 +266,25 @@ createServer(async (req, res) => {
     }
     if (url.pathname === '/api/passives') {
       return json(res, await passives());
+    }
+    if (url.pathname === '/api/pull-interface' && req.method === 'POST') {
+      // On-demand interface hot-pull: same sha-pinned fetch the shell does at
+      // launch, but written next to the running bridge so static serving picks
+      // the new files up immediately (the caller reloads its window). Changes
+      // to server.mjs/actions.mjs themselves still need an app restart — the
+      // running modules can't be re-imported.
+      try {
+        const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' } }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
+        const cur = await appVersion();
+        const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
+        const base = `https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}`;
+        const manifest = JSON.parse(await g(`${base}/version.json`));
+        if (manifest.version <= cur) return json(res, { updated: false, version: cur });
+        const files = await Promise.all(manifest.files.map(f => g(`${base}/${f}`).then(t => [f, t]))); // all fetched before writing
+        for (const [f, t] of files) await writeFile(new URL('./' + f, import.meta.url), t);
+        await writeFile(new URL('./version.json', import.meta.url), JSON.stringify(manifest));
+        return json(res, { updated: true, version: manifest.version });
+      } catch { return json(res, { updated: false, error: true }); }
     }
     if (url.pathname === '/api/refocus' && req.method === 'POST') {
       // Shell-level focus restore (see main.cjs __refocus). No-op on old shells.
