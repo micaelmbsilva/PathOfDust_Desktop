@@ -183,6 +183,8 @@ async function passives() {
   const points = strip((text.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || '');
   const respecLabel = strip((text.match(/action="\/passives\/respec">\s*<button[^>]*>([^<]*)</) || [])[1] || 'Respec');
   const canSave = /action="\/passives\/save">\s*<button(?![^>]*disabled)/.test(text);
+  const canReset = /action="\/passives\/reset"/.test(text); // "Reset Preview" — discard unsaved changes
+  const dirty = /preview-note dirty/.test(text);            // site's "Unsaved changes." flag
   // The live tree is an absolute canvas; grab its size + the SVG connectors
   // verbatim so we can reproduce the exact layout and dependency lines.
   const svg = (text.match(/<svg class="connectors"[\s\S]*?<\/svg>/) || [])[0] || '';
@@ -208,7 +210,7 @@ async function passives() {
       canDec: /value="-1"(?![^>]*disabled)/.test(head),
     });
   }
-  return { points, respecLabel, canSave, stage, connectors: svg, nodes };
+  return { points, respecLabel, canSave, canReset, dirty, stage, connectors: svg, nodes };
 }
 
 createServer(async (req, res) => {
