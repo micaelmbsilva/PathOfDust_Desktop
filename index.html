@@ -167,7 +167,7 @@
 <div id="down">
   <span class="p"></span><span class="p"></span><span class="p"></span><span class="p"></span>
   <span class="p"></span><span class="p"></span><span class="p"></span><span class="p"></span>
-  <div class="dtitle" id="downTitle">💤 Server is down</div>
+  <div class="dtitle" id="downTitle">💤 Server Is Down</div>
   <div class="dmsg">Waiting for it to come back — this screen clears itself.</div>
 </div>
 
@@ -178,8 +178,8 @@
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
-  <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight me</button>
-  <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect Quality items when they drop">🔒 Auto-lock ✨</button>
+  <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight Me</button>
+  <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect Quality items when they drop">🔒 Auto-Lock ✨</button>
   <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag(); pullInterface(false)">🔄 Refresh</button>
   <button class="tbtn" id="updateBtn" title="Check for updates" onclick="updateAction()">Check for Updates</button>
   <button class="tbtn" title="Send feedback / report a bug" onclick="sendFeedback()">🐛 Feedback</button>
@@ -217,7 +217,7 @@
   <div class="rows" id="rows"><p class="muted">Loading…</p></div>
 </div>
 
-<div id="toasts"><button id="dismissAll">✕ Dismiss all</button></div>
+<div id="toasts"><button id="dismissAll">✕ Dismiss All</button></div>
 
 <script>
   document.getElementById('appTitle').textContent = GAME_NAME;
@@ -416,7 +416,7 @@
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
         `${r.autoRepairTip ? ` data-tip="${r.autoRepairTip.replace(/"/g, '&quot;')}"` : ''}>` +
-        `<span class="l">🔧 Auto-repair</span><span class="v">${r.autoRepair ? 'On' : 'Off'}</span></div>`;
+        `<span class="l">🔧 Auto-Repair</span><span class="v">${r.autoRepair ? 'On' : 'Off'}</span></div>`;
       document.getElementById('rows').innerHTML = arRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
@@ -435,7 +435,7 @@
   // with the curtain; loadStats's 3s poll doubles as the server-up check, and on
   // the first success we drop the curtain and reload the dead iframe.
   let siteFails = 0, isDown = false;
-  document.getElementById('downTitle').textContent = `💤 ${GAME_NAME} is down`;
+  document.getElementById('downTitle').textContent = `💤 ${GAME_NAME} Is Down`;
   function setDown(on) {
     if (on === isDown) return;
     isDown = on;
@@ -583,13 +583,13 @@
     document.querySelectorAll('.toast.reforge').forEach(t => t.remove());
     const el = document.createElement('div');
     el.className = 'toast reforge';
-    const dustBtn = (rf.canDust && rf.action) ? `<button data-act="dust">${rf.label || 'Reforge (1k dust)'}</button>` : '';
+    const dustBtn = (rf.canDust && rf.action) ? `<button data-act="dust">${rf.label || 'Reforge (1k Dust)'}</button>` : '';
     el.innerHTML = `
-      <div class="th"><span class="tn">⚒️ Reforge Gear ready</span><span class="ts">once per hour</span></div>
+      <div class="th"><span class="tn">⚒️ Reforge Gear Ready</span><span class="ts">Once per Hour</span></div>
       <div class="tmods"><span>Upgrade a random equipped item 2–4 tiers — 1k dust or 1k channel points.</span></div>
       <div class="tacts">
         ${dustBtn}
-        <button data-act="chat">Redeem (points)</button>
+        <button data-act="chat">Redeem (Points)</button>
         <button data-act="x">Dismiss</button>
       </div>`;
     el.querySelector('[data-act="x"]').onclick = () => { reforgeDismissed = true; el.remove(); updateDismissAll(); };
@@ -602,7 +602,7 @@
       const snap = () => fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
       const before = await snap();
       const res = await action(rf.action, {}).catch(() => null);
-      if (!res || !res.ok) { reforgeToast('⚒️ Reforge failed', 'Could not reach the game — try again.'); loadStats(); return; }
+      if (!res || !res.ok) { reforgeToast('⚒️ Reforge Failed', 'Could not reach the game — try again.'); loadStats(); return; }
       let hit = reforgeDiff(before, await snap());
       for (let i = 0; !hit && i < 4; i++) { // read-after-write lag — up to ~3.2s before giving up
         await new Promise(r => setTimeout(r, 800));
@@ -728,14 +728,14 @@
   // "Check for Updates" button — pull interface updates immediately, and ask
   // electron-updater for app updates.
   async function updateAction() {
-    infoToast('🔄 Checking for updates…');
+    infoToast('🔄 Checking for Updates…');
     if (await pullInterface(true)) return; // reloading with the new interface
     try { await fetch('/api/check-update', { cache: 'no-store' }); } catch { infoToast('Update check failed'); return; }
     await new Promise(r => setTimeout(r, 2500)); // give the updater a moment to respond
     let u; try { u = await fetch('/api/update-status', { cache: 'no-store' }).then(r => r.json()); } catch {}
     if (u && u.status === 'ready') showShellUpdateToast(u.version);
-    else if (u && u.status === 'downloading') infoToast(`⬆️ Update v${fmtV(u.version)} downloading…`);
-    else infoToast(`✅ Up to date (v${appVersion})`);
+    else if (u && u.status === 'downloading') infoToast(`⬆️ Update v${fmtV(u.version)} Downloading…`);
+    else infoToast(`✅ Up to Date (v${appVersion})`);
   }
 
   // ---- shell (installer) update via electron-updater: toast when downloading /
@@ -747,9 +747,9 @@
     document.querySelectorAll('.toast.update').forEach(t => t.remove());
     const el = document.createElement('div');
     el.className = 'toast update';
-    el.innerHTML = `<div class="th"><span class="tn">⬆️ Update v${fmtV(v)} ready</span></div>` +
+    el.innerHTML = `<div class="th"><span class="tn">⬆️ Update v${fmtV(v)} Ready</span></div>` +
       `<div class="tmods"><span>Restart to install — your login and layout are kept.</span></div>` +
-      `<div class="tacts"><button data-act="restart">Restart &amp; update</button><button data-act="x">Later</button></div>`;
+      `<div class="tacts"><button data-act="restart">Restart &amp; Update</button><button data-act="x">Later</button></div>`;
     el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
     el.querySelector('[data-act="restart"]').onclick = () => fetch('/api/apply-update', { method: 'POST' });
     document.getElementById('dismissAll').after(el); updateDismissAll();
@@ -761,7 +761,7 @@
     if (_shellSeen === tag) return;
     _shellSeen = tag;
     if (u.status === 'ready') showShellUpdateToast(u.version);
-    else if (u.status === 'downloading') infoToast(`⬆️ Update v${fmtV(u.version)} downloading…`);
+    else if (u.status === 'downloading') infoToast(`⬆️ Update v${fmtV(u.version)} Downloading…`);
   }
   setTimeout(checkShellUpdate, 5000);
   setInterval(checkShellUpdate, 30000);
@@ -772,7 +772,7 @@
     if (document.getElementById('fbToast')) return; // one at a time
     const el = document.createElement('div');
     el.className = 'toast'; el.id = 'fbToast';
-    el.innerHTML = `<div class="th"><span class="tn">🐛 Feedback / bug report</span></div>
+    el.innerHTML = `<div class="th"><span class="tn">🐛 Feedback / Bug Report</span></div>
       <textarea id="fbText" rows="3" placeholder="What happened?" style="width:100%;background:#1c1830;color:#eae6f5;border:1px solid rgba(160,140,255,0.35);border-radius:7px;padding:6px;font:inherit;resize:vertical"></textarea>
       <div class="tacts" style="margin-top:8px"><button data-act="send">Send</button><button data-act="x">Cancel</button></div>`;
     const close = () => { el.remove(); updateDismissAll(); };
@@ -799,7 +799,7 @@
   if (_upd) {
     const el = document.createElement('div');
     el.className = 'toast';
-    el.innerHTML = `<div class="th"><span class="tn">✨ Interface updated</span></div>` +
+    el.innerHTML = `<div class="th"><span class="tn">✨ Interface Updated</span></div>` +
       `<div class="tmods"><span>You're on the latest — the app updates itself on launch.</span></div>` +
       `<div class="tacts"><button data-act="x">Dismiss</button></div>`;
     const close = () => { el.remove(); updateDismissAll(); };
