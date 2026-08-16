@@ -202,11 +202,13 @@ function playersTable(players, passives) {
   const rows = players.map((p, i) => ({ p, rank: i + 1, pw: power(p, passives) }));
   const classes = [...new Set(rows.map(r => str(r.p.archetype)).filter(Boolean))];
   const wrap = el('div', null);
-  let sortKey = 'level', dir = -1, cls = null;
+  let sortKey = 'level', dir = -1, cls = null, roleF = null;
+  const ROLES = [['dps', '🗡️ DPS'], ['tank', '🛡️ Tanks'], ['healer', '🩹 Healers']];
   const get = (r, k) => k === 'name' ? str(r.p.name).toLowerCase() : k === 'class' ? str(r.p.archetype)
     : k === 'power' ? r.pw.val : k === 'seen' ? str(r.p.last_seen) : (+r.p.level || 0);
   function render() {
-    const shown = rows.filter(r => !cls || str(r.p.archetype) === cls)
+    const shown = rows.filter(r => (!cls || str(r.p.archetype) === cls)
+        && (!roleF || roleOf(r.p.archetype, passives) === roleF))
       .sort((a, b) => (get(a, sortKey) > get(b, sortKey) ? 1 : get(a, sortKey) < get(b, sortKey) ? -1 : 0) * dir);
     const th = (label, key, right) => {
       const e = el('th', { class: (right ? 'r ' : '') + 'sortable' }, label, sortKey === key ? (dir < 0 ? ' ▾' : ' ▴') : '');
@@ -214,11 +216,17 @@ function playersTable(players, passives) {
       return e;
     };
     wrap.replaceChildren(
-      el('div', { class: 'chips', style: 'margin:0 0 10px' }, [null, ...classes].map(c => {
-        const e = el('span', { class: 'chip' + (c === cls ? ' on' : '') }, c || 'All');
-        e.onclick = () => { cls = c; render(); };
-        return e;
-      })),
+      el('div', { class: 'chips', style: 'margin:0 0 10px' }, [
+        ...[[null, 'All'], ...ROLES].map(([r, label]) => {
+          const e = el('span', { class: 'chip' + (r === roleF && (r || !cls) ? ' on' : '') }, label);
+          e.onclick = () => { roleF = r; if (!r) cls = null; render(); };
+          return e;
+        }),
+        ...classes.map(c => {
+          const e = el('span', { class: 'chip' + (c === cls ? ' on' : '') }, c);
+          e.onclick = () => { cls = c === cls ? null : c; render(); };
+          return e;
+        })]),
       el('table', null,
         el('thead', null, el('tr', null, el('th', { class: 'r' }, '#'), th('Name', 'name'),
           th('Class', 'class'), th('Level', 'level', true), th('Power', 'power', true), th('Last seen', 'seen'))),
