@@ -152,7 +152,8 @@
 
   // open a custom page in its own app-style window
   function openWin(path, name, w = 1000, h = 800) {
-    window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`);
+    // .focus(): reopening an already-open named window otherwise leaves it behind this one
+    window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`)?.focus();
   }
 
   // ---- layout persistence (panel positions/sizes/collapse + overlay zoom) ----
