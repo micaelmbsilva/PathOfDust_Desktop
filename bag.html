@@ -202,7 +202,10 @@
         catch { return []; }
       };
       let parts = await diff();
-      if (!parts.length) { await new Promise(z => setTimeout(z, 700)); parts = await diff(); } // read-after-write lag
+      for (let i = 0; !parts.length && i < 4; i++) { // read-after-write lag — up to ~3.2s before calling it rejected
+        await new Promise(z => setTimeout(z, 800));
+        parts = await diff();
+      }
       // Empty diff is NOT success: the site 303s on business failures too (e.g.
       // not enough dust), so nothing changing usually means it was rejected.
       toast(parts.length ? `${label ? label + ': ' : ''}${parts.join(' · ')}`

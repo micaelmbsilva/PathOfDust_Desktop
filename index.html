@@ -454,7 +454,10 @@
       const res = await action(rf.action, {}).catch(() => null);
       if (!res || !res.ok) { reforgeToast('⚒️ Reforge failed', 'Could not reach the game — try again.'); loadStats(); return; }
       let hit = reforgeDiff(before, await snap());
-      if (!hit) { await new Promise(r => setTimeout(r, 700)); hit = reforgeDiff(before, await snap()); } // read-after-write retry
+      for (let i = 0; !hit && i < 4; i++) { // read-after-write lag — up to ~3.2s before giving up
+        await new Promise(r => setTimeout(r, 800));
+        hit = reforgeDiff(before, await snap());
+      }
       if (hit) reforgeToast(`⚒️ Reforged ${hit.name}`, `${hit.from} → ${hit.to} (+${hit.d} tiers)`, hit.slot);
       else reforgeToast('⚒️ Reforge', "No change detected — likely rejected (not enough dust?) or couldn't spot the upgraded item.");
       loadStats();
