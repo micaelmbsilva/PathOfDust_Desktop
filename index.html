@@ -455,7 +455,7 @@
       let hit = reforgeDiff(before, await snap());
       if (!hit) { await new Promise(r => setTimeout(r, 700)); hit = reforgeDiff(before, await snap()); } // read-after-write retry
       if (hit) reforgeToast(`⚒️ Reforged ${hit.name}`, `${hit.from} → ${hit.to} (+${hit.d} tiers)`, hit.slot);
-      else reforgeToast('⚒️ Reforge done', "Submitted — couldn't detect the upgraded item.");
+      else reforgeToast('⚒️ Reforge', "No change detected — likely rejected (not enough dust?) or couldn't spot the upgraded item.");
       loadStats();
     };
     document.getElementById('dismissAll').after(el);

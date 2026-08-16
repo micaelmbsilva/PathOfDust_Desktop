@@ -203,7 +203,10 @@
       };
       let parts = await diff();
       if (!parts.length) { await new Promise(z => setTimeout(z, 700)); parts = await diff(); } // read-after-write lag
-      toast(parts.length ? `${label ? label + ': ' : ''}${parts.join(' · ')}` : `${label || 'Done'} ✓`);
+      // Empty diff is NOT success: the site 303s on business failures too (e.g.
+      // not enough dust), so nothing changing usually means it was rejected.
+      toast(parts.length ? `${label ? label + ': ' : ''}${parts.join(' · ')}`
+        : `${label || 'Action'}: no change — likely rejected (not enough dust/tokens?)`, parts.length ? '' : 'cost');
     }
     return r;
   }
