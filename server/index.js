@@ -185,6 +185,78 @@ app.get('/api/build/:name', h(async (req, res) => {
 // caching so the shell revalidates on deploy. Serves public/index.html at /.
 app.use(express.static(require('path').join(__dirname, 'public')));
 
+// ---- Periodic roster scrape --------------------------------------------------
+// The game's /characters pages are public; every 30 min we refresh each roster
+// character into installs, keyed by name. Freshest writer wins: a scrape merges
+// its keys (stats/equipped/level) over the row's data, a later app ping replaces
+// the row wholesale — so passives/currency from pings survive scrapes, and both
+// paths keep the row current. SCRAPE=off disables.
+const GAME_URL = process.env.GAME_URL || 'https://adventure.lokati.net';
+const strip = (s) => String(s).replace(/<[^>]*>/g, '').replace(/&middot;/g, '·').replace(/&amp;/g, '&')
+  .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#?\w+;/g, '').trim();
+const getPage = async (p) => {
+  const r = await fetch(GAME_URL + p, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error(`GET ${p} -> ${r.status}`);
+  return r.text();
+};
+
+function parseCharacter(text) {
+  const name = strip((text.match(/<h1>([^<]*)<\/h1>/) || [])[1] || '');
+  const archetype = strip((text.match(/class="role-badge[^"]*"[^>]*>([^<]*)</) || [])[1] || '');
+  const stats = {};
+  for (const m of text.matchAll(/class="stat-label"[^>]*>(.*?)<\/div>\s*<div class="stat-value"[^>]*>(.*?)<\/div>/gs)) {
+    const k = strip(m[1]);
+    if (k && !/^(Dust|Sand)$/i.test(k)) stats[k] = strip(m[2]); // currency stays out of public stats
+  }
+  const level = +String(stats.Level || '').replace(/\D/g, '') || null;
+  const equipped = [];
+  for (const chunk of text.split(/class="bag-row/)[0].split('class="gear-slot"').slice(1)) {
+    const grab = (cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+    equipped.push({
+      slot: grab('gear-slot-label'), name: grab('gear-name'), tier: grab('gear-tier'),
+      quality: grab('gear-quality'), primary: grab('gear-primary'),
+      mods: [...chunk.matchAll(/class="mod-roll"([^>]*)>([^<]*)</g)]
+        .map(m => ({ t: strip(m[2]), tip: strip((m[1].match(/data-tip="([^"]*)"/) || [])[1] || '') })),
+      sacred: /gear-name-sacred/.test(chunk), krangled: /gear-name-locked/.test(chunk),
+      implicit: strip((chunk.match(/class="gear-(?:sacred|unique)"[^>]*>([^<]*)</) || [])[1] || ''),
+    });
+  }
+  return { name, archetype, level, stats, equipped };
+}
+
+async function scrapeRoster() {
+  if (!pool) return;
+  try {
+    const listing = await getPage('/characters');
+    const slugs = [...new Set([...listing.matchAll(/href="\/characters\/([^"/]+)"/g)].map(m => m[1]))];
+    let ok = 0;
+    for (const slug of slugs) {
+      try {
+        const c = parseCharacter(await getPage('/characters/' + encodeURIComponent(slug)));
+        if (!c.name) continue;
+        const id = 'web:' + slug.slice(0, 60);
+        const data = { scraped: new Date().toISOString(), name: c.name, stats: c.stats, equipped: c.equipped };
+        await pool.query(`DELETE FROM installs WHERE id = $1 AND name <> $2`, [id, c.name]); // renamed char
+        await pool.query(
+          `INSERT INTO installs (id, name, archetype, level, data) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (name) WHERE name IS NOT NULL DO UPDATE SET
+             archetype = COALESCE(EXCLUDED.archetype, installs.archetype),
+             level = COALESCE(EXCLUDED.level, installs.level),
+             last_seen = now(),
+             data = installs.data || EXCLUDED.data`,
+          [id, c.name.slice(0, 128), c.archetype || null, c.level, JSON.stringify(data)]);
+        ok++;
+      } catch (e) { console.error('scrape', slug + ':', e.message); }
+      await new Promise((r) => setTimeout(r, 500)); // be polite to the game server
+    }
+    console.log('roster scrape:', ok, '/', slugs.length);
+  } catch (e) { console.error('roster scrape failed:', e.message); }
+}
+if (process.env.SCRAPE !== 'off') {
+  setTimeout(scrapeRoster, 60e3); // first pass shortly after boot, once DB init settled
+  setInterval(scrapeRoster, 30 * 60e3);
+}
+
 // Serve regardless of DB state so / always answers; init (and retry) in background.
 const PORT = process.env.PORT || 8080; // domain routes to 8080
 app.listen(PORT, () => console.log('telemetry up on', PORT));
