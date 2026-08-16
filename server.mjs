@@ -3,6 +3,7 @@
 // No deps. Run: node server.mjs   ->   http://localhost:8787
 import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
+import { exec } from 'node:child_process';
 import { extname } from 'node:path';
 import { post, getAuthed } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL } from './config.mjs';
@@ -305,6 +306,12 @@ createServer(async (req, res) => {
         await writeFile(new URL('./version.json', import.meta.url), JSON.stringify(manifest));
         return json(res, { updated: true, version: manifest.version });
       } catch { return json(res, { updated: false, error: true }); }
+    }
+    if (url.pathname === '/api/open-wiki' && req.method === 'POST') {
+      // Open the game wiki in the user's default browser. Fixed URL on purpose —
+      // no url parameter, so this can't be steered anywhere else.
+      exec('start "" "https://adventure.lokati.net/wiki"');
+      return json(res, { ok: true });
     }
     if (url.pathname === '/api/refocus' && req.method === 'POST') {
       // Shell-level focus restore (see main.cjs __refocus). No-op on old shells.
