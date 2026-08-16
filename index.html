@@ -86,6 +86,12 @@
   .srow[title] { cursor: help; } .tmods span[title] { cursor: help; }
   .srow.repair { cursor: pointer; border-bottom: 1px solid rgba(160,140,255,0.15); margin-bottom: 3px; padding-bottom: 4px; }
   .srow.repair.on .v { color: #7fdba3; } .srow.repair.off .v { color: #ff8080; }
+  .srow.wings { cursor: pointer; }
+  .srow.wings.on .v { color: #7fdba3; }
+  .xpbar { height: 5px; border-radius: 3px; background: rgba(160,140,255,0.15); margin: 1px 0 4px; overflow: hidden; }
+  .xpbar > div { height: 100%; background: linear-gradient(90deg, #7c5cff, #b98bff); }
+  .srow.retreat { color: #ff9d9d; border: 1px solid rgba(255,138,138,0.4); border-radius: 7px;
+    padding: 3px 7px; margin: 2px 0 4px; }
   .muted { color: #8a7fb0; font-size: 0.8rem; }
 
   /* new-item notifications */
@@ -247,7 +253,9 @@
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
+  <button class="tbtn" title="Open the game's patch notes in your browser" onclick="fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'patch-notes'})})">📜 Patch Notes</button>
   <button class="tbtn" id="partyBtn" title="Who's fighting right now — DPS/Heal/Tank, status" onclick="toggleModal('party')">👥 Party</button>
+  <button class="tbtn" id="buffsBtn" title="Active buffs/debuffs — channel-point events and your in-fight buffs" onclick="toggleModal('buffs')">✨ Buffs</button>
   <button class="tbtn" id="fightBtn" title="Live leaderboard + your combat log for the fight in progress" onclick="toggleModal('fight')">🗡️ Fight</button>
   <button class="tbtn" id="battlesBtn" title="Your saved battle reports + per-fight leaderboards" onclick="toggleModal('battles')">⚔️ Battles</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
@@ -288,6 +296,15 @@
       <button title="close" onclick="toggleModal('party', false)">✕</button></span>
   </div>
   <div class="abody" id="partyBody"><p class="muted">Waiting for battle data…</p></div>
+</div>
+
+<div class="apanel" id="buffspanel" style="bottom:14px;left:16px;width:620px;height:150px">
+  <div class="cbar" id="buffsbar">
+    <span class="ctitle">✨ Buffs &amp; Debuffs</span>
+    <span class="cbtns"><button id="buffsCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('buffs', false)">✕</button></span>
+  </div>
+  <div class="abody" id="buffsBody"><p class="muted">Nothing active.</p></div>
 </div>
 
 <div class="apanel" id="fightpanel" style="top:90px;left:60px;width:440px;height:540px">
@@ -470,11 +487,23 @@
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
         `${r.autoRepairTip ? ` data-tip="${r.autoRepairTip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">🔧 Auto-Repair</span><span class="v">${r.autoRepair ? 'On' : 'Off'}</span></div>`;
-      document.getElementById('rows').innerHTML = arRow + r.stats.map(s =>
+      // XP progress (from the character sheet's own bar)
+      const xpRow = r.xp?.label ? `<div class="srow"><span class="l">${r.xp.label}</span></div><div class="xpbar"><div style="width:${r.xp.pct}%"></div></div>` : '';
+      // Wings of Flight — owners only; click toggles flying
+      const wingsRow = r.wings?.owned ? `<div class="srow wings ${r.wings.flying ? 'on' : ''}" id="wingsRow" title="Wings of Flight — hover above the crowd. Click to toggle.">` +
+        `<span class="l">🕊️ Flying</span><span class="v">${r.wings.flying ? 'On' : 'Off'}</span></div>` : '';
+      // Retreated (any non-Reforge countdown card the site shows): banner + time left
+      const mmssLeft = (ms) => { const s = Math.max(0, Math.round((ms - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+      const retreatRow = (r.countdowns || []).filter(c => !/Reforge/i.test(c.title))
+        .map(c => `<div class="srow retreat"><span class="l">🏳️ ${c.title}</span><span class="v">${mmssLeft(c.resetMs)}</span></div>`).join('');
+      document.getElementById('rows').innerHTML = retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
+      const wr = document.getElementById('wingsRow');
+      if (wr) wr.onclick = async () => { await action('toggle-flying', {}); loadStats(); };
       reconcileReforge(r.reforge);
+      lastMe = r; // buffTable etc. for the Buffs panel
       siteFails = 0; setDown(false);
       document.getElementById('overlay').classList.add('live'); // site reachable — reveal the overlay
     } catch {
@@ -530,8 +559,9 @@
     p.classList.toggle('open', open);
     document.getElementById(which + 'Btn').classList.toggle('active', open);
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
+    if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
-      ({ party: renderParty, battles: renderBattles, fight: renderFight })[which]();
+      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
       const r = p.getBoundingClientRect();
@@ -567,6 +597,36 @@
   wirePanel('partypanel', 'partybar', 'partyCollapse', 'lay.party');
   wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
+  wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
+
+  // ---- Buffs & Debuffs: the site's channel-point activity table (scraped
+  // generically via /api/me) + my own in-fight buffs from the replay's
+  // buffSnapshot events. Ticks while open.
+  let buffsTimer = null, lastMe = null;
+  const prettyBuff = (k) => String(k).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  function renderBuffs() {
+    const body = document.getElementById('buffsBody');
+    const parts = [];
+    // site-wide channel-point buffs/debuffs (first row is the header)
+    const t = lastMe?.buffTable;
+    if (t && t.length > 1) {
+      parts.push('<div class="fhead">📢 Channel Events</div>' +
+        `<table class="lb"><tr>${t[0].map(c => `<th style="text-align:left">${esc(c)}</th>`).join('')}</tr>` +
+        t.slice(1).map(rw => `<tr>${rw.map(c => `<td style="text-align:left">${esc(c)}</td>`).join('')}</tr>`).join('') + '</table>');
+    }
+    // my combat buffs, synced with the fight replay
+    if (fight && fight.mySnaps?.length) {
+      const cursor = Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale);
+      let snap = null;
+      for (const s of fight.mySnaps) { if (s.at <= cursor) snap = s; else break; }
+      const live = Date.now() - fight.t0 < fight.dur;
+      if (snap && snap.buffs.length) {
+        parts.push(`<div class="fhead">🗡️ Your Fight Buffs${live ? '' : ' (last fight)'}</div>` +
+          '<div class="rolechips">' + snap.buffs.map(([k, v]) => `<span class="chip">${esc(prettyBuff(k))}: <b>${esc(v)}</b></span>`).join('') + '</div>');
+      }
+    }
+    body.innerHTML = parts.join('') || '<p class="muted">Nothing active.</p>';
+  }
 
   // Party composition classed as DPS / Heal / Tank (not the site's melee/ranged/
   // support): each player gets the metric they rank best at in the latest saved
@@ -726,6 +786,7 @@
     const evs = [...(d.events || [])].sort((a, b) => (a.atMs || 0) - (b.atMs || 0));
     const maxAt = evs.length ? evs[evs.length - 1].atMs || 1 : 1;
     // group my events into 1s sim-time buckets so the log reads, not spams
+    const mySnaps = [];
     const groups = new Map();
     const G = (key, mk) => { let g = groups.get(key); if (!g) { g = mk(); groups.set(key, g); } return g; };
     for (const ev of evs) {
@@ -742,10 +803,12 @@
         G('o' + ev.target + b, () => ({ at: ev.atMs, kind: 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
       } else if (ev.kind === 'defeat' && ev.unit === myId) {
         groups.set('d' + b, { at: ev.atMs, kind: 'death' });
+      } else if (ev.kind === 'buffSnapshot' && ev.unit === myId) {
+        mySnaps.push({ at: ev.atMs || 0, buffs: ev.buffs || [] }); // for the Buffs panel
       }
     }
     const dur = d.displayDurationMs || maxAt;
-    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, agg: {},
+    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, agg: {}, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind };
     if (document.getElementById('fightpanel').classList.contains('open')) startFightTimer();
   }
