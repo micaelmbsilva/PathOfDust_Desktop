@@ -381,8 +381,15 @@
       await action('toggle-disenchant-protect', { item_id: item.id, protect: 'on' });
       e.target.textContent = '🔒 Locked';
     };
+    // Two-click confirm instead of native confirm(): the OS dialog steals window
+    // focus and leaves the cross-origin chat iframe deaf to keyboard afterwards.
     el.querySelector('[data-act="dis"]').onclick = async (e) => {
-      if (!confirm(`Disenchant ${item.name}? This can't be undone.`)) return;
+      if (e.target.dataset.armed !== '1') {
+        e.target.dataset.armed = '1';
+        e.target.textContent = 'Sure? (no undo)';
+        setTimeout(() => { e.target.dataset.armed = ''; e.target.textContent = 'Disenchant'; }, 4000);
+        return;
+      }
       e.target.disabled = true;
       const dust = () => fetch('/api/inventory', { cache: 'no-store' })
         .then(r => r.json()).then(i => +String(i.dust).replace(/[^\d]/g, '') || 0).catch(() => null);
@@ -411,8 +418,11 @@
   // toast interaction while the chat panel is open.
   document.getElementById('toasts').addEventListener('click', () => setTimeout(() => {
     const p = document.getElementById('chatpanel');
-    if (p.classList.contains('open') && !p.classList.contains('collapsed'))
+    if (p.classList.contains('open') && !p.classList.contains('collapsed')) {
+      if (document.activeElement) document.activeElement.blur(); // release parent-page focus first
+      window.focus();
       document.getElementById('chatFrame').focus();
+    }
   }, 50));
 
   // ---- Reforge Gear reminder: once per hour, shared between a 1k-dust option

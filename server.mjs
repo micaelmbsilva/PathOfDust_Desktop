@@ -190,9 +190,10 @@ async function passives() {
                   h: +(svg.match(/height="(\d+)"/) || [])[1] || 463 };
   const nodes = [];
   for (const chunk of text.split('class="node ').slice(1)) {
-    const head = chunk.slice(0, chunk.indexOf('</form>') + 7);
-    const key = (head.match(/name="node_key"\s+value="([^"]+)"/) || [])[1];
-    if (!key) continue;
+    const fe = chunk.indexOf('</form>');
+    const head = fe >= 0 ? chunk.slice(0, fe + 7) : chunk.slice(0, 900); // node-root has no form
+    const key = (head.match(/name="node_key"\s+value="([^"]+)"/) || [])[1] || null;
+    if (!key && !head.startsWith('node-root')) continue; // keyless + not the class passive -> not a node
     const grab = (cls) => strip((head.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
     nodes.push({
       // name: full inner markup stripped, so a nested "(inactive)" span survives
