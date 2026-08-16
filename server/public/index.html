@@ -260,8 +260,17 @@ function playersTable(players, passives) {
   return wrap;
 }
 
+function agoText(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  const mins = Math.max(0, Math.round((Date.now() - d) / 60000));
+  const rel = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 2880 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`;
+  return `${d.toLocaleString()} (${rel})`;
+}
+
 async function ladder() {
-  const [r, { builds, passives }] = await Promise.all([fetch('api/ladder'), staticData()]);
+  const [r, { builds, passives }, metaR] = await Promise.all([fetch('api/ladder'), staticData(), fetch('api/meta')]);
+  const meta = metaR.ok ? await metaR.json() : null;
   if (!r.ok) throw new Error('ladder ' + r.status);
   const { players, byClass, levels, total } = await r.json();
   view(
@@ -278,7 +287,8 @@ async function ladder() {
     el('p', { class: 'sub' }, 'Power is role-aware — raw DPS for damage classes, effective HP for tanks, effective HPS for healers. Hover a value for the math. Click headers to sort, chips to filter by class.'),
     playersTable(arr(players), passives),
     advStats(arr(players), passives),
-    null); // OP watchlist lives at the unlinked #/watchlist route
+    meta ? el('p', { class: 'sub', style: 'margin-top:36px;border-top:1px solid var(--grid);padding-top:12px' },
+      `rev ${str(meta.rev)} · site updated ${agoText(meta.deployed)} · data fetched ${agoText(meta.lastScrape || meta.dbLatest)}`) : null);
 }
 
 // Hidden routes are keyed: append ?key=<SITE_KEY> once (e.g. #/watchlist?key=…),

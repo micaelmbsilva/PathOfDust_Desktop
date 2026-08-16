@@ -187,6 +187,17 @@ app.get('/api/watchlist', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'watchlist.json'));
 });
 
+// Freshness watermark for the site footer: deploy identity + when data last moved.
+const STARTED = new Date().toISOString();
+let lastScrapeAt = null;
+app.get('/api/meta', h(async (_req, res) => {
+  const dbLatest = pool ? (await pool.query(`SELECT max(last_seen) AS m FROM installs`)).rows[0].m : null;
+  res.json({
+    rev: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || 'dev',
+    deployed: STARTED, lastScrape: lastScrapeAt, dbLatest,
+  });
+}));
+
 // Empirical affix rates for the advisor's t100 projection: average mod value per
 // item tier, per affix type, across all scraped gear. Same key as the watchlist.
 app.get('/api/affix-rates', h(async (req, res) => {
@@ -306,6 +317,7 @@ async function scrapeRoster() {
       await new Promise((r) => setTimeout(r, 500)); // be polite to the game server
     }
     console.log('roster scrape:', ok, '/', slugs.length);
+    if (ok) lastScrapeAt = new Date().toISOString();
   } catch (e) { console.error('roster scrape failed:', e.message); }
 }
 // ---- Wiki tree scrape --------------------------------------------------------
