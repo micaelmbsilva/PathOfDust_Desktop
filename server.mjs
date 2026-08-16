@@ -221,10 +221,13 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/version') {
       let webRev = 0;
       try { webRev = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
-      // The app's semver (global.__version) is the single user-facing version. Old
-      // shells that don't set it fall back to the internal web-revision integer.
-      // autoUpdate=true only on the installer shell — the UI warns others to move to it.
-      return json(res, { version: globalThis.__version || String(webRev), autoUpdate: !!globalThis.__autoUpdate });
+      // Displayed version = shell major.minor + interface revision in the patch
+      // slot (e.g. shell 29.0.0 + interface 36 -> "29.0.36"), so silent interface
+      // updates are visible without looking like an app update. Convention: shell
+      // releases bump major/minor only, keeping the patch slot free for this.
+      // Old shells without global.__version fall back to the bare revision.
+      const semver = globalThis.__version;
+      return json(res, { version: semver ? semver.replace(/\d+$/, String(webRev)) : String(webRev), autoUpdate: !!globalThis.__autoUpdate });
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {
