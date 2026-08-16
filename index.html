@@ -1095,35 +1095,43 @@
     if (!v.bridgeRev || v.bridgeRev < 71) showRestartBanner();
   }).catch(() => {});
 
-  function showRestartBanner() {
-    if (document.getElementById('restartBanner')) return;
+  // Full-width system banner across the top; one per id. Used for restart
+  // notices, the legacy-shell warning, and operator broadcasts.
+  function sysBanner(id, bg, fg, html, onDismiss) {
+    if (document.getElementById(id)) return;
     const el = document.createElement('div');
-    el.id = 'restartBanner';
-    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#c0392b;color:#fff;' +
+    el.id = id;
+    el.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:2000;background:${bg};color:${fg};` +
       'font-weight:700;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.5)';
-    el.innerHTML = '⚠️ RESTART YOUR CLIENT — this update needs a full restart to finish. Close the app and reopen it. ' +
-      '<button id="restartX" style="margin-left:10px;background:#fff;color:#c0392b;border:0;border-radius:4px;padding:3px 9px;cursor:pointer;font-weight:700">Dismiss</button>';
+    el.innerHTML = html +
+      ` <button style="margin-left:10px;background:${fg};color:${bg};border:0;border-radius:4px;padding:3px 9px;cursor:pointer;font-weight:700">Dismiss</button>`;
+    el.querySelector('button').onclick = () => { el.remove(); if (onDismiss) onDismiss(); };
     document.body.appendChild(el);
-    document.getElementById('restartX').onclick = () => el.remove();
   }
-
+  const showRestartBanner = () => sysBanner('restartBanner', '#c0392b', '#fff',
+    '⚠️ RESTART YOUR CLIENT — this update needs a full restart to finish. Close the app and reopen it.');
   // Old portable builds still hot-update their web UI but can't update the app
   // shell (this bridge doesn't report autoUpdate). Warn them to install the new
   // one, or they're frozen on this shell forever.
-  function showLegacyBanner() {
-    if (document.getElementById('legacyBanner')) return;
-    const el = document.createElement('div');
-    el.id = 'legacyBanner';
-    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#d9a441;color:#1a1205;' +
-      'font-weight:700;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.5)';
-    el.innerHTML = '⚠️ This version no longer receives updates. ' +
-      '<a href="https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest" target="_blank" ' +
-      'style="color:#1a1205;text-decoration:underline">Download the new installer</a> ' +
-      '— install once, then updates are automatic. ' +
-      '<button id="legacyX" style="margin-left:10px;background:#1a1205;color:#ffcf5a;border:0;border-radius:4px;padding:3px 9px;cursor:pointer">Dismiss</button>';
-    document.body.appendChild(el);
-    document.getElementById('legacyX').onclick = () => el.remove();
+  const showLegacyBanner = () => sysBanner('legacyBanner', '#d9a441', '#1a1205',
+    '⚠️ This version no longer receives updates. ' +
+    '<a href="https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest" target="_blank" ' +
+    'style="color:#1a1205;text-decoration:underline">Download the new installer</a> ' +
+    '— install once, then updates are automatic.');
+
+  // ---- operator broadcast: a message posted to the telemetry backend shows as
+  // a banner on every running client within a minute. Dismiss remembers the
+  // message id, so each broadcast is seen once.
+  const TELEMETRY = 'https://pathofdustdesktop-production.up.railway.app';
+  async function checkBroadcast() {
+    try {
+      const b = await fetch(TELEMETRY + '/broadcast', { cache: 'no-store' }).then(r => r.json());
+      if (b.id && localStorage.getItem('bcSeen') !== b.id)
+        sysBanner('bc-' + b.id, '#7c5cff', '#fff', '📢 ' + esc(b.message), () => localStorage.setItem('bcSeen', b.id));
+    } catch {} // backend down / offline — try next tick
   }
+  setTimeout(checkBroadcast, 5000);
+  setInterval(checkBroadcast, 60000);
 
   // Generic simple toast: title, optional body/sub, action buttons. The loot
   // toast and the reforge reminder stay bespoke (richer markup + arming logic).
