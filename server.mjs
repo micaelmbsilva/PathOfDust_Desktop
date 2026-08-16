@@ -261,6 +261,14 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/passives') {
       return json(res, await passives());
     }
+    if (url.pathname === '/api/raw') {
+      // Raw page passthrough for parser debugging — allowlisted site pages only.
+      const p = url.searchParams.get('path');
+      if (!['/', '/inventory', '/passives'].includes(p)) { res.writeHead(400); return res.end('bad path'); }
+      const { text } = await getAuthed(p);
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end(text);
+    }
     if (url.pathname === '/api/action' && req.method === 'POST') {
       const { endpoint, fields } = JSON.parse(await body(req));
       return json(res, await post(endpoint, fields || {}));
