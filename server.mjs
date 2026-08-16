@@ -232,7 +232,7 @@ async function passives() {
   return { points, respecLabel, canSave, canReset, dirty, stage, connectors: svg, nodes };
 }
 
-createServer(async (req, res) => {
+const srv = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     res.setHeader('Cache-Control', 'no-store'); // never cache app files — always serve the current (updated) version
@@ -318,14 +318,6 @@ createServer(async (req, res) => {
       if (typeof globalThis.__refocus === 'function') globalThis.__refocus();
       return json(res, { ok: true });
     }
-    if (url.pathname === '/api/raw') {
-      // Raw page passthrough for parser debugging — allowlisted site pages only.
-      const p = url.searchParams.get('path');
-      if (!['/', '/inventory', '/passives'].includes(p)) { res.writeHead(400); return res.end('bad path'); }
-      const { text } = await getAuthed(p);
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end(text);
-    }
     if (url.pathname === '/api/action' && req.method === 'POST') {
       const { endpoint, fields } = JSON.parse(await body(req));
       return json(res, await post(endpoint, fields || {}));
@@ -340,7 +332,13 @@ createServer(async (req, res) => {
     res.writeHead(e.code === 'ENOENT' ? 404 : 500);
     res.end(String(e.message || e));
   }
-}).listen(PORT, () => console.log(`bridge on http://localhost:${PORT}`));
+});
+// Resolves once the bridge is accepting connections — the shell awaits this
+// instead of polling the port.
+export const ready = new Promise((resolve, reject) => {
+  srv.once('error', reject);
+  srv.listen(PORT, () => { console.log(`bridge on http://localhost:${PORT}`); resolve(); });
+});
 
 const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 const body = (req) => new Promise((r) => { let b = ''; req.on('data', c => b += c); req.on('end', () => r(b)); });

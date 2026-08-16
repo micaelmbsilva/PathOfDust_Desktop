@@ -7,7 +7,6 @@ const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
-const http = require('node:http');
 
 // Keep third-party cookies working in the embedded Twitch chat (so it's logged
 // in and you can actually send messages), and let us iframe the full popout chat.
@@ -17,7 +16,6 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net';
 const SEVENTV_ID = 'lppmekppnliemjclknbagdhoocikieoi';
 const REPO = 'micaelmbsilva/PathOfDust_Desktop';
-let updatedTo = 0; // set by resolveAppDir when it pulls a newer version this launch
 
 // Self-update: the app's web/bridge files (server.mjs, actions.mjs, *.html,
 // tooltip.js) are plain text served from disk, so we refresh just those from
@@ -47,7 +45,6 @@ async function resolveAppDir() {
       for (const [f, t] of files) fs.writeFileSync(path.join(appDir, f), t); // all fetched before writing
       fs.writeFileSync(path.join(appDir, 'version.json'), JSON.stringify(manifest));
       localVer = manifest.version;
-      updatedTo = manifest.version; // pulled a newer version this launch
     }
   } catch { /* offline / fetch failed — use what we already have */ }
   return localVer > bundledVer ? appDir : __dirname;
@@ -92,12 +89,6 @@ function installId() {
   try { fs.mkdirSync(app.getPath('userData'), { recursive: true }); fs.writeFileSync(f, id); } catch {}
   return id;
 }
-
-const waitForPort = () => new Promise((resolve) => {
-  const tick = () => http.get({ port: PORT, path: '/', timeout: 500 }, (r) => { r.destroy(); resolve(); })
-    .on('error', () => setTimeout(tick, 150));
-  tick();
-});
 
 const getAdvSession = async () =>
   (await session.defaultSession.cookies.get({ url: SITE, name: 'adv_session' }))[0]?.value || null;
@@ -199,10 +190,10 @@ async function start() {
   global.__autoUpdate = true; // this (installer) shell self-updates; the bridge reports it so the
                               // hot-updated UI can warn old portable shells, which never set this
   global.__version = app.getVersion(); // the app's semver — the single user-facing version
-  await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
+  const bridge = await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);
-  await waitForPort();
+  await bridge.ready; // resolves when .listen() is accepting
 
   const winState = readWinState();
   const mb = winState.main || {};
@@ -220,7 +211,7 @@ async function start() {
   actions.setCookie(`adv_session=${advSession}`); // the bridge now acts as this user
   await relaxTwitchCookies();                     // make the chat embed see the login
   await session.defaultSession.clearCache().catch(() => {}); // drop stale cached app files
-  win.loadURL(`http://localhost:${PORT}/${updatedTo ? `?updated=${updatedTo}` : ''}`);
+  win.loadURL(`http://localhost:${PORT}/`);
   // Authoritative keyboard-focus restore for the chat iframe: after toast
   // interactions the cross-origin (OOPIF) chat frame can go deaf to keys, and
   // renderer-side focus() alone doesn't always recover it. The bridge exposes
