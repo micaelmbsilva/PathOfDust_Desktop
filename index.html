@@ -1090,7 +1090,22 @@
     const n = document.getElementById('hname').textContent;
     setTitle(n && n !== 'Character' ? n : '');
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
+    // Hot-pulled pages running against an older in-process bridge: some features
+    // won't work until the app is closed and reopened. Clears itself on restart.
+    if (!v.bridgeRev || v.bridgeRev < 71) showRestartBanner();
   }).catch(() => {});
+
+  function showRestartBanner() {
+    if (document.getElementById('restartBanner')) return;
+    const el = document.createElement('div');
+    el.id = 'restartBanner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#c0392b;color:#fff;' +
+      'font-weight:700;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.5)';
+    el.innerHTML = '⚠️ RESTART YOUR CLIENT — this update needs a full restart to finish. Close the app and reopen it. ' +
+      '<button id="restartX" style="margin-left:10px;background:#fff;color:#c0392b;border:0;border-radius:4px;padding:3px 9px;cursor:pointer;font-weight:700">Dismiss</button>';
+    document.body.appendChild(el);
+    document.getElementById('restartX').onclick = () => el.remove();
+  }
 
   // Old portable builds still hot-update their web UI but can't update the app
   // shell (this bridge doesn't report autoUpdate). Warn them to install the new
