@@ -176,18 +176,22 @@
     }
     return parts;
   }
-  // Run an action, then diff inventory before/after and toast what changed.
+  // Run an action, then diff inventory before/after and toast what changed. Some
+  // actions (reforge) reflect a beat after the POST returns, so if the first diff
+  // is empty we retry once; a successful action always toasts something.
   async function craftAct(endpoint, fields, label) {
     let before = null;
     try { before = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); } catch {}
     const r = await api(endpoint, fields);
     if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
     if (before) {
-      try {
-        const after = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json());
-        const parts = craftSummary(before, after);
-        if (parts.length) toast(`${label ? label + ': ' : ''}${parts.join(' · ')}`);
-      } catch {}
+      const diff = async () => {
+        try { return craftSummary(before, await fetch('/api/inventory', { cache: 'no-store' }).then(x => x.json())); }
+        catch { return []; }
+      };
+      let parts = await diff();
+      if (!parts.length) { await new Promise(z => setTimeout(z, 700)); parts = await diff(); } // read-after-write lag
+      toast(parts.length ? `${label ? label + ': ' : ''}${parts.join(' · ')}` : `${label || 'Done'} ✓`);
     }
     return r;
   }
