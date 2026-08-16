@@ -178,6 +178,7 @@
   // Re-added after every bar re-render (load() wipes #bar's innerHTML).
   async function loadArchetype() {
     let me; try { me = await fetch('/api/me').then(r => r.json()); } catch { return; }
+    if (me.name) document.title = `${GAME_NAME} — Passives — ${me.name}`;
     const a = me.archetype;
     if (!a || !a.options?.length || $('archSel')) return;
     const cur = a.options.find(o => o.selected)?.value;
@@ -199,7 +200,7 @@
     $('err').textContent = '';
     let p;
     try { p = await fetch('/api/passives').then(r => r.json()); }
-    catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
+    catch { $('err').textContent = 'Can\'t reach the game right now'; loadArchetype(); return; } // still sets the title (+ class chip) if /api/me works
 
     $('bar').innerHTML =
       `<span class="chip">🪓 <strong>${p.points}</strong></span>
@@ -260,7 +261,6 @@
     });
   }
   load();
-  fetch('/api/me').then(r => r.json()).then(me => { if (me.name) document.title = `${GAME_NAME} — Passives — ${me.name}`; }).catch(() => {});
 </script>
 <script src="/tooltip.js"></script>
 </body>
