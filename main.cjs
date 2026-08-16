@@ -144,6 +144,51 @@ function allowTwitchFraming() {
   });
 }
 
+// Remember which child windows (Bag, Passives, chat popout) were open and where,
+// plus the main window's bounds, and restore them next launch. State lives in
+// userData — the main process has no localStorage. One entry per page/host.
+const winStateFile = () => path.join(app.getPath('userData'), 'windows.json');
+const readWinState = () => { try { return JSON.parse(fs.readFileSync(winStateFile(), 'utf8')); } catch { return {}; } };
+const writeWinState = (s) => { try { fs.writeFileSync(winStateFile(), JSON.stringify(s)); } catch {} };
+function winKey(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'localhost') return u.pathname;   // /bag.html, /passives.html
+    if (u.hostname.endsWith('twitch.tv')) return 'twitch-chat';
+  } catch {}
+  return null; // anything else isn't a window we manage
+}
+function initWindowPersistence(win, state) {
+  const saveMain = () => { if (!win.isDestroyed()) { state.main = { ...(state.main || {}), ...win.getBounds() }; writeWinState(state); } };
+  win.on('moved', saveMain); win.on('resized', saveMain);
+  // Apply saved bounds to each child as it opens (keyed by its URL).
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    const s = state[winKey(url)] || {};
+    const bounds = s.x != null ? { x: s.x, y: s.y, width: s.width, height: s.height } : {};
+    return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16', ...bounds } };
+  });
+  win.webContents.on('did-create-window', (child, { url }) => {
+    const key = winKey(url); if (!key) return;
+    state[key] = { ...(state[key] || {}), url, open: true, ...child.getBounds() };
+    writeWinState(state);
+    const save = () => { if (!child.isDestroyed()) { state[key] = { ...state[key], ...child.getBounds() }; writeWinState(state); } };
+    child.on('moved', save); child.on('resized', save);
+    child.on('close', () => { if (state[key]) { state[key].open = false; writeWinState(state); } });
+  });
+  // Reopen whatever was open last session once the main page can host window.open
+  // (its handler above then applies the saved bounds). ponytail: no off-screen
+  // clamp — if the monitor layout changed a window may land off-screen; move it.
+  win.webContents.once('did-finish-load', () => {
+    for (const [key, s] of Object.entries(state)) {
+      if (key === 'main' || !s.open || !s.url) continue;
+      const feat = `width=${s.width || 1000},height=${s.height || 800}`;
+      win.webContents.executeJavaScript(
+        `window.open(${JSON.stringify(s.url)}, ${JSON.stringify(key)}, ${JSON.stringify(feat)})`
+      ).catch(() => {});
+    }
+  });
+}
+
 async function start() {
   allowTwitchFraming();
   await load7tv(); // custom emotes in chat, if 7TV is installed
@@ -157,12 +202,14 @@ async function start() {
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);
   await waitForPort();
 
+  const winState = readWinState();
+  const mb = winState.main || {};
   const win = new BrowserWindow({
-    width: 1440, height: 900, backgroundColor: '#0c0a16', autoHideMenuBar: true, title: GAME_NAME,
+    width: mb.width || 1440, height: mb.height || 900,
+    ...(mb.x != null && mb.y != null ? { x: mb.x, y: mb.y } : {}),
+    backgroundColor: '#0c0a16', autoHideMenuBar: true, title: GAME_NAME,
   });
-  win.webContents.setWindowOpenHandler(() => ({
-    action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16' },
-  }));
+  initWindowPersistence(win, winState); // remember main + child windows across launches
 
   // Log in once (persisted across launches); reuse the saved session thereafter.
   let advSession = await getAdvSession();
