@@ -114,7 +114,7 @@
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight me</button>
-  <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag()">🔄 Refresh</button>
+  <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag(); pullInterface(false)">🔄 Refresh</button>
   <button class="tbtn" id="updateBtn" title="Check for updates" onclick="updateAction()">Check for Updates</button>
   <button class="tbtn" title="Send feedback / report a bug" onclick="sendFeedback()">🐛 Feedback</button>
 </div>
@@ -565,10 +565,21 @@
     el.querySelector('[data-act="x"]').onclick = close;
     document.getElementById('dismissAll').after(el); updateDismissAll(); setTimeout(close, 8000);
   }
-  // "Check for Updates" button — ask electron-updater to look now, then report
-  // using the app's semver. Interface changes apply silently on launch.
+  // Pull newer interface files through the bridge and reload to show them —
+  // no app restart needed (bridge-code changes still arrive via restart).
+  async function pullInterface(manual) {
+    try {
+      const r = await fetch('/api/pull-interface', { method: 'POST' }).then(x => x.json());
+      if (r.updated) { location.reload(); return true; }
+      if (manual && r.error) infoToast('Interface check failed');
+    } catch {}
+    return false;
+  }
+  // "Check for Updates" button — pull interface updates immediately, and ask
+  // electron-updater for app updates.
   async function updateAction() {
     infoToast('🔄 Checking for updates…');
+    if (await pullInterface(true)) return; // reloading with the new interface
     try { await fetch('/api/check-update', { cache: 'no-store' }); } catch { infoToast('Update check failed'); return; }
     await new Promise(r => setTimeout(r, 2500)); // give the updater a moment to respond
     let u; try { u = await fetch('/api/update-status', { cache: 'no-store' }).then(r => r.json()); } catch {}
