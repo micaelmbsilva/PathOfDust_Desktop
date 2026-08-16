@@ -101,6 +101,25 @@
   #chatpanel.collapsed .cwrap { display: none; }
   #chatpanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
+
+  /* stream picture-in-picture — same panel pattern as the chat */
+  #streampanel { position: fixed; bottom: 16px; right: 16px; z-index: 35; width: 480px; height: 302px;
+    display: none; flex-direction: column; background: rgba(24,20,40,0.96);
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 30px #0009; resize: both; min-width: 240px; min-height: 160px; }
+  #streampanel.open { display: flex; }
+  #streampanel .cbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    cursor: grab; user-select: none; border-bottom: 1px solid rgba(160,140,255,0.2); }
+  #streampanel .cbar.grabbing { cursor: grabbing; }
+  #streampanel .ctitle { font-weight: 700; font-size: 0.85rem; }
+  #streampanel .cbtns { margin-left: auto; display: flex; gap: 2px; }
+  #streampanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 2px 6px; }
+  #streampanel .swrap { flex: 1; min-height: 0; background: #000; }
+  #streampanel.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
+  #streampanel.collapsed .swrap { display: none; }
+  #streampanel.collapsed .cbar { border-bottom: 0; }
+  #streampanel iframe { width: 100%; height: 100%; border: 0; }
 </style>
 </head>
 <body>
@@ -113,6 +132,7 @@
   <button class="tbtn" onclick="openWin('/bag.html','bag',1140,880)">🎒 Bag</button>
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
+  <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight me</button>
   <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag(); pullInterface(false)">🔄 Refresh</button>
   <button class="tbtn" id="updateBtn" title="Check for updates" onclick="updateAction()">Check for Updates</button>
@@ -129,6 +149,17 @@
     </span>
   </div>
   <div class="cwrap"><iframe id="chatFrame" title="Twitch chat"></iframe></div>
+</div>
+
+<div id="streampanel">
+  <div class="cbar" id="streambar">
+    <span class="ctitle">📺 Stream</span>
+    <span class="cbtns">
+      <button id="streamCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleStream(false)">✕</button>
+    </span>
+  </div>
+  <div class="swrap"><iframe id="streamFrame" title="Twitch stream" allow="autoplay; fullscreen"></iframe></div>
 </div>
 
 <div id="stats">
@@ -213,6 +244,42 @@
     p.classList.toggle('open', open);
     b.classList.toggle('active', open);
   }
+  // stream picture-in-picture — lazy iframe (only loads while open, saves CPU)
+  function toggleStream(show) {
+    const p = document.getElementById('streampanel'), b = document.getElementById('streamBtn'),
+          f = document.getElementById('streamFrame');
+    const open = show === undefined ? !p.classList.contains('open') : show;
+    if (open) f.src = `https://player.twitch.tv/?channel=${TWITCH_LOGIN}&parent=localhost&muted=true`;
+    else f.removeAttribute('src'), f.src = 'about:blank'; // stop playback when hidden
+    p.classList.toggle('open', open);
+    b.classList.toggle('active', open);
+  }
+  (function () {
+    const panel = document.getElementById('streampanel');
+    const bar = document.getElementById('streambar');
+    const cbtn = document.getElementById('streamCollapse');
+    const save = persistPanel(panel, 'lay.stream');
+    cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+    cbtn.onclick = () => {
+      panel.classList.toggle('collapsed');
+      cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+      save();
+    };
+    let drag = false, dx = 0, dy = 0;
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.cbtns')) return;
+      drag = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
+      const r = panel.getBoundingClientRect();
+      dx = e.clientX - r.left; dy = e.clientY - r.top; panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      panel.style.left = Math.max(0, Math.min(innerWidth - 60, e.clientX - dx)) + 'px';
+      panel.style.top = Math.max(44, Math.min(innerHeight - 40, e.clientY - dy)) + 'px';
+    });
+    bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); save(); });
+  })();
+
   // collapse + drag, same pattern as the stats modal
   (function () {
     const panel = document.getElementById('chatpanel');
