@@ -2,9 +2,29 @@
   "note": "Curated from the full passive trees (game wiki, re-reviewed). Numbers quote max-rank values. Point budget: 1 + floor(level/4); orders sum to 23 (the lv-91 cap). Skills cost 3, specializations 4 (4th point reveals modifiers), modifiers 3.",
   "interactions": [
     {
+      "title": "Lingering Effect ignores every defense",
+      "classes": ["Berserker", "Slayer", "Monk"],
+      "text": "Lingering applies a DoT worth its % of each hit's PRE-DEFENSE damage — it can't be blocked or evaded, only flat damage reduction applies, and every hit spawns its own independent 4s DoT. Dynamic difficulty pumps boss block/evasion toward the 75% cap as you win — Lingering doesn't care. Multi-hit builds (Frenzy's 4 strikes, attack-speed stackers) each stack their own timers. The single best anti-defense tech in the game."
+    },
+    {
+      "title": "Attack speed is uncapped and compounds",
+      "classes": ["Berserker", "Warlock", "Mage", "Ranger"],
+      "text": "The old hidden 75% speed ceiling is gone — speed is a real rate with only a 50ms floor, and TREE speed multiplies gear speed independently (all tree stats compound with gear now, not add). Gloves' tier cap is also gone (a t95 Perfect glove ≈ 123%). Mage/Warlock convert everything past 100% into damage and crit on top. Speed is the premium roll almost everywhere."
+    },
+    {
+      "title": "Dynamic difficulty punishes stomping",
+      "classes": [],
+      "text": "Boss power rubber-bands off your last 20 fights toward a ~5:2 win:loss ratio — a DOMINANT win ratchets boss HP/damage/defenses up hard (tuned so the next fight is a likely loss), a close win barely moves it, and losses ease it 15%/loss. Overkill no longer counts as dominance. Efficient play is winning UGLY: barely-won fights farm the same loot at low difficulty. Also: enemies focus above-median-level players first, and catch-up multiplies low-level pity loot — sitting at or below party median means less focus and more loot."
+    },
+    {
+      "title": "The 7-modifier item blueprint",
+      "classes": [],
+      "text": "Hard ceiling per item: 4 base modifiers + at most one each from Reforge's crit, Recombine's crit, and Krangle. Reforge's bonus-modifier crit scales with quality (2.2% on Perfect, once EVER per item, survives Recombine) — so the order is: roll 4 mods, Polish to Perfect, spam targeted Reforge for the crit, Recombine-crit, Krangle last (it locks the item). From stage 200, Sacred bases add a 5th, maxed implicit outside the cap on top. Every craft also bumps tier (+3 under t25) — cheap crafts on low-tier gear are free tier growth."
+    },
+    {
       "title": "Overflow double-dipping",
       "classes": ["Rogue", "Monk", "Druid", "Paladin", "Warrior"],
-      "text": "Every overflow node counts COMBINED gear + tree stat, and four classes have a second, independent conversion channel off the same overflow (Rogue Phantom, Monk Granite Skin, Druid Primal Shift, Paladin Sanctified Armor) — stacking one defensive stat on every gear slot past its 75%/50% cap pays out up to +60% crit/damage/DR on top of a capped defense. Gear alone can carry the whole engine."
+      "text": "Every overflow node counts COMBINED gear + tree stat, and four classes have a second, independent conversion channel off the same overflow (Rogue Phantom, Monk Granite Skin, Druid Primal Shift, Paladin Sanctified Armor). Patch-confirmed: node conversions pay out ON TOP of the free baseline overflow-to-damage conversion every character already gets — the same overcapped stat pays two or three times. Gear alone can carry the whole engine."
     },
     {
       "title": "Echo chains snowball",
@@ -24,12 +44,12 @@
     {
       "title": "Volley counts reachable targets — and now boosts everything",
       "classes": ["Ranger"],
-      "text": "Volley grants +30% damage per target the attack CAN reach (not per hit), and the reworked Chain Shot adds another +30% per rank to that same per-target bonus for the WHOLE attack, splash included. Every point of gear splash is now a straight damage multiplier twice over. Meaningfully stronger than before the wiki update."
+      "text": "Volley grants +30% damage per target the attack CAN reach (not per hit), and the reworked Chain Shot adds another +30% per rank to that same per-target bonus for the WHOLE attack, splash included. Splash past 100% grants bonus targets, which raises the reachable count again. Peak case: the Lich raises up to 20 skeletons — every one of them is a Volley multiplier. Rangers should pray for Lich fights."
     },
     {
       "title": "Healing-power flywheel",
       "classes": ["Druid", "Paladin", "Cleric"],
-      "text": "Healing power above 100% shortens the Druid's action interval (base effect + Wild Surge's extra 24%); Evergrowth converts 9% of TOTAL healing power into Lingering Effect and Seed of Life turns every tick into shields. More healing → faster actions → more healing. Paladin's Holy Fire double-dips the same stat as party-wide damage (45% of all healing done, per hit, with Wildfire)."
+      "text": "Healing power above 100% converts into ACTION FREQUENCY — interval = 1.7s ÷ (1 + excess), so 300% healing power means three actions in the time of one, stacking with glove/archetype speed and the Druid's Wild Surge. Evergrowth converts 9% of total healing power into Lingering, Seed of Life turns ticks into shields, and Divine elemental procs stack +1% healing done per proc up to +200% — the flywheel now feeds itself from gear procs too. Paladin's Holy Fire double-dips the same stat as party-wide damage."
     },
     {
       "title": "Slayer ignores the leech cap",
@@ -40,6 +60,11 @@
       "title": "Party-wide damage-taken amplification",
       "classes": ["Warlock"],
       "text": "Curse of Weakness 20% + Amplify Curse 24% + Hex Mastery 24% = up to +68% damage taken by the target from EVERYONE, spread via Contagious Curse, then Doom detonates for 105% of damage dealt (with Harbinger) and Apocalypse splashes 90% of that. Best force-multiplier in a full party."
+    },
+    {
+      "title": "Fight the right fights",
+      "classes": [],
+      "text": "Cthulhu permanently crushes whoever leads the damage meter by 90% — spread damage, don't carry; helm gear is a STACKING dps buff the longer you survive, and boss HP is 10x, so tanky sustain builds out-damage glass late in long fights. A DPS Celestial Shard wielder gets a 10% replay hit on every landed hit that triggers leech and elemental procs — an extra proc engine, now droppable for everyone. Wings of Flight makes you immune to slam knockback for full attack uptime."
     }
   ],
   "classes": {
