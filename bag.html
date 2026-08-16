@@ -17,6 +17,10 @@
   #hdr h1 { margin-bottom: 8px; }
   .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px; padding: 4px 10px; font-size: 0.85rem; color: #eae6f5; }
   .chip.repair { cursor: pointer; }
+  .chip.autodis { gap: 6px; display: inline-flex; align-items: center; }
+  .chip.autodis select { padding: 1px 4px; font-size: 0.8rem; }
+  .chip.autodis input[type="number"] { width: 52px; background: #1c1830; color: #eae6f5;
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; padding: 1px 4px; font-size: 0.8rem; }
   .chip.repair.on { border-color: #4a8a5a; background: rgba(120,255,160,0.12); }
   .chip.repair.off { border-color: #a04a4a; background: rgba(200,70,70,0.12); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
@@ -230,14 +234,33 @@
       fetch('/api/inventory').then(r => r.json()),
       fetch('/api/me').then(r => r.json()).catch(() => ({})),
     ]); }
-    catch { $('err').textContent = 'Bridge offline — run server.mjs'; return; }
+    catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
 
     if (meData.name) document.title = `${GAME_NAME} — Bag — ${meData.name}`;
     const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
+    const ad = inv.autoDisenchant;
     $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
       inv.tokens.map(t => `<span class="chip">${t}</span>`).join('') +
-      `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-repair: ${meData.autoRepair ? 'On' : 'Off'}</button>`;
+      `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
+      (ad ? `<span class="chip autodis" title="Auto-disenchant new items below the chosen threshold (site-side setting)">
+        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="adOn" ${ad.enabled ? 'checked' : ''}> 🗑️ Auto-dis below</label>
+        <select id="adTier">${ad.options.map(o => `<option value="${o.value}"${o.value === ad.tier ? ' selected' : ''}>${o.label}</option>`).join('')}</select>
+        <input type="number" id="adPct" min="1" max="100" value="${ad.minPercent}" title="Quality % floor — used when 'Quality %' is selected"
+          style="display:${ad.tier === 'quality' ? '' : 'none'}"></span>` : '');
     $('autoRep').onclick = async () => { await api('toggle-auto-repair', {}); refresh(); };
+    if (ad) {
+      // mirror the site's form: every change posts the full state
+      const saveAd = async () => {
+        const fields = { tier: $('adTier').value, min_percent: $('adPct').value };
+        if ($('adOn').checked) fields.enabled = 'on'; // unchecked = field omitted, like a real form
+        await api('set-auto-disenchant', fields);
+        refresh();
+      };
+      $('adOn').onchange = saveAd;
+      $('adTier').onchange = () => { $('adPct').style.display = $('adTier').value === 'quality' ? '' : 'none'; saveAd(); };
+      $('adPct').onchange = saveAd;
+    }
 
     $('equipped').innerHTML = inv.equipped.map(it =>
       itemCard(it, `<button data-un="${it.slot}">Unequip</button> ${shareBtn(it)}`)).join('') || '<p class="muted">Nothing equipped.</p>';
@@ -264,7 +287,17 @@
       <label>Item B (recombine) <select id="itemB"><option value="">None</option>${inv.craft.options.map(opt).join('')}</select></label>
       <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"> Veil this craft (+500 dust; Recombine also +500 per combined modifier)</label>
       <div class="acts">${inv.craft.actions.map(a =>
-        `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}</div>`;
+        `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}</div>
+      <div class="acts" style="align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(160,140,255,0.18)">
+        <span class="muted">Polish / Reforge batch:</span>
+        <label class="hint" title="Run Polishing/Reforge 5 times in one go"><input type="checkbox" class="batchx" value="5"> ×5</label>
+        <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"> ×10</label>
+      </div>`;
+    // x5/x10 are mutually exclusive, like the site's batch-check boxes
+    document.querySelectorAll('.batchx').forEach(b => b.onchange = () => {
+      if (b.checked) document.querySelectorAll('.batchx').forEach(o => { if (o !== b) o.checked = false; });
+      updateCosts();
+    });
     const keep = (sel, v) => { if (v && [...sel.options].some(o => o.value === v)) sel.value = v; };
     keep($('itemA'), prevA); keep($('itemB'), prevB);
 
@@ -281,17 +314,21 @@
   // for the selected item (base + 3*tier; veil extras; reforge 30*tier; polish
   // by quality). Token-based buttons (Regal/Krangle) keep the server label.
   let lastCraft = { options: [], actions: [] };
+  const batchTimes = () => +([...document.querySelectorAll('.batchx')].find(b => b.checked)?.value || 1);
   function updateCosts() {
     const byId = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
     const A = byId[$('itemA')?.value], B = byId[$('itemB')?.value];
     const tierA = A?.tier || 0, qualA = A?.quality || 0, perfA = !!A?.perfect;
     const pool = (A?.affixes || 0) + (B?.affixes || 0);
     const veiled = $('veil')?.checked;
+    // ×N label suffix only — per-cast cost rises as quality/tier climb mid-batch,
+    // so a multiplied total would be a lie; affordability stays per-cast.
+    const xN = batchTimes() > 1 ? ` ×${batchTimes()}` : '';
     for (const a of lastCraft.actions || []) {
       const btn = document.querySelector(`[data-craft="${a.action}"]`);
       if (!btn) continue;
-      if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s)`; btn.disabled = (a.sand ?? 0) < c; continue; }
-      if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d)`; btn.disabled = (a.dust ?? 0) < c; continue; }
+      if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c; continue; }
+      if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
       if (a.base == null) { btn.textContent = a.label; btn.disabled = false; continue; } // Regal/Krangle: token label
       let cost = a.recombine ? a.base : a.base + 3 * tierA;
       if (veiled && a.veilExtra != null) { cost += a.veilExtra; if (a.recombine) cost += 500 * pool; }
@@ -374,6 +411,8 @@
       const fields = { action, item_a: $('itemA').value };
       if (action === 'recombine' && $('itemB').value) fields.item_b = $('itemB').value;
       if ($('veil').checked) fields.veiled = '1';
+      const times = batchTimes();
+      if (times > 1 && (action === 'polishing' || action === 'reforge')) fields.times = String(times);
       if ((action === 'scour' || action === 'krangle') && !confirm(`${action} this item? Can't be undone.`)) return;
       await craftAct('craft', fields, title(action)); refresh();
     });
