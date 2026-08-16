@@ -27,6 +27,8 @@
   .node.locked { opacity: 0.45; }
   .node.inactive { border-style: dashed; border-color: #b3495a; filter: grayscale(0.5); opacity: 0.65; } /* not implemented in-game */
   .node.inactive .nm { color: #c98a94; }
+  .node.root { border-color: #d9a441; background: rgba(60,44,20,0.75); } /* class passive — always active */
+  .node.root .nm { color: #ffcf5a; }
   .node .nm { font-weight: 700; font-size: 0.82rem; line-height: 1.05; }
   .node .tr { font-size: 0.62rem; color: #8a7fb0; }
   .node .acts { display: flex; align-items: center; gap: 5px; margin-top: auto; }
@@ -174,12 +176,13 @@
       const locked = n.cls.includes('locked');
       const invested = n.cls.includes('invested');                              // partially ranked
       const inactive = /inactive/.test(n.cls) || /\(inactive\)/i.test(n.name);  // not implemented in-game yet
-      return `<div class="node ${maxed ? 'maxed' : ''} ${locked ? 'locked' : ''} ${invested ? 'invested' : ''} ${inactive ? 'inactive' : ''}"
+      const root = n.cls.includes('node-root');                                 // class passive — always active
+      return `<div class="node ${maxed ? 'maxed' : ''} ${locked ? 'locked' : ''} ${invested ? 'invested' : ''} ${inactive ? 'inactive' : ''} ${root ? 'root' : ''}"
         style="left:${n.x * S}px;top:${(n.y - offY) * S}px;width:${n.w * S}px;height:${NODE_H}px;"
         data-tip="${n.desc.replace(/"/g, '&quot;')}">
         <div class="nm">${n.name}</div>
         <div class="tr">${n.tier || ''}</div>
-        <div class="acts">${pips(n)}</div>
+        <div class="acts">${root ? `<span class="tr">${n.desc}</span>` : pips(n)}</div>
       </div>`;
     }).join('');
 
