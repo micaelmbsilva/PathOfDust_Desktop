@@ -153,16 +153,25 @@
       map[it.id != null ? 'id:' + it.id : 'slot:' + it.slot] = it; // bag items have ids; equipped keyed by slot
     return map;
   };
-  // Human summary of what an action changed: dust/sand delta (exact, from the
-  // site's data-dust/-sand), any newly-added mod with its roll/tier, and tier
-  // changes. New items (e.g. a recombine result, unseen id) are skipped so their
-  // whole mod set isn't dumped as "new".
-  function craftSummary(before, after) {
+  // Human summary of what an action changed. The game auto-battles, so dust/sand
+  // drift constantly from loot & auto-repair — diffing them is only meaningful for
+  // disenchant (opts.currency), where the gain dwarfs that noise; for crafts it's
+  // pure noise. Tokens and gear mods/tier only move via crafts, so those are
+  // reliable. New items (recombine result, unseen id) are skipped.
+  function craftSummary(before, after, opts) {
     const parts = [];
-    const dust = Math.round(numCur(after.dust) - numCur(before.dust));
-    const sand = Math.round(numCur(after.sand) - numCur(before.sand));
-    if (dust) parts.push(`<b>${dust > 0 ? '+' : ''}${dust.toLocaleString()}</b> dust`);
-    if (sand) parts.push(`<b>${sand > 0 ? '+' : ''}${sand.toLocaleString()}</b> sand`);
+    if (opts && opts.currency) {
+      const dust = Math.round(numCur(after.dust) - numCur(before.dust));
+      const sand = Math.round(numCur(after.sand) - numCur(before.sand));
+      if (dust) parts.push(`<b>${dust > 0 ? '+' : ''}${dust.toLocaleString()}</b> dust`);
+      if (sand) parts.push(`<b>${sand > 0 ? '+' : ''}${sand.toLocaleString()}</b> sand`);
+    }
+    const toks = (inv) => { const m = {}; for (const t of (inv.tokens || [])) { const x = String(t).match(/([A-Za-z]+)\s*[×x]\s*(\d+)/); if (x) m[x[1]] = +x[2]; } return m; };
+    const tb = toks(before), ta = toks(after);
+    for (const name of new Set([...Object.keys(tb), ...Object.keys(ta)])) {
+      const d = (ta[name] || 0) - (tb[name] || 0);
+      if (d) parts.push(`<b>${d > 0 ? '+' : ''}${d}</b> ${name}`);
+    }
     const b = keyItems(before), a = keyItems(after);
     for (const k of Object.keys(a)) {
       const bi = b[k]; if (!bi) continue;
@@ -179,14 +188,14 @@
   // Run an action, then diff inventory before/after and toast what changed. Some
   // actions (reforge) reflect a beat after the POST returns, so if the first diff
   // is empty we retry once; a successful action always toasts something.
-  async function craftAct(endpoint, fields, label) {
+  async function craftAct(endpoint, fields, label, opts) {
     let before = null;
     try { before = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); } catch {}
     const r = await api(endpoint, fields);
     if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
     if (before) {
       const diff = async () => {
-        try { return craftSummary(before, await fetch('/api/inventory', { cache: 'no-store' }).then(x => x.json())); }
+        try { return craftSummary(before, await fetch('/api/inventory', { cache: 'no-store' }).then(x => x.json()), opts); }
         catch { return []; }
       };
       let parts = await diff();
@@ -329,7 +338,7 @@
     document.querySelectorAll('[data-lock]').forEach(b => b.onclick = async () => { await api('toggle-disenchant-protect', { item_id: b.dataset.lock, protect: 'on' }); refresh(); });
     document.querySelectorAll('[data-dis]').forEach(b => b.onclick = async () => {
       if (!confirm(`Disenchant ${b.dataset.name}? Can't be undone.`)) return;
-      await craftAct('disenchant', { item_id: b.dataset.dis }, 'Disenchant'); refresh();
+      await craftAct('disenchant', { item_id: b.dataset.dis }, 'Disenchant', { currency: true }); refresh();
     });
     document.querySelectorAll('[data-veilpick]').forEach(b => b.onclick = async () => { await craftAct('craft/choose-veil', { index: b.dataset.veilpick }, 'Chosen'); refresh(); });
     document.querySelectorAll('[data-share]').forEach(b => b.onclick = async () => {
@@ -349,7 +358,7 @@
   // Disenchant every unlocked bag item (server skips Krangled + 🔒 Keep items).
   document.getElementById('disAll').onclick = async () => {
     if (!confirm(`Disenchant ALL unlocked bag items? Krangled and 🔒 Keep-marked items are skipped. Can't be undone.`)) return;
-    await craftAct('disenchant-all', {}, 'Disenchant all');
+    await craftAct('disenchant-all', {}, 'Disenchant all', { currency: true });
     refresh();
   };
 
