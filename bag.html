@@ -97,7 +97,7 @@
     <label>Sort <select id="sortBy">
       <option value="tier">Tier</option>
       <option value="quality">Quality</option>
-      <option value="roll">Best roll</option>
+      <option value="roll">Best Roll</option>
       <option value="name">Name</option>
       <option value="slot">Slot</option>
     </select></label>
@@ -105,7 +105,7 @@
       <option value="">None</option>
       <option value="slot">Slot</option>
     </select></label>
-    <button id="disAll" class="danger" title="Disenchant every unlocked bag item. Krangled and 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All (unlocked)</button>
+    <button id="disAll" class="danger" title="Disenchant every unlocked bag item. Krangled and 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All (Unlocked)</button>
   </div>
   <div id="bag"></div>
   <div id="toasts"></div>
@@ -241,10 +241,10 @@
     const ad = inv.autoDisenchant;
     $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
       inv.tokens.map(t => `<span class="chip">${t}</span>`).join('') +
-      `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
+      `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-Repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
       (ad ? `<span class="chip autodis" title="Auto-disenchant new items below the chosen threshold (site-side setting)">
         <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
-          <input type="checkbox" id="adOn" ${ad.enabled ? 'checked' : ''}> 🗑️ Auto-dis below</label>
+          <input type="checkbox" id="adOn" ${ad.enabled ? 'checked' : ''}> 🗑️ Auto Disenchant Below</label>
         <select id="adTier">${ad.options.map(o => `<option value="${o.value}"${o.value === ad.tier ? ' selected' : ''}>${o.label}</option>`).join('')}</select>
         <input type="number" id="adPct" min="1" max="100" value="${ad.minPercent}" title="Quality % floor — used when 'Quality %' is selected"
           style="display:${ad.tier === 'quality' ? '' : 'none'}"></span>` : '');
@@ -284,12 +284,12 @@
     const opt = (o) => `<option value="${o.id}">${o.label}</option>`;
     $('craft').innerHTML = `
       <label>Item A <select id="itemA">${inv.craft.options.map(opt).join('')}</select></label>
-      <label>Item B (recombine) <select id="itemB"><option value="">None</option>${inv.craft.options.map(opt).join('')}</select></label>
-      <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"> Veil this craft (+500 dust; Recombine also +500 per combined modifier)</label>
+      <label>Item B (Recombine) <select id="itemB"><option value="">None</option>${inv.craft.options.map(opt).join('')}</select></label>
+      <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"> Veil This Craft (+500 dust; Recombine also +500 per combined modifier)</label>
       <div class="acts">${inv.craft.actions.map(a =>
         `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}</div>
       <div class="acts" style="align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(160,140,255,0.18)">
-        <span class="muted">Polish / Reforge batch:</span>
+        <span class="muted">Polish / Reforge Batch:</span>
         <label class="hint" title="Run Polishing/Reforge 5 times in one go"><input type="checkbox" class="batchx" value="5"> ×5</label>
         <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"> ×10</label>
       </div>`;
