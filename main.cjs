@@ -2,7 +2,7 @@
 // window. Standalone .exe (bundled Chromium). Multi-user: no tokens are shipped —
 // each user logs in once via the site's Twitch OAuth, and that one login drives
 // everything (site session for stats/bag/passives/actions, and Twitch chat).
-const { app, BrowserWindow, session, dialog } = require('electron');
+const { app, BrowserWindow, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -57,17 +57,14 @@ async function resolveAppDir() {
 // web/bridge files still hot-update in place via resolveAppDir; this handles the
 // Electron shell itself, which those can't touch. Downloads in the background and
 // prompts to restart once staged. Only meaningful in a packaged install.
-function initAutoUpdate(win) {
+function initAutoUpdate() {
   if (!app.isPackaged) return; // `electron .` dev runs have no update feed
+  global.__applyUpdate = () => autoUpdater.quitAndInstall(); // called by /api/apply-update
   autoUpdater.autoDownload = true;
-  autoUpdater.on('update-downloaded', async ({ version }) => {
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'info', buttons: ['Restart now', 'Later'], defaultId: 0, cancelId: 1,
-      title: 'Update ready', message: `Path of Dust ${version} is ready.`,
-      detail: 'Restart now to install it? Your login and layout are kept.',
-    });
-    if (response === 0) autoUpdater.quitAndInstall();
-  });
+  // Publish update state on the global so the bridge can report it and the UI can
+  // toast — "downloading" when found, "ready" once staged.
+  autoUpdater.on('update-available', (i) => { global.__update = { status: 'downloading', version: i.version }; });
+  autoUpdater.on('update-downloaded', (i) => { global.__update = { status: 'ready', version: i.version }; });
   autoUpdater.on('error', () => {}); // offline / feed hiccup — try again next launch
   autoUpdater.checkForUpdates().catch(() => {});
 }
@@ -175,7 +172,7 @@ async function start() {
   await relaxTwitchCookies();                     // make the chat embed see the login
   await session.defaultSession.clearCache().catch(() => {}); // drop stale cached app files
   win.loadURL(`http://localhost:${PORT}/${updatedTo ? `?updated=${updatedTo}` : ''}`);
-  initAutoUpdate(win); // background: full-app update via electron-updater
+  initAutoUpdate(); // background: full-app update via electron-updater
 }
 
 app.whenReady().then(start);
