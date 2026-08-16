@@ -6,7 +6,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { exec } from 'node:child_process';
 import { extname } from 'node:path';
 import { post, getAuthed } from './actions.mjs';
-import { GAME_NAME, TELEMETRY_URL } from './config.mjs';
+import { GAME_NAME, TELEMETRY_URL, PING_KEY } from './config.mjs';
 
 // Anonymous telemetry/feedback → the Railway backend. No-op if no URL set.
 const INSTALL = process.env.INSTALL_ID || '';
@@ -15,7 +15,7 @@ async function telemetry(pathname, extra) {
   if (!TELEMETRY_URL) return;
   try {
     await fetch(`${TELEMETRY_URL}${pathname}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-pod-key': PING_KEY },
       body: JSON.stringify({ install: INSTALL, version: await appVersion(), ...extra }),
     });
   } catch { /* offline / backend down — ignore */ }
