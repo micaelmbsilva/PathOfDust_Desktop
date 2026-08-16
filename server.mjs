@@ -217,11 +217,12 @@ createServer(async (req, res) => {
       return res.end(`window.GAME_NAME=${JSON.stringify(GAME_NAME)};`);
     }
     if (url.pathname === '/api/version') {
-      let version = 0;
-      try { version = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
-      // autoUpdate=true only on the installer shell (sets global.__autoUpdate). Old
-      // portable shells never set it, so the UI can warn them to move to the installer.
-      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate });
+      let webRev = 0;
+      try { webRev = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
+      // The app's semver (global.__version) is the single user-facing version. Old
+      // shells that don't set it fall back to the internal web-revision integer.
+      // autoUpdate=true only on the installer shell — the UI warns others to move to it.
+      return json(res, { version: globalThis.__version || String(webRev), autoUpdate: !!globalThis.__autoUpdate });
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {
@@ -231,14 +232,10 @@ createServer(async (req, res) => {
       return;
     }
     if (url.pathname === '/api/check-update') {
-      let current = 0;
-      try { current = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
-      try {
-        const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' } }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
-        const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
-        const latest = JSON.parse(await g(`https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}/version.json`)).version;
-        return json(res, { current, latest, updateAvailable: latest > current });
-      } catch { return json(res, { current, latest: current, updateAvailable: false, error: true }); }
+      // Ask electron-updater to look now; its result arrives via events into
+      // global.__update, which the UI reads from /api/update-status.
+      if (typeof globalThis.__checkUpdate === 'function') globalThis.__checkUpdate();
+      return json(res, { version: globalThis.__version || '', update: globalThis.__update || {} });
     }
     if (url.pathname === '/api/restart' && req.method === 'POST') {
       json(res, { ok: !!global.__relaunch });

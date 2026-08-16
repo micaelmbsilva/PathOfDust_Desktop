@@ -60,6 +60,7 @@ async function resolveAppDir() {
 function initAutoUpdate() {
   if (!app.isPackaged) return; // `electron .` dev runs have no update feed
   global.__applyUpdate = () => autoUpdater.quitAndInstall(); // called by /api/apply-update
+  global.__checkUpdate = () => autoUpdater.checkForUpdates().catch(() => {}); // called by /api/check-update
   autoUpdater.autoDownload = true;
   // Publish update state on the global so the bridge can report it and the UI can
   // toast — "downloading" when found, "ready" once staged.
@@ -197,6 +198,7 @@ async function start() {
   global.__relaunch = () => { app.relaunch(); app.exit(0); }; // used by /api/restart to apply updates
   global.__autoUpdate = true; // this (installer) shell self-updates; the bridge reports it so the
                               // hot-updated UI can warn old portable shells, which never set this
+  global.__version = app.getVersion(); // the app's semver — the single user-facing version
   await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);
