@@ -171,6 +171,16 @@ async function inventory() {
     });
   const veilTip = tipOf((craftForm.match(/class="veil-check"([^>]*)>/) || [])[1] || '');
 
+  // Site-side auto-disenchant setting (form POST /set-auto-disenchant):
+  // enabled + threshold tier (quality|perfect|sacred) + quality-% floor.
+  const adForm = (text.split('action="/set-auto-disenchant"')[1] || '').split('</form>')[0];
+  const autoDisenchant = adForm ? {
+    enabled: /name="enabled"[^>]*checked/.test(adForm),
+    tier: (adForm.match(/<option value="([^"]+)"[^>]*\bselected\b/) || [])[1] || 'perfect',
+    minPercent: +(adForm.match(/name="min_percent"[^>]*value="(\d+)"/) || [])[1] || 1,
+    options: [...adForm.matchAll(/<option value="([^"]+)"[^>]*>([^<]*)</g)].map(m => ({ value: m[1], label: strip(m[2]) })),
+  } : null;
+
   // Pending veil/token choice: a veiled or token craft rolls 3 outcomes and the
   // site waits for the user to pick one (POST /craft/choose-veil, index 0-2).
   let veil = null;
@@ -182,7 +192,7 @@ async function inventory() {
     if (options.length) veil = { title, options };
   }
 
-  return { dust, sand, tokens, equipped, bag: (await bag(text)).items, craft: { options, actions, veilTip }, veil };
+  return { dust, sand, tokens, equipped, bag: (await bag(text)).items, craft: { options, actions, veilTip }, veil, autoDisenchant };
 }
 
 // Passive tree: points chip, respec/save availability, and every node.
