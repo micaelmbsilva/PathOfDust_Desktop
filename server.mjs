@@ -53,6 +53,9 @@ async function ping() {
 }
 
 const PORT = 8787;
+// Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
+// The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
+const BRIDGE_REV = 71;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -122,10 +125,9 @@ const qtipOf = (chunk) => tipOf((chunk.match(/class="gear-quality[^"]*"([^>]*)>/
 // One per item; implicitGold marks the unique (gold) variant for styling.
 const implicitOf = (chunk) => strip((chunk.match(/class="gear-(?:sacred|unique)"[^>]*>([^<]*)</) || [])[1] || '');
 
-// Scrape the bag (unequipped items) from the inventory page. Each item's id is
-// the item_id its equip/disenchant forms carry; `protected` = the Keep checkbox.
-async function bag(pageText) {
-  const text = pageText ?? (await getAuthed('/inventory')).text; // reuse caller's fetch when given
+// Scrape the bag (unequipped items) out of the inventory page's text. Each item's
+// id is the item_id its equip/disenchant forms carry; `protected` = Keep checkbox.
+function bag(text) {
   const card = (text.split('class="card bag-card"')[1] || '').split('</div>\n</body>')[0];
   const items = [];
   for (const chunk of card.split('class="gear-slot"').slice(1)) {
@@ -216,7 +218,7 @@ async function inventory() {
     if (options.length) veil = { title, options };
   }
 
-  return { dust, sand, tokens, equipped, bag: (await bag(text)).items, craft: { options, actions, veilTip }, veil, autoDisenchant };
+  return { dust, sand, tokens, equipped, bag: bag(text).items, craft: { options, actions, veilTip }, veil, autoDisenchant };
 }
 
 // Passive tree: points chip, respec/save availability, and every node.
@@ -274,7 +276,7 @@ const srv = createServer(async (req, res) => {
       // Old shells without global.__version fall back to the bare revision.
       const maj = +((globalThis.__version || '').split('.')[0]);
       const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${webRev}` : String(webRev);
-      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate });
+      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV });
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {
@@ -301,9 +303,6 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/me') {
       return json(res, await me());
-    }
-    if (url.pathname === '/api/bag') {
-      return json(res, await bag());
     }
     if (url.pathname === '/api/inventory') {
       return json(res, await inventory());
