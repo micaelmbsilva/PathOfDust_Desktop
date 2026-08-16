@@ -33,9 +33,12 @@ export async function post(endpoint, fields = {}) {
 }
 
 // Authenticated GET — returns the response text. For scraping our own pages.
+// 5xx (incl. Cloudflare's 52x error pages when the game is down) throws so the
+// scrape routes 500 and the UI shows its downtime state instead of parsing junk.
 export async function getAuthed(path = '/') {
   const res = await fetch(`${ORIGIN}/${path.replace(/^\//, '')}`, {
     headers: { 'Cookie': cookieHeader() },
   });
+  if (res.status >= 500) throw new Error(`site down: ${res.status}`);
   return { status: res.status, text: await res.text() };
 }

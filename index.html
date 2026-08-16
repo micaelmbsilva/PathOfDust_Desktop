@@ -16,7 +16,9 @@
      size is changed inversely + scaled back, so the scene stays full-bleed while
      the content (characters) shrinks/grows. Anchored top-left (ground at bottom). */
   #overlay { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 0;
-    pointer-events: none; transform-origin: 0 0; }
+    pointer-events: none; transform-origin: 0 0;
+    visibility: hidden; /* dark until the first successful poll — a Cloudflare error page must not flash white */ }
+  #overlay.live { visibility: visible; }
   #zoomcapture { position: fixed; inset: 0; z-index: 10; cursor: grab; }
   #zoomcapture.grabbing { cursor: grabbing; }
 
@@ -421,6 +423,7 @@
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
       reconcileReforge(r.reforge);
       siteFails = 0; setDown(false);
+      document.getElementById('overlay').classList.add('live'); // site reachable — reveal the overlay
     } catch {
       document.getElementById('rows').innerHTML = '<p class="muted">Can\'t reach the game right now</p>';
       if (++siteFails >= 2) setDown(true); // 2 consecutive fails (~6s) — not a one-off hiccup
