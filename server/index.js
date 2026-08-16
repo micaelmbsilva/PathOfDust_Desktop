@@ -20,7 +20,7 @@ app.use((req, res, next) => { // open receiver — the app posts from anywhere
 const DB_URL = process.env.DATABASE_URL || '';
 const pool = DB_URL ? new Pool({
   connectionString: DB_URL,
-  ssl: DB_URL.includes('.railway.internal') ? false : { rejectUnauthorized: false },
+  ssl: /\.railway\.internal|localhost|127\.0\.0\.1/.test(DB_URL) ? false : { rejectUnauthorized: false },
 }) : null;
 
 async function init() {
@@ -31,6 +31,11 @@ async function init() {
   await pool.query(`ALTER TABLE installs ADD COLUMN IF NOT EXISTS data JSONB`);
   await pool.query(`ALTER TABLE installs ADD COLUMN IF NOT EXISTS name TEXT`);
   await pool.query(`UPDATE installs SET name = data->>'name' WHERE name IS NULL AND data ? 'name'`); // backfill from prior pings so old dupes collapse too
+  // The public site keys on name — enforce uniqueness (pre-backfill rows and racing
+  // pings can leave dupes): keep the freshest row per name, then lock it in.
+  await pool.query(`DELETE FROM installs a USING installs b
+    WHERE a.name IS NOT NULL AND a.name = b.name AND a.last_seen < b.last_seen`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS installs_name_uniq ON installs (name) WHERE name IS NOT NULL`);
   await pool.query(`CREATE TABLE IF NOT EXISTS logs (
     id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), install TEXT, version TEXT, level TEXT, message TEXT)`);
   await pool.query(`CREATE TABLE IF NOT EXISTS feedback (
@@ -45,9 +50,13 @@ async function init() {
 // async route wrapper — never hang; DB errors → 503 instead of a dead request
 const h = (fn) => (req, res) => fn(req, res).catch((e) => { console.error(e.message); if (!res.headersSent) res.sendStatus(503); });
 
-app.get('/', (_req, res) => res.type('text').send('Path of Dust telemetry — ok'));
-
 app.post('/ping', h(async (req, res) => {
+  // Shared secret from the app (config.mjs PING_KEY): with the ladder public, an
+  // unauthenticated /ping would let anyone overwrite a player's row by name.
+  // ponytail: key ships inside the app so it's extractable; HMAC-signed pings if
+  // someone determined ever griefs the ladder. Guard only /ping — /log and
+  // /feedback stay open so old clients keep reporting.
+  if (process.env.PING_KEY && req.get('x-pod-key') !== process.env.PING_KEY) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   const { install, version, archetype, level, ...data } = req.body || {};
   if (!install) return res.sendStatus(400);
@@ -92,7 +101,9 @@ app.post('/feedback', h(async (req, res) => {
 
 // Dashboard JSON — guarded by ?token=STATS_TOKEN
 app.get('/stats', h(async (req, res) => {
-  if (process.env.STATS_TOKEN && req.query.token !== process.env.STATS_TOKEN) return res.sendStatus(403);
+  // Fail closed: without STATS_TOKEN configured this dump (install ids + full
+  // JSONB incl. bags/currency) must not be public.
+  if (!process.env.STATS_TOKEN || req.query.token !== process.env.STATS_TOKEN) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   const one = async (q) => (await pool.query(q)).rows;
   const num = async (q) => +(await one(q))[0].count;
@@ -109,6 +120,41 @@ app.get('/stats', h(async (req, res) => {
   ]);
   res.json({ totalInstalls, active24h, active7d, byClass, byVersion, levels, recentSnapshots, recentFeedback, recentErrors });
 }));
+
+// ---- Public site (poe.ninja-style ladder) ----------------------------------
+// Public rows key on name only — the install id is the /ping upsert key and must
+// never leave the server. last_seen is coarsened to the day.
+
+const PUB = `FROM installs WHERE name IS NOT NULL AND data ? 'equipped'`;
+
+app.get('/api/ladder', h(async (_req, res) => {
+  if (!pool) return res.sendStatus(503);
+  const [players, byClass, levels, total] = await Promise.all([
+    pool.query(`SELECT name, archetype, level, date_trunc('day', last_seen) AS last_seen ${PUB}
+                ORDER BY level DESC NULLS LAST, last_seen DESC LIMIT 200`),
+    pool.query(`SELECT archetype, count(*)::int ${PUB} GROUP BY archetype ORDER BY 2 DESC`),
+    pool.query(`SELECT (level/10)*10 AS bucket, count(*)::int ${PUB} AND level IS NOT NULL GROUP BY 1 ORDER BY 1`),
+    pool.query(`SELECT count(*) ${PUB}`),
+  ]);
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ players: players.rows, byClass: byClass.rows, levels: levels.rows, total: +total.rows[0].count });
+}));
+
+app.get('/api/build/:name', h(async (req, res) => {
+  if (!pool) return res.sendStatus(503);
+  // Whitelist in SQL — id, bag, and currency never leave the DB.
+  const { rows } = await pool.query(
+    `SELECT name, archetype, level, date_trunc('day', last_seen) AS last_seen,
+            data->'stats' AS stats, data->'equipped' AS equipped, data->'passives' AS passives
+     FROM installs WHERE name = $1 ORDER BY last_seen DESC LIMIT 1`, [String(req.params.name).slice(0, 128)]);
+  if (!rows.length) return res.sendStatus(404);
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json(rows[0]);
+}));
+
+// After all routes so nothing in public/ can shadow an API path; default etag
+// caching so the shell revalidates on deploy. Serves public/index.html at /.
+app.use(express.static(require('path').join(__dirname, 'public')));
 
 // Serve regardless of DB state so / always answers; init (and retry) in background.
 const PORT = process.env.PORT || 8080; // domain routes to 8080
