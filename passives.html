@@ -174,6 +174,27 @@
   // refresh now, then again once the server settles the action
   const refresh = () => { load(); setTimeout(load, 800); };
 
+  // Archetype switcher — the site's /change-archetype select, as a bar chip.
+  // Re-added after every bar re-render (load() wipes #bar's innerHTML).
+  async function loadArchetype() {
+    let me; try { me = await fetch('/api/me').then(r => r.json()); } catch { return; }
+    const a = me.archetype;
+    if (!a || !a.options?.length || $('archSel')) return;
+    const cur = a.options.find(o => o.selected)?.value;
+    const wrap = document.createElement('span');
+    wrap.className = 'chip';
+    wrap.innerHTML = `Class <select id="archSel" style="background:#1c1830;color:#eae6f5;border:1px solid rgba(160,140,255,0.3);border-radius:6px;padding:2px 6px;font-size:0.78rem;max-width:340px">` +
+      a.options.map(o => `<option value="${o.value}"${o.selected ? ' selected' : ''}>${o.label}</option>`).join('') + `</select>`;
+    $('bar').appendChild(wrap);
+    $('archSel').onchange = async () => {
+      const v = $('archSel').value;
+      if (v === cur) return;
+      if (!confirm(`Change archetype to ${v}?`)) { $('archSel').value = cur; return; }
+      await api('change-archetype', { archetype: v });
+      location.reload(); // whole tree changes with the class
+    };
+  }
+
   async function load() {
     $('err').textContent = '';
     let p;
@@ -187,6 +208,7 @@
        <button class="btn-respec" id="respec">${p.respecLabel}</button>
        ${p.dirty ? '<span class="chip" style="color:#ffd76b;border-color:rgba(255,215,107,0.4)">Unsaved Changes</span>' : ''}`;
     $('save').onclick = async () => { await api('passives/save', {}); refresh(); };
+    loadArchetype(); // class switcher chip (async, appended to the bar)
     const rst = $('reset');
     if (rst) rst.onclick = async () => { await api('passives/reset', {}); refresh(); }; // discard unsaved allocations
     $('respec').onclick = async () => { if (confirm('Respec — reset all points?')) { await api('passives/respec', {}); refresh(); } };

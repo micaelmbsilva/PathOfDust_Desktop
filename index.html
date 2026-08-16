@@ -86,6 +86,12 @@
   .srow[title] { cursor: help; } .tmods span[title] { cursor: help; }
   .srow.repair { cursor: pointer; border-bottom: 1px solid rgba(160,140,255,0.15); margin-bottom: 3px; padding-bottom: 4px; }
   .srow.repair.on .v { color: #7fdba3; } .srow.repair.off .v { color: #ff8080; }
+  .srow.wings { cursor: pointer; }
+  .srow.wings.on .v { color: #7fdba3; }
+  .xpbar { height: 5px; border-radius: 3px; background: rgba(160,140,255,0.15); margin: 1px 0 4px; overflow: hidden; }
+  .xpbar > div { height: 100%; background: linear-gradient(90deg, #7c5cff, #b98bff); }
+  .srow.retreat { color: #ff9d9d; border: 1px solid rgba(255,138,138,0.4); border-radius: 7px;
+    padding: 3px 7px; margin: 2px 0 4px; }
   .muted { color: #8a7fb0; font-size: 0.8rem; }
 
   /* new-item notifications */
@@ -247,6 +253,7 @@
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
+  <button class="tbtn" title="Open the game's patch notes in your browser" onclick="fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'patch-notes'})})">📜 Patch Notes</button>
   <button class="tbtn" id="partyBtn" title="Who's fighting right now — DPS/Heal/Tank, status" onclick="toggleModal('party')">👥 Party</button>
   <button class="tbtn" id="fightBtn" title="Live leaderboard + your combat log for the fight in progress" onclick="toggleModal('fight')">🗡️ Fight</button>
   <button class="tbtn" id="battlesBtn" title="Your saved battle reports + per-fight leaderboards" onclick="toggleModal('battles')">⚔️ Battles</button>
@@ -519,10 +526,21 @@
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
         `${r.autoRepairTip ? ` data-tip="${r.autoRepairTip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">🔧 Auto-Repair</span><span class="v">${r.autoRepair ? 'On' : 'Off'}</span></div>`;
-      document.getElementById('rows').innerHTML = arRow + r.stats.map(s =>
+      // XP progress (from the character sheet's own bar)
+      const xpRow = r.xp?.label ? `<div class="srow"><span class="l">${r.xp.label}</span></div><div class="xpbar"><div style="width:${r.xp.pct}%"></div></div>` : '';
+      // Wings of Flight — owners only; click toggles flying
+      const wingsRow = r.wings?.owned ? `<div class="srow wings ${r.wings.flying ? 'on' : ''}" id="wingsRow" title="Wings of Flight — hover above the crowd. Click to toggle.">` +
+        `<span class="l">🕊️ Flying</span><span class="v">${r.wings.flying ? 'On' : 'Off'}</span></div>` : '';
+      // Retreated (any non-Reforge countdown card the site shows): banner + time left
+      const mmssLeft = (ms) => { const s = Math.max(0, Math.round((ms - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+      const retreatRow = (r.countdowns || []).filter(c => !/Reforge/i.test(c.title))
+        .map(c => `<div class="srow retreat"><span class="l">🏳️ ${c.title}</span><span class="v">${mmssLeft(c.resetMs)}</span></div>`).join('');
+      document.getElementById('rows').innerHTML = retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
+      const wr = document.getElementById('wingsRow');
+      if (wr) wr.onclick = async () => { await action('toggle-flying', {}); loadStats(); };
       reconcileReforge(r.reforge);
       siteFails = 0; setDown(false);
       document.getElementById('overlay').classList.add('live'); // site reachable — reveal the overlay
