@@ -8,8 +8,7 @@
     'color:#eae6f5', 'font:12px/1.45 "Segoe UI",Arial,sans-serif',
     'padding:7px 10px', 'border-radius:8px', 'box-shadow:0 8px 24px #000a', 'display:none',
   ].join(';');
-  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(tip));
-  if (document.body) document.body.appendChild(tip);
+  document.body.appendChild(tip); // this script is loaded at end of <body>, so body exists
 
   let cur = null;
   const show = (el) => {

@@ -237,11 +237,6 @@ createServer(async (req, res) => {
       if (typeof globalThis.__checkUpdate === 'function') globalThis.__checkUpdate();
       return json(res, { version: globalThis.__version || '', update: globalThis.__update || {} });
     }
-    if (url.pathname === '/api/restart' && req.method === 'POST') {
-      json(res, { ok: !!global.__relaunch });
-      if (global.__relaunch) setTimeout(global.__relaunch, 200); // pull the new version on relaunch
-      return;
-    }
     if (url.pathname === '/api/feedback' && req.method === 'POST') {
       const { message, contact } = JSON.parse(await body(req) || '{}');
       await telemetry('/feedback', { message, contact });
