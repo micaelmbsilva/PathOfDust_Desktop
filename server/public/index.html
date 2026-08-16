@@ -168,9 +168,10 @@ async function ladder() {
 }
 
 function itemCard(it) {
+  const tier = str(it.tier).replace(/^Tier\s*/i, ''); // ping/scrape send "Tier 58"
   return el('div', { class: 'card item' },
     el('div', { class: 'slot' }, str(it.slot) || 'item',
-      str(it.tier) && el('span', { class: 'badge' }, 'T', str(it.tier)),
+      tier && el('span', { class: 'badge' }, /^\d+$/.test(tier) ? 'T' + tier : tier),
       it.sacred ? el('span', { class: 'badge sacred' }, 'sacred') : null,
       it.krangled ? el('span', { class: 'badge krangled' }, 'krangled') : null,
       it.protected ? el('span', { class: 'badge' }, 'protected') : null),
