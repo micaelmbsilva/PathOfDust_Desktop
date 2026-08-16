@@ -1,0 +1,141 @@
+{
+  "note": "Curated from the full passive trees (game wiki). Numbers quote max-rank values.",
+  "interactions": [
+    {
+      "title": "Overflow double-dipping",
+      "classes": ["Rogue", "Monk", "Druid", "Paladin", "Warrior"],
+      "text": "Every overflow node counts COMBINED gear + tree stat, and four classes have a second, independent conversion channel off the same overflow (Rogue Phantom, Monk Granite Skin, Druid Primal Shift, Paladin Sanctified Armor) — stacking one defensive stat on every gear slot past its 75%/50% cap pays out up to +60% crit/damage/DR on top of a capped defense. Gear alone can carry the whole engine."
+    },
+    {
+      "title": "Echo chains snowball",
+      "classes": ["Mage", "Rogue", "Berserker"],
+      "text": "Mage Spell Echo (75% trigger with Resonance, 80% damage with Echoing Power) can re-trigger itself up to 9 times via Finite Loop; Rogue Twin Strikes (75% with Flurry, 95% damage with Echo) re-crits and re-triggers via Double Tap; Berserker Chain Frenzy chains 4-strike Frenzy procs up to 3 deep. Hit-count multiplies with crit stacking — the closer to 100% crit, the closer these get to exponential."
+    },
+    {
+      "title": "Titan's Grip is multiplicative",
+      "classes": ["Warrior"],
+      "text": "Juggernaut 24% + Colossus doubling = 48% max HP, and Titan's Grip converts 100% of it into increased damage applied MULTIPLICATIVELY on top of all other bonuses — almost everything else in the game is additive. A tanky stat stick that out-scales pure damage nodes."
+    },
+    {
+      "title": "Healing-power flywheel",
+      "classes": ["Druid", "Paladin", "Cleric"],
+      "text": "Healing power above 100% shortens the Druid's action interval (base effect + Wild Surge's extra 24%); Evergrowth converts 9% of TOTAL healing power into Lingering Effect (the wiki's own example: 1000% healing power = 90% Lingering) and Seed of Life turns every tick into shields. More healing → faster actions → more healing. Paladin's Holy Fire double-dips the same stat as party-wide damage (45% of all healing done, per hit, with Wildfire)."
+    },
+    {
+      "title": "Slayer ignores the leech cap",
+      "classes": ["Slayer"],
+      "text": "Endless Thirst at 3/3 removes the leech-per-second cap entirely during FlickerStrike windows; Hemorrhage explodes for 80% of ALL damage dealt to the wounded target and its Overflow leech explicitly bypasses the cap too. Combined with Bloodpact firing quadruple-damage hits every ~2s (Blood Sacrifice), sustain scales with damage with no ceiling."
+    },
+    {
+      "title": "Execute thresholds stack with hit count",
+      "classes": ["Berserker", "Ranger"],
+      "text": "Culling Strike outright kills at ≤6% HP on ANY Frenzy strike — Frenzy is 4 strikes per proc, ~40% proc chance (doubled ≤65% HP via Blood Scent), plus Chain Frenzy re-rolls. Ranger's Kill Zone (+60% vs marked <45% HP with Final Blow) plus Clean Kill's free re-mark rolls the snowball between targets."
+    },
+    {
+      "title": "Party-wide damage-taken amplification",
+      "classes": ["Warlock"],
+      "text": "Curse of Weakness 20% + Amplify Curse 24% + Hex Mastery 24% = up to +68% damage taken by the target from EVERYONE, spread to up to 6 enemies via Contagious Curse, then Doom detonates for 105% of damage dealt (with Harbinger) and Apocalypse splashes 90% of that. Best force-multiplier in a full party."
+    }
+  ],
+  "classes": {
+    "Warrior": {
+      "builds": [{
+        "name": "Titan's Fortress",
+        "tagline": "Defense converted three ways into multiplicative damage",
+        "passives": ["Juggernaut 3/3", "Colossus 4/4", "Titan's Grip 3/3", "Bulwark 3/3", "Unbreakable 4/4", "Second Skin 3/3", "Overwhelming Force 4/4", "Momentous Blow 3/3"],
+        "why": "Three conversion engines run at once: Titan's Grip turns the doubled Juggernaut HP (48%) into multiplicative damage, Unbreakable turns block overflow past 75% into damage, and Overwhelming Force converts damage reduction into more damage — with Momentous Blow feeding block chance into it at half rate. You get tank stats and top-of-meter damage from the same points.",
+        "gear": "Block chance on every slot (overflow is the payoff — gear counts, tree doesn't need to reach 75% alone). Then flat damage and attack speed. Skip gear max-HP for damage: Titan's Grip ignores gear HP."
+      }]
+    },
+    "Berserker": {
+      "builds": [{
+        "name": "Culling Chain",
+        "tagline": "Four-strike Frenzy procs that chain and execute",
+        "passives": ["Frenzy 3/3", "Rising Fury 4/4", "Frenzied Assault 3/3", "Blood Scent 3/3", "Berserking 4/4", "Culling Strike 3/3", "Chain Frenzy 3/3", "Bloodlust 3/3", "Overwhelm 4/4"],
+        "why": "Frenzy at 3/3 strikes four times; Rising Fury + Frenzied Assault push the proc to ~40%, doubled to ~80% against enemies ≤65% HP by Blood Scent. Chain Frenzy re-rolls up to 3 extra procs, and every single strike executes at ≤6% HP via Culling Strike. Bloodlust/Overwhelm shreds enemy damage reduction so the strikes hit harder as stacks build.",
+        "gear": "Attack speed first (more hits = more Frenzy rolls), then damage. Take Bloodletting instead of Overwhelm if you die before the execute threshold matters."
+      }]
+    },
+    "Rogue": {
+      "builds": [{
+        "name": "Overflow Assassin",
+        "tagline": "Evasion past the cap becomes crit; crits duplicate themselves",
+        "passives": ["Shadowstep 3/3", "Elusive 4/4", "Phantom 3/3", "Duskveil 3/3", "Deadly Precision 3/3", "Twin Strikes 4/4", "Flurry 3/3", "Echo 3/3", "Double Tap 3/3"],
+        "why": "Elusive + Phantom are two independent channels off the same evasion overflow — up to +60% crit chance for wearing defensive gear, plus +30% attack speed from Duskveil. Every crit then has 75% to Twin Strike at 95% damage, and Double Tap lets the copy crit and re-trigger. Near crit cap this is the strongest per-point damage loop in the game.",
+        "gear": "Evasion on literally every slot — the overflow IS the build. Then crit damage; crit chance mostly comes from the conversion."
+      }]
+    },
+    "Monk": {
+      "builds": [{
+        "name": "Stone Current",
+        "tagline": "Overcapped evasion turned into damage, HP and free counters",
+        "passives": ["Iron Body 3/3", "Stone Fist 4/4", "Granite Skin 3/3", "Earthen Will 3/3", "Flowing Strikes 3/3", "Pressure Point 4/4", "Nerve Strike 3/3", "Relentless Assault 4/4", "Inner Focus 3/3", "Meditation 4/4"],
+        "why": "Stone Fist + Granite Skin double-convert evasion overflow into up to +60% damage, Earthen Will adds +30% max HP from the same overflow. Flowing Strikes with Pressure Point turns the monk's hit cadence into stacking crit, refreshed forever by Relentless Assault. Meditation's heal scales with the same evasion you're already stacking — one stat feeds offense, defense and sustain.",
+        "gear": "Evasion everywhere, then attack speed to build Flowing Strikes stacks faster."
+      }]
+    },
+    "Paladin": {
+      "builds": [{
+        "name": "Burning Chapel",
+        "tagline": "Every heal is also an AoE nuke",
+        "passives": ["Radiant Smite 3/3", "Holy Fire 4/4", "Wildfire 3/3", "Rising Blaze 3/3", "Zealotry 4/4", "Guardian's Oath 3/3", "Aegis Ward 4/4", "Sanctified Armor 3/3"],
+        "why": "Radiant Smite heals allies for up to 45% of your max HP per hit (with Zealotry), and Holy Fire converts 45% of ALL healing done into damage against every enemy, striking 3 extra times with Rising Blaze. Healing power multiplies both halves at once. Aegis Ward + Sanctified Armor double-convert intervene overflow into up to +60% damage reduction to keep you standing in the middle of it.",
+        "gear": "Healing power and max HP (Smite scales off max HP), intervene past 50% for the Aegis Ward overflow."
+      }]
+    },
+    "Ranger": {
+      "builds": [{
+        "name": "Arrowstorm",
+        "tagline": "Damage per reachable target — splash is a damage stat",
+        "passives": ["Multishot 3/3", "Volley 4/4", "Storm of Arrows 3/3", "Explosive Tips 4/4", "Overcharge 3/3", "Piercing Shots 4/4", "True Strike 3/3", "Fleet Step 3/3"],
+        "why": "Volley grants +30% damage per target the attack CAN reach — not per hit — so every point of splash on gear is also a damage multiplier, and Storm of Arrows adds 3 guaranteed extra targets. Piercing Shots lets all that splash crit independently with your full multiplier. Scales quadratically with pack size.",
+        "gear": "Splash on every slot (it's both coverage and damage here), then crit chance/damage."
+      }]
+    },
+    "Mage": {
+      "builds": [{
+        "name": "Infinite Echo",
+        "tagline": "Crits that recast themselves up to nine times",
+        "passives": ["Arcane Mastery 3/3", "Overload 4/4", "Cataclysm 3/3", "Spell Echo 4/4", "Resonance 3/3", "Echoing Power 3/3", "Finite Loop 3/3", "Critical Mass 4/4", "Mana Surge 3/3"],
+        "why": "On a 22% crit-damage root, Overload + Cataclysm add +90% more. Spell Echo then recasts crits at 75% chance for 80% damage, and Finite Loop lets echoes chain nine deep. Critical Mass + Mana Surge feed the crit chance that makes the loop spin. With attack-speed gear, swap into Temporal Rift + Paradox — excess speed past 100% becomes damage AND crit.",
+        "gear": "Crit chance until comfortable, then crit damage. Attack speed only if going the Temporal Rift route."
+      }]
+    },
+    "Warlock": {
+      "builds": [{
+        "name": "Doomstack",
+        "tagline": "+68% damage taken for the whole party, then it detonates",
+        "passives": ["Curse of Weakness 3/3", "Amplify Curse 4/4", "Hex Mastery 3/3", "Contagious Curse 4/4", "Doom 4/4", "Harbinger 3/3", "Apocalypse 3/3", "Dark Pact 3/3", "Unstable Power 4/4"],
+        "why": "The curse stack (20+24+24%) makes every party member hit 68% harder on cursed targets, spread to up to 6 enemies. Doom then replays 105% of everything dealt to the target as a detonation that splashes at 90% via Apocalypse. Unstable Power converts attack speed past 100% into damage — the root passive is already 16% attack speed.",
+        "gear": "Attack speed past 100% (Unstable Power eats the excess), then damage. Leech is covered by Soul Siphon if you take it."
+      }]
+    },
+    "Cleric": {
+      "builds": [{
+        "name": "Unkillable Choir",
+        "tagline": "Two death-saves a fight and shields made of overheal",
+        "passives": ["Blessed Resilience 3/3", "Guardian Spirit 4/4", "Sanctuary 4/4", "Divine Grace 3/3", "Radiant Light 4/4", "Luminous 3/3", "Overflowing Grace 4/4", "Balanced Faith 3/3", "Prayer of Mending 3/3", "Chain of Light 4/4"],
+        "why": "Guardian Spirit prevents ANY party death twice per fight. Divine Grace + Radiant Light + Luminous stack ~150% healing power in three independent additive channels, which makes Overflowing Grace constantly bank overheal into shields that also grant +30% damage reduction via Balanced Faith. Chain of Light bounces the surplus across the whole party.",
+        "gear": "Healing power, then max HP (Blessed Resilience and shields scale with it)."
+      }]
+    },
+    "Druid": {
+      "builds": [{
+        "name": "Evergrowth Engine",
+        "tagline": "Healing power that compounds into action speed, DoT heals and shields",
+        "passives": ["Regrowth 3/3", "Rejuvenation 4/4", "Blooming Field 3/3", "Evergrowth 3/3", "Seed of Life 3/3", "Wild Surge 4/4", "Overgrowth 3/3", "Nature's Blessing 4/4", "Verdant Burst 3/3"],
+        "why": "Regrowth and Blooming Field are separate MULTIPLICATIVE ×1.3 healing multipliers — rare in this game. Evergrowth turns 9% of total healing power into Lingering Effect, Seed of Life turns every lingering tick into shields, and Wild Surge makes healing power above 100% shorten your action interval even further. Each stat purchase accelerates all the others; Verdant Burst adds three cheat-deaths for anyone under your HoT.",
+        "gear": "Healing power on every slot — it is damage-of-record for this build. The flywheel does the rest."
+      }]
+    },
+    "Slayer": {
+      "builds": [{
+        "name": "Uncapped Exsanguinator",
+        "tagline": "80% damage replay, no leech cap, quadruple hits every 2 seconds",
+        "passives": ["Open Wound 3/3", "Blood Debt 3/3", "Hemorrhage 4/4", "Overflow 3/3", "Vampiric Frenzy 3/3", "Endless Thirst 4/4", "Overflow Vessel 3/3", "Bloodpact 3/3", "Blood Sacrifice 4/4", "Grim Bargain 4/4", "Clean Slate 3/3"],
+        "why": "Hemorrhage explodes 8-stack wounds for 80% of all damage dealt to the target, and its Overflow leech bypasses the leech cap — which Endless Thirst removes entirely during FlickerStrike anyway, banking the excess as shields via Overflow Vessel. Bloodpact fires quadruple-damage hits every ~2s with Blood Sacrifice, refunded by Grim Bargain and reset outright by Clean Slate. Damage and sustain are the same number.",
+        "gear": "Damage and attack speed — the tree supplies all the leech you can use. Crit multiplies the Hemorrhage bank."
+      }]
+    }
+  }
+}

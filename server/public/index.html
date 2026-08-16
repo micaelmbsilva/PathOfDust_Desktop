@@ -67,6 +67,26 @@
   .badge.krangled { color: #d55181; border-color: #d5518155; }
   .passives li { padding: 2px 0; }
   .passives .rank { color: var(--muted); }
+
+  /* Builds, OP watchlist, tree browser */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-block; font-size: 12px; color: var(--ink-2); background: rgba(255,255,255,0.04);
+          border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
+  a.chip { color: var(--accent); }
+  .bname { color: var(--ink); font-weight: 600; font-size: 15px; }
+  .btag { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
+  .card p { margin: 10px 0 0; }
+  .gearline b { color: var(--ink); font-weight: 600; }
+  .stack { display: grid; gap: 12px; }
+  details.skill { padding: 0; }
+  details.skill summary { cursor: pointer; padding: 12px 16px; color: var(--ink-2); }
+  details.skill summary b { color: var(--ink); }
+  details.skill[open] summary { border-bottom: 1px solid var(--grid); }
+  .spec { padding: 10px 16px 12px 28px; border-bottom: 1px solid var(--grid); }
+  .spec:last-child { border-bottom: 0; }
+  .spec b { color: var(--accent); }
+  .modn { margin: 6px 0 0 20px; font-size: 13px; }
+  .modn b { color: var(--ink-2); }
 </style>
 </head>
 <body>
@@ -106,13 +126,23 @@ function barChart(rows, color) { // rows: [{label: string|Node, count, num?}]
 }
 const classLink = (a) => el('a', { href: '#/class/' + encodeURIComponent(str(a)) }, str(a));
 
+// Static curated data (builds.json = suggestions + OP watchlist, passives.json = full trees)
+let STATIC;
+function staticData() {
+  const j = (u) => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null);
+  return STATIC || (STATIC = Promise.all([j('builds.json'), j('passives.json')])
+    .then(([builds, passives]) => ({ builds, passives })));
+}
+
 async function ladder() {
-  const r = await fetch('api/ladder');
+  const [r, { builds, passives }] = await Promise.all([fetch('api/ladder'), staticData()]);
   if (!r.ok) throw new Error('ladder ' + r.status);
   const { players, byClass, levels, total } = await r.json();
   view(
     el('h1', null, 'Path of Dust — Ladder'),
     el('p', { class: 'sub' }, `${total} players tracked · updates as players play`),
+    passives ? el('div', { class: 'chips', style: 'margin:0 0 20px' },
+      Object.keys(passives).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(c) }, c))) : null,
     el('div', { class: 'grid2' },
       el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, 'Classes'),
         barChart(arr(byClass).map(c => ({ label: c.archetype ? classLink(c.archetype) : '—', count: c.count })), 'var(--series-1)')),
@@ -127,7 +157,14 @@ async function ladder() {
         el('td', null, el('a', { href: '#/build/' + encodeURIComponent(str(p.name)) }, str(p.name))),
         el('td', null, p.archetype ? classLink(p.archetype) : '—'),
         el('td', { class: 'r' }, str(p.level) || '—'),
-        el('td', null, seenDay(p.last_seen)))))));
+        el('td', null, seenDay(p.last_seen)))))),
+    builds && arr(builds.interactions).length ? [
+      el('h2', null, 'OP interactions watchlist'),
+      el('div', { class: 'stack' }, arr(builds.interactions).map(i => el('div', { class: 'card' },
+        el('div', { class: 'bname' }, str(i.title)),
+        el('div', { class: 'chips', style: 'margin:6px 0 0' },
+          arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
+        el('p', null, str(i.text)))))] : null);
 }
 
 function itemCard(it) {
@@ -168,27 +205,57 @@ async function build(name) {
           el('span', { class: 'rank' }, ` — T${str(n.tier)} · rank ${str(n.rank)}`))))] : null);
 }
 
+function buildCards(archetype, builds) {
+  const b = builds && builds.classes && builds.classes[archetype];
+  if (!b || !arr(b.builds).length) return null;
+  return [el('h2', null, 'Suggested builds'),
+    el('div', { class: 'stack' }, arr(b.builds).map(x => el('div', { class: 'card' },
+      el('div', { class: 'bname' }, str(x.name)),
+      el('div', { class: 'btag' }, str(x.tagline)),
+      el('div', { class: 'chips' }, arr(x.passives).map(p => el('span', { class: 'chip' }, str(p)))),
+      el('p', null, str(x.why)),
+      el('p', { class: 'gearline' }, el('b', null, 'Gear: '), str(x.gear)))))];
+}
+
+function treeSection(archetype, passives) {
+  const t = passives && passives[archetype];
+  if (!t) return null;
+  return [el('h2', null, 'Full passive tree'),
+    el('p', { class: 'sub' }, str(t.root)),
+    el('div', { class: 'stack' }, arr(t.skills).map(s => el('details', { class: 'card skill' },
+      el('summary', null, el('b', null, str(s.name)), ` ${str(s.max)} — ${str(s.text)}`),
+      arr(s.specializations).map(sp => el('div', { class: 'spec' },
+        el('div', null, el('b', null, str(sp.name)), ` ${str(sp.max)} — ${str(sp.text)}`),
+        arr(sp.modifiers).map(m => el('div', { class: 'modn' }, el('b', null, str(m.name)), ` ${str(m.max)} — ${str(m.text)}`)))))))];
+}
+
 async function classView(archetype) {
-  const r = await fetch('api/class/' + encodeURIComponent(archetype));
-  if (r.status === 404) { view(el('p', { class: 'status' }, 'No players of this class yet. ', el('a', { href: '#/' }, 'Back to ladder'))); return; }
-  if (!r.ok) throw new Error('class ' + r.status);
-  const c = await r.json();
+  const [r, { builds, passives }] = await Promise.all([fetch('api/class/' + encodeURIComponent(archetype)), staticData()]);
+  const known = (passives && passives[archetype]) || (builds && builds.classes && builds.classes[archetype]);
+  if (r.status === 404 && !known) { view(el('p', { class: 'status' }, 'Unknown class. ', el('a', { href: '#/' }, 'Back to ladder'))); return; }
+  if (!r.ok && r.status !== 404) throw new Error('class ' + r.status);
+  const c = r.ok ? await r.json() : null;
+  const role = passives && passives[archetype] && passives[archetype].role;
   const pct = (n) => Math.round(100 * n / c.players) + '%';
   view(
     el('p', null, el('a', { href: '#/' }, '← Ladder')),
-    el('h1', null, str(c.archetype)),
-    el('p', { class: 'sub' }, `What ${c.players} tracked player${c.players === 1 ? '' : 's'} run · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`),
-    arr(c.passives).length ? [el('h2', null, 'Popular passives'),
+    el('h1', null, str(archetype)),
+    el('p', { class: 'sub' }, c
+      ? `${role ? str(role) + ' · ' : ''}what ${c.players} tracked player${c.players === 1 ? '' : 's'} run · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`
+      : `${role ? str(role) + ' · ' : ''}no tracked players yet`),
+    buildCards(archetype, builds),
+    treeSection(archetype, passives),
+    c && arr(c.passives).length ? [el('h2', null, 'Popular passives'),
       el('div', { class: 'card' }, barChart(arr(c.passives).map(p => ({
         label: str(p.name) + (p.tier != null ? ` (T${str(p.tier)})` : ''),
         count: p.players,
         num: pct(p.players) + (p.avg_rank != null ? ` · rank ${str(p.avg_rank)}` : ''),
       })), 'var(--series-1)'))] : null,
-    arr(c.mods).length ? [el('h2', null, 'Popular gear mods'),
+    c && arr(c.mods).length ? [el('h2', null, 'Popular gear mods'),
       el('div', { class: 'card' }, barChart(arr(c.mods).map(m => ({
         label: m.mod, count: m.players, num: pct(m.players),
       })), 'var(--series-2)'))] : null,
-    arr(c.items).length ? [el('h2', null, 'Most used per slot'),
+    c && arr(c.items).length ? [el('h2', null, 'Most used per slot'),
       el('table', null,
         el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Item'), el('th', { class: 'r' }, 'Used by'))),
         el('tbody', null, arr(c.items).map(i => el('tr', null,
