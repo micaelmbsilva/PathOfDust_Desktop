@@ -195,7 +195,6 @@ async function start() {
   await load7tv(); // custom emotes in chat, if 7TV is installed
   const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
   process.env.INSTALL_ID = installId(); // anonymous, for usage stats
-  global.__relaunch = () => { app.relaunch(); app.exit(0); }; // used by /api/restart to apply updates
   global.__autoUpdate = true; // this (installer) shell self-updates; the bridge reports it so the
                               // hot-updated UI can warn old portable shells, which never set this
   global.__version = app.getVersion(); // the app's semver — the single user-facing version

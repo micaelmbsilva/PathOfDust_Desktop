@@ -11,13 +11,9 @@ twitch.json
 .profile/
 .appchrome/
 
-# dev-only scraping / scanning tools + captured site pages (not shipped)
-harvest.mjs
-twitch-login.mjs
-capture.mjs
-check.mjs
-run.txt
+# captured site pages + scratch output from dev scraping (not shipped, never commit)
 authed/
+run.txt
 
 # internal doc describing the reverse-engineered endpoints — keep private
 README-actions.md

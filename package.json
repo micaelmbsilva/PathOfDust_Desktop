@@ -16,8 +16,7 @@
   },
   "devDependencies": {
     "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
-    "playwright": "^1.62.1"
+    "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "net.lokati.pathofdust",
