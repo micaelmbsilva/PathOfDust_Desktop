@@ -281,7 +281,10 @@
   cap.addEventListener('dblclick', () => { z = 1; panX = 0; panY = 0; applyZoom(); });
 
   // ---- stats modal: load + refresh ----
+  let statsBusy = false; // in-flight guard: a slow fetch mustn't stack more
   async function loadStats() {
+    if (statsBusy) return;
+    statsBusy = true;
     try {
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
@@ -299,10 +302,9 @@
       reconcileReforge(r.reforge);
     } catch {
       document.getElementById('rows').innerHTML = '<p class="muted">Bridge offline — run server.mjs</p>';
-    }
+    } finally { statsBusy = false; }
   }
   loadStats();
-  setInterval(loadStats, 3000);
 
   // ---- new-item notifications ----
   // Known-item ids persist so a page reload doesn't re-toast the whole bag.
@@ -312,10 +314,14 @@
   let seeded = known.size > 0;
   const saveKnown = () => localStorage.setItem(KEY, JSON.stringify([...known]));
 
+  let bagBusy = false;
   async function pollBag() {
+    if (bagBusy) return;
+    bagBusy = true;
     let bag;
     try { bag = await fetch('/api/bag').then(r => r.json()); }
     catch { return; } // bridge offline — try again next tick
+    finally { bagBusy = false; }
     const ids = new Set(bag.items.map(i => i.id));
     if (!seeded) { known = ids; seeded = true; saveKnown(); return; } // silent seed
     for (const item of bag.items) {
@@ -325,8 +331,13 @@
     known = new Set([...known].filter(id => ids.has(id)));
     saveKnown();
   }
-  setInterval(pollBag, 3000);
   pollBag();
+
+  // One poll loop for stats + bag. While the event WebSocket below is healthy it
+  // pushes changes near-instantly, so polling backs off to a 30s safety net;
+  // without it (offline, WS down) we poll every 3s as before.
+  let wsOk = false, pollTick = 0;
+  setInterval(() => { if (wsOk && ++pollTick % 10) return; loadStats(); pollBag(); }, 3000);
 
   // Event-driven refresh: the server pushes to /ws whenever something happens
   // (fights, drops). Refresh stats+bag on push (debounced) so changes show
@@ -334,8 +345,9 @@
   function watchEvents() {
     let ws, t = null;
     try { ws = new WebSocket('wss://adventure.lokati.net/ws'); } catch { return; }
+    ws.onopen = () => { wsOk = true; };
     ws.onmessage = () => { clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700); };
-    ws.onclose = () => setTimeout(watchEvents, 3000);
+    ws.onclose = () => { wsOk = false; setTimeout(watchEvents, 3000); };
     ws.onerror = () => ws.close();
   }
   watchEvents();
