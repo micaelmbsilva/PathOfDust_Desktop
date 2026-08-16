@@ -525,7 +525,6 @@
 
   // ---- Party modal + battle reports (all data from the game WS) ----
   let lastRoster = null; // latest `state` message
-  const ROLE_ICON = { melee: '⚔️', ranged: '🏹', support: '✨' };
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   function toggleModal(which, show) {
     const el = document.getElementById(which + 'Back');
@@ -536,18 +535,41 @@
   for (const id of ['partyBack', 'battlesBack']) // click outside the box closes
     document.getElementById(id).addEventListener('pointerdown', (e) => { if (e.target.id === id) e.target.classList.remove('open'); });
 
+  // Party composition classed as DPS / Heal / Tank (not the site's melee/ranged/
+  // support): each player gets the metric they rank best at in the latest saved
+  // battle (damage dealt / healing / damage taken). No battle data yet -> the
+  // WS role is the fallback (support = Heal, rest = DPS).
+  const CLASS_ICON = { dps: '🗡️', heal: '🩹', tank: '🛡️' };
+  function classifyParty() {
+    const rep = LS.get('battleLog', [])[0];
+    const cls = {};
+    if (rep && rep.board?.length) {
+      const n = rep.board.length;
+      const tot = (k) => rep.board.reduce((s, p) => s + p[k], 0) || 1;
+      const totH = tot('h'), totT = tot('t');
+      // Heal: does >1.5x a fair share of the party's healing. Tank: soaks >2x a
+      // fair share of the damage taken. Everyone else is DPS. Heal wins ties —
+      // dedicated healers get hit too.
+      for (const p of rep.board) {
+        cls[p.n.toLowerCase()] = p.h / totH > 1.5 / n ? 'heal' : p.t / totT > 2 / n ? 'tank' : 'dps';
+      }
+    }
+    return cls;
+  }
   function renderParty() {
     if (!lastRoster) return; // placeholder stays
+    const cls = classifyParty();
+    const of = (c) => cls[c.displayName.toLowerCase()] || (c.role === 'support' ? 'heal' : 'dps');
     const cs = [...lastRoster.characters].sort((a, b) => b.level - a.level);
-    const counts = {};
-    for (const c of cs) counts[c.role] = (counts[c.role] || 0) + 1;
+    const counts = { dps: 0, heal: 0, tank: 0 };
+    for (const c of cs) counts[of(c)]++;
     const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
     document.getElementById('partyBody').innerHTML =
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
-      Object.entries(counts).map(([r, n]) => `<span class="chip">${ROLE_ICON[r] || ''} ${r[0].toUpperCase()}${r.slice(1)} × ${n}</span>`).join('') +
+      ['dps', 'heal', 'tank'].map(k => `<span class="chip">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
       `<span class="chip">Total ${cs.length}</span></div>` +
       cs.map(c => `<div class="mrow${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}">
-        <span>${ROLE_ICON[c.role] || ''}</span><span class="nm">${esc(c.displayName)}</span>
+        <span>${CLASS_ICON[of(c)]}</span><span class="nm">${esc(c.displayName)}</span>
         <span class="muted">Lv ${c.level}</span>
         <span class="sub">${c.wins}W/${c.losses}L · ${status(c)}</span></div>`).join('');
   }
