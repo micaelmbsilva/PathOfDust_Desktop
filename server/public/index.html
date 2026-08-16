@@ -161,6 +161,43 @@ function power(p, passives) {
   return { val: num(s.DPS), unit: 'DPS', why: `DPS role: raw DPS ${s.DPS || '0'}.` };
 }
 
+// Per-role stat averages ("advanced view"): avg + best of the stats that matter
+// for each role, computed from the same ladder rows.
+function advStats(players, passives) {
+  const SETS = {
+    dps: ['DPS', 'Health', 'Crit Chance', 'Increased Dmg Dealt', 'Increased Crit Dmg Dealt', 'Splash', 'Evasion'],
+    tank: ['Health', 'Reduced Dmg Taken', 'Block', 'Evasion', 'Intervene', 'DPS'],
+    healer: ['HPS', 'Healing Power', 'Lingering Effect', 'Health', 'Intervene', 'DPS'],
+  };
+  const TITLES = { dps: 'DPS players', tank: 'Tanks', healer: 'Healers' };
+  const byRole = { dps: [], tank: [], healer: [] };
+  for (const p of players) byRole[roleOf(p.archetype, passives)].push(p);
+  const cards = Object.keys(SETS).map(role => {
+    const ps = byRole[role];
+    if (!ps.length) return null;
+    const rows = SETS[role].map(key => {
+      const vals = ps.map(p => p.stats && p.stats[key]).filter(v => v != null && v !== '');
+      if (!vals.length) return null;
+      const nums = vals.map(num);
+      const pct = vals.filter(v => /%/.test(v)).length > vals.length / 2;
+      const show = n => pct ? (Math.round(n * 10) / 10) + '%' : fmt(n);
+      return el('tr', null, el('td', null, key),
+        el('td', { class: 'r' }, show(nums.reduce((a, b) => a + b, 0) / nums.length)),
+        el('td', { class: 'r' }, show(Math.max(...nums))));
+    }).filter(Boolean);
+    if (!rows.length) return null;
+    return el('div', { class: 'card' },
+      el('div', { class: 'bname' }, `${TITLES[role]} · ${ps.length}`),
+      el('table', null,
+        el('thead', null, el('tr', null, el('th', null, 'Stat'), el('th', { class: 'r' }, 'Avg'), el('th', { class: 'r' }, 'Best'))),
+        el('tbody', null, rows)));
+  }).filter(Boolean);
+  if (!cards.length) return null;
+  return el('details', { class: 'card skill' },
+    el('summary', null, el('b', null, 'Advanced stats'), ' — per-role averages across all tracked players'),
+    el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:14px 16px' }, cards));
+}
+
 function playersTable(players, passives) {
   const rows = players.map((p, i) => ({ p, rank: i + 1, pw: power(p, passives) }));
   const classes = [...new Set(rows.map(r => str(r.p.archetype)).filter(Boolean))];
@@ -214,6 +251,7 @@ async function ladder() {
     el('h2', null, 'Top players'),
     el('p', { class: 'sub' }, 'Power is role-aware — raw DPS for damage classes, effective HP for tanks, effective HPS for healers. Hover a value for the math. Click headers to sort, chips to filter by class.'),
     playersTable(arr(players), passives),
+    advStats(arr(players), passives),
     builds && arr(builds.interactions).length ? [
       el('h2', null, 'OP interactions watchlist'),
       el('div', { class: 'stack' }, arr(builds.interactions).map(i => el('div', { class: 'card' },
