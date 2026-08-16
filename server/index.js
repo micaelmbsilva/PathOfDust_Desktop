@@ -148,7 +148,7 @@ app.get('/api/class/:archetype', h(async (req, res) => {
   if (!pool) return res.sendStatus(503);
   const a = String(req.params.archetype).slice(0, 64);
   const W = `${PUB} AND archetype = $1`;
-  const [meta, passives, mods, items] = await Promise.all([
+  const [meta, passives, mods] = await Promise.all([
     pool.query(`SELECT count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level ${W}`, [a]),
     // Only allocated nodes count as picks (rank "2/4" or "2"; "0/4" = unallocated).
     pool.query(`SELECT n->>'name' AS name, count(*)::int AS players,
@@ -156,18 +156,16 @@ app.get('/api/class/:archetype', h(async (req, res) => {
                        round(avg((substring(n->>'rank' from '^\\d+'))::int), 1) AS avg_rank
                 ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'passives'->'nodes') n`)}
                 AND n->>'name' IS NOT NULL AND n->>'rank' ~ '^[1-9]' GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
-    pool.query(`SELECT m->>'t' AS mod, count(DISTINCT id)::int AS players
+    // Mods grouped by TYPE ("+55% crit chance" and "+40% crit chance" are the
+    // same affix at different rolls) — strip the numeric part before grouping.
+    pool.query(`SELECT trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')) AS mod, count(DISTINCT id)::int AS players
                 ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m`)}
-                AND m->>'t' IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
-    pool.query(`SELECT DISTINCT ON (slot) slot, name, players FROM (
-                  SELECT it->>'slot' AS slot, it->>'name' AS name, count(*)::int AS players
-                  ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'equipped') it`)}
-                  AND it->>'slot' IS NOT NULL AND it->>'name' IS NOT NULL GROUP BY 1, 2) t
-                ORDER BY slot, players DESC, name`, [a]),
+                AND m->>'t' IS NOT NULL GROUP BY 1 HAVING trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')) <> ''
+                ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
   ]);
   if (!meta.rows[0].players) return res.sendStatus(404);
   res.set('Cache-Control', 'public, max-age=60');
-  res.json({ archetype: a, ...meta.rows[0], passives: passives.rows, mods: mods.rows, items: items.rows });
+  res.json({ archetype: a, ...meta.rows[0], passives: passives.rows, mods: mods.rows });
 }));
 
 app.get('/api/build/:name', h(async (req, res) => {
@@ -181,6 +179,14 @@ app.get('/api/build/:name', h(async (req, res) => {
   res.set('Cache-Control', 'public, max-age=60');
   res.json(rows[0]);
 }));
+
+// Freshly scraped class trees win over the static public/passives.json snapshot
+// (which stays as the fallback until the first wiki scrape lands).
+app.get('/passives.json', (_req, res, next) => {
+  if (!wikiTrees) return next();
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json(wikiTrees);
+});
 
 // After all routes so nothing in public/ can shadow an API path; default etag
 // caching so the shell revalidates on deploy. Serves public/index.html at /.
@@ -278,9 +284,58 @@ async function scrapeRoster() {
     console.log('roster scrape:', ok, '/', slugs.length);
   } catch (e) { console.error('roster scrape failed:', e.message); }
 }
+// ---- Wiki tree scrape --------------------------------------------------------
+// Keeps the class trees + node effect text behind /passives.json current with
+// the live game wiki (public page). Parser ported from wiki/scrape.mjs.
+let wikiTrees = null;
+const wstrip = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&#?\w+;/g, '')
+  .replace(/\s+/g, ' ').trim();
+function parseWiki(t) {
+  const out = {};
+  for (let block of t.split(/<details class="[^"]*wiki-archetype[^"]*">/).slice(1)) {
+    block = block.split('</details>')[0];
+    const summary = wstrip((block.match(/<summary[^>]*>([\s\S]*?)<\/summary>/) || [])[1] || '');
+    const name = summary.replace(/Melee|Ranged|Support/g, '').replace(/^[^A-Za-z]+/, '').trim();
+    if (!name) continue;
+    out[name] = {
+      role: (block.match(/role-badge[^>]*>([^<]*)</) || [])[1] || '',
+      root: wstrip((block.match(/wiki-root-desc[^>]*>([\s\S]*?)<\/p>/) || [])[1] || ''),
+      skills: block.split('<div class="wiki-skill">').slice(1).map((sk) => {
+        const h3 = (sk.match(/<h3>([\s\S]*?)<\/h3>/) || [])[1] || '';
+        return {
+          name: wstrip(h3.split('<span')[0]),
+          max: (wstrip(h3).match(/max\s+([\d/]+)/) || [])[1] || '',
+          text: wstrip((sk.split('<div class="wiki-spec">')[0].match(/<p[^>]*>([\s\S]*?)<\/p>/) || [])[1] || ''),
+          specializations: sk.split('<div class="wiki-spec">').slice(1).map((sp) => {
+            const h4 = (sp.match(/<h4>([\s\S]*?)<\/h4>/) || [])[1] || '';
+            return {
+              name: wstrip(h4.split('<span')[0]),
+              max: (wstrip(h4).match(/max\s+([\d/]+)/) || [])[1] || '',
+              text: wstrip((sp.match(/<p[^>]*>([\s\S]*?)<\/p>/) || [])[1] || ''),
+              modifiers: [...sp.matchAll(/<li><strong>([^<]*)<\/strong>\s*<span[^>]*>\(([^)]*)\)<\/span>\s*-?\s*([\s\S]*?)<\/li>/g)]
+                .map((m) => ({ name: wstrip(m[1]), max: (m[2].match(/max\s+([\d/]+)/) || [])[1] || '', text: wstrip(m[3]) })),
+            };
+          }),
+        };
+      }),
+    };
+  }
+  return out;
+}
+async function scrapeWiki() {
+  try {
+    const out = parseWiki(await getPage('/wiki'));
+    const n = Object.keys(out).length;
+    if (n >= 5) { wikiTrees = out; console.log('wiki scrape:', n, 'classes'); }
+    else console.error('wiki scrape: only', n, 'classes parsed — markup changed? keeping previous');
+  } catch (e) { console.error('wiki scrape failed:', e.message); }
+}
+
 if (process.env.SCRAPE !== 'off') {
   setTimeout(scrapeRoster, 60e3); // first pass shortly after boot, once DB init settled
   setInterval(scrapeRoster, 30 * 60e3);
+  setTimeout(scrapeWiki, 20e3);
+  setInterval(scrapeWiki, 6 * 3600e3); // trees change rarely
 }
 
 // Serve regardless of DB state so / always answers; init (and retry) in background.
