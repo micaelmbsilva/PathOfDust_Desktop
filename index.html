@@ -420,7 +420,7 @@
     const p = document.getElementById('chatpanel');
     if (p.classList.contains('open') && !p.classList.contains('collapsed')) {
       if (document.activeElement) document.activeElement.blur(); // release parent-page focus first
-      window.focus();
+      fetch('/api/refocus', { method: 'POST' }).catch(() => {});  // shell-level focus (authoritative)
       document.getElementById('chatFrame').focus();
     }
   }, 50));
