@@ -336,7 +336,11 @@
     el.querySelector('[data-act="dis"]').onclick = async (e) => {
       if (!confirm(`Disenchant ${item.name}? This can't be undone.`)) return;
       e.target.disabled = true;
+      const dust = () => fetch('/api/inventory', { cache: 'no-store' })
+        .then(r => r.json()).then(i => +String(i.dust).replace(/[^\d]/g, '') || 0).catch(() => null);
+      const before = await dust();
       await action('disenchant', { item_id: item.id });
+      if (before != null) { const after = await dust(); if (after > before) infoToast(`💰 +${(after - before).toLocaleString()} dust from ${item.name}`); }
       close();
     };
     const dismissAll = document.getElementById('dismissAll');
