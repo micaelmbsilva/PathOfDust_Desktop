@@ -617,12 +617,26 @@
   setInterval(checkShellUpdate, 30000);
 
   // ---- feedback + error reporting (anonymous, to the telemetry backend) ----
+  // Inline toast input — window.prompt() is unsupported in Electron (silently no-ops).
   function sendFeedback() {
-    const msg = prompt('Send feedback or report a bug (anonymous — no name is sent):');
-    if (!msg) return;
-    fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
-      .then(r => r.json()).then(r => infoToast(r.ok ? '✅ Thanks — sent.' : 'Feedback isn\'t set up yet.'))
-      .catch(() => infoToast('Could not send feedback.'));
+    if (document.getElementById('fbToast')) return; // one at a time
+    const el = document.createElement('div');
+    el.className = 'toast'; el.id = 'fbToast';
+    el.innerHTML = `<div class="th"><span class="tn">🐛 Feedback / bug report</span></div>
+      <textarea id="fbText" rows="3" placeholder="What happened?" style="width:100%;background:#1c1830;color:#eae6f5;border:1px solid rgba(160,140,255,0.35);border-radius:7px;padding:6px;font:inherit;resize:vertical"></textarea>
+      <div class="tacts" style="margin-top:8px"><button data-act="send">Send</button><button data-act="x">Cancel</button></div>`;
+    const close = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="x"]').onclick = close;
+    el.querySelector('[data-act="send"]').onclick = () => {
+      const msg = document.getElementById('fbText').value.trim();
+      if (!msg) return;
+      fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+        .then(r => r.json()).then(r => infoToast(r.ok ? '✅ Thanks — sent.' : 'Feedback isn\'t set up yet.'))
+        .catch(() => infoToast('Could not send feedback.'));
+      close();
+    };
+    document.getElementById('dismissAll').after(el); updateDismissAll();
+    document.getElementById('fbText').focus();
   }
   let _lastLog = 0;
   function logRemote(level, message) {
