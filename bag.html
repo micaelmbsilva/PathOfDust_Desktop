@@ -24,7 +24,14 @@
   .item .n { font-weight: 700; }
   .item .s { font-size: 0.72rem; color: #b0a2d9; }
   .perfect { color: #ffcf5a; font-weight: 700; } /* Perfect Quality → gold */
+  .sacredq { color: #d6f0ff; font-weight: 700; } /* Sacred → icy blue-white, like the site */
+  .item .n.sacred { color: #d6f0ff; text-shadow: 0 0 8px rgba(120,200,255,0.6); }
   .item .n.krangled { color: #b23a3a; } /* Krangled (locked) — matches the site */
+  /* Sacred/unique implicit callout — boxed line above the mods, site's treatment */
+  .imp { font-size: 0.78rem; color: #d6f0ff; font-weight: 600; line-height: 1.35;
+    background: rgba(120,200,255,0.12); border: 1px solid rgba(120,200,255,0.4);
+    border-radius: 6px; padding: 4px 7px; margin-top: 6px; width: fit-content; }
+  .imp.gold { color: #ffd76b; background: rgba(255,215,107,0.1); border-color: rgba(255,215,107,0.35); }
   .item .m { font-size: 0.8rem; color: #c9bdf0; margin: 6px 0; }
   .veilbox { background: rgba(60,44,20,0.6); border: 1px solid #d9a441; border-radius: 10px; padding: 14px; margin-bottom: 16px; }
   .veilbox h2 { color: #ffcf5a; margin: 0 0 4px; }
@@ -114,7 +121,8 @@
   const slotOf = (s) => `${SLOT_EMOJI[(s || '').toLowerCase()] || ''} ${title(s)}`.trim();
   const qual = (it) => {
     const q = it.quality || '';
-    const inner = q.includes('Perfect') ? `<span class="perfect">${q}</span>` : q;
+    const inner = it.sacred || q === 'Sacred' ? `<span class="sacredq">${q}</span>`
+      : q.includes('Perfect') ? `<span class="perfect">${q}</span>` : q;
     return it.qtip ? `<span class="hint"${tip(it.qtip)}>${inner}</span>` : inner;
   };
   // Roll % → tier (T1 best). Percentile-from-top: T1 95-100, T2 90-94, T3 75-89,
@@ -130,8 +138,9 @@
   };
   const itemCard = (it, acts) => `
     <div class="item">
-      <div class="n${it.krangled ? ' krangled' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
+      <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
       <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}</div>
+      ${it.implicit ? `<div class="imp${it.implicitGold ? ' gold' : ''}">${it.implicit}</div>` : ''}
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
       <div class="acts">${acts}</div>
     </div>`;
@@ -300,17 +309,20 @@
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
   let lastBag = [];
   const numTier = (i) => +(i.tier?.match(/\d+/) || [0])[0];
-  const numQual = (i) => i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
+  const numQual = (i) => i.sacred || i.quality === 'Sacred' ? 102 : i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
   const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
   // chat-ready one-liner, e.g.
   // "✨ Ascended Hood 【Helm · T17 · ⭐92%】 +80 dps ➤ +50% dmg dealt (T5·45%)"
   const shareText = (it) => {
     const t = (it.tier || '').replace('Tier ', 'T');
-    const q = it.quality?.includes('Perfect') ? '🌟Perfect' : `⭐${(it.quality || '').replace('Quality ', '')}`;
-    const mods = (it.mods || []).map(m => {
-      const r = rollOf(m.tip);
-      return r != null ? `${m.t} (T${tierOf(r)}·${r}%)` : m.t;
-    }).join('  |  ');
+    const q = it.sacred ? '✦Sacred' : it.quality?.includes('Perfect') ? '🌟Perfect' : `⭐${(it.quality || '').replace('Quality ', '')}`;
+    const mods = [
+      ...(it.implicit ? [it.implicit] : []),
+      ...(it.mods || []).map(m => {
+        const r = rollOf(m.tip);
+        return r != null ? `${m.t} (T${tierOf(r)}·${r}%)` : m.t;
+      }),
+    ].join('  |  ');
     return `✨ ${it.name} 【${slotOf(it.slot)} · ${t} · ${q}】${it.primary ? ` ${it.primary}` : ''}${mods ? `  ➤  ${mods}` : ''}`;
   };
   const shareBtn = (it) => `<button data-share="${esc(shareText(it))}" title="Copy for chat">Share</button>`;

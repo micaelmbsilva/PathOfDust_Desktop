@@ -93,6 +93,13 @@
   .toast .th { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
   .toast .tn { font-weight: 700; } .toast .ts { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; }
   .toast .perfect { color: #ffcf5a; font-weight: 700; }
+  .toast .tn.sacred { color: #d6f0ff; text-shadow: 0 0 8px rgba(120,200,255,0.6); }
+  .toast .sacredq { color: #d6f0ff; font-weight: 700; }
+  /* Sacred/unique implicit callout — boxed line above the mods, site's treatment */
+  .toast .imp { font-size: 0.78rem; color: #d6f0ff; font-weight: 600; line-height: 1.35;
+    background: rgba(120,200,255,0.12); border: 1px solid rgba(120,200,255,0.4);
+    border-radius: 6px; padding: 4px 7px; margin: 4px 0; width: fit-content; }
+  .toast .imp.gold { color: #ffd76b; background: rgba(255,215,107,0.1); border-color: rgba(255,215,107,0.35); }
   .toast.reforge, .toast.reforge-result { border-color: #d9a441; background: rgba(60,44,20,0.96); }
   .toast.reforge .tn, .toast.reforge-result .tn { color: #ffcf5a; }
   .toast .tmods { font-size: 0.8rem; color: #c9bdf0; margin: 2px 0 8px; }
@@ -455,8 +462,8 @@
       for (const item of bag.items) {
         if (known.has(item.id)) continue;
         known.add(item.id);
-        // auto-lock Perfect drops before toasting, so the toast shows it locked
-        if (autoLockOn() && !item.protected && (item.quality || '').includes('Perfect')) {
+        // auto-lock Perfect-or-better drops before toasting, so the toast shows it locked
+        if (autoLockOn() && !item.protected && ((item.quality || '').includes('Perfect') || item.sacred)) {
           const r = await action('toggle-disenchant-protect', { item_id: item.id, protect: 'on' }).catch(() => null);
           if (r && r.ok) item.protected = true; // only claim locked on confirmed success
         }
@@ -499,9 +506,12 @@
     const el = document.createElement('div');
     el.className = 'toast';
     const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span data-tip="${(m.tip || '').replace(/"/g, '&quot;')}">${m.t}</span>`).join('')}</div>` : '';
+    const qual = item.sacred ? `<span class="sacredq">${item.quality}</span>`
+      : item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${item.quality}</span>` : item.quality;
     el.innerHTML = `
-      <div class="th"><span class="tn">${item.name}</span>
-        <span class="ts">${item.slot} · ${item.tier} · ${item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${item.quality}</span>` : item.quality}</span></div>
+      <div class="th"><span class="tn${item.sacred ? ' sacred' : ''}">${item.name}</span>
+        <span class="ts">${item.slot} · ${item.tier} · ${qual}</span></div>
+      ${item.implicit ? `<div class="imp${item.implicitGold ? ' gold' : ''}">${item.implicit}</div>` : ''}
       ${mods}
       <div class="tacts">
         <button class="danger" data-act="dis">Disenchant</button>
