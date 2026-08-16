@@ -130,7 +130,7 @@ const PUB = `FROM installs WHERE name IS NOT NULL AND data ? 'equipped'`;
 app.get('/api/ladder', h(async (_req, res) => {
   if (!pool) return res.sendStatus(503);
   const [players, byClass, levels, total] = await Promise.all([
-    pool.query(`SELECT name, archetype, level, date_trunc('day', last_seen) AS last_seen ${PUB}
+    pool.query(`SELECT name, archetype, level, date_trunc('day', last_seen) AS last_seen, data->'stats' AS stats ${PUB}
                 ORDER BY level DESC NULLS LAST, last_seen DESC LIMIT 200`),
     pool.query(`SELECT archetype, count(*)::int ${PUB} GROUP BY archetype ORDER BY 2 DESC`),
     pool.query(`SELECT (level/10)*10 AS bucket, count(*)::int ${PUB} AND level IS NOT NULL GROUP BY 1 ORDER BY 1`),

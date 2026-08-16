@@ -73,6 +73,10 @@
   .chip { display: inline-block; font-size: 12px; color: var(--ink-2); background: rgba(255,255,255,0.04);
           border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
   a.chip { color: var(--accent); }
+  span.chip { cursor: pointer; }
+  .chip.on { color: var(--accent); border-color: var(--accent); }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--ink); }
   .bname { color: var(--ink); font-weight: 600; font-size: 15px; }
   .btag { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
   .card p { margin: 10px 0 0; }
@@ -134,6 +138,65 @@ function staticData() {
     .then(([builds, passives]) => ({ builds, passives })));
 }
 
+// Role-aware "power" score: LVL alone doesn't explain who's on top.
+const TANKS = { Warrior: 1, Paladin: 1 };
+const roleOf = (cls, passives) => TANKS[cls] ? 'tank'
+  : (passives && passives[cls] && passives[cls].role) === 'Support' ? 'healer' : 'dps';
+const num = (v) => { const m = String(v == null ? '' : v).replace(/,/g, '').match(/^([\d.]+)\s*([KMB])?/i);
+  return m ? +m[1] * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] || '').toUpperCase()] || 1) : 0; };
+const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M'
+  : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+function power(p, passives) {
+  const s = (p.stats && typeof p.stats === 'object') ? p.stats : {};
+  const role = roleOf(p.archetype, passives);
+  if (role === 'healer') {
+    const val = num(s.HPS) * (1 + num(s['Lingering Effect']) / 100);
+    return { val, unit: 'eHPS', why: `Healer: HPS ${s.HPS || '0'} × (1 + lingering ${s['Lingering Effect'] || '0'}). Healing power (${s['Healing Power'] || '?'}) is already baked into HPS.` };
+  }
+  if (role === 'tank') {
+    const val = num(s.Health) * (1 + num(s['Reduced Dmg Taken']) / 100) * (1 + num(s.Block) / 200)
+      * (1 + num(s.Evasion) / 100) * (1 + num(s.Intervene) / 100);
+    return { val, unit: 'eHP', why: `Tank: HP ${s.Health || '0'} × dmg reduction ${s['Reduced Dmg Taken'] || '0'} × block ${s.Block || '0'} (half weight — blocked hits still land) × evasion ${s.Evasion || '0'} × intervene ${s.Intervene || '0'}.` };
+  }
+  return { val: num(s.DPS), unit: 'DPS', why: `DPS role: raw DPS ${s.DPS || '0'}.` };
+}
+
+function playersTable(players, passives) {
+  const rows = players.map((p, i) => ({ p, rank: i + 1, pw: power(p, passives) }));
+  const classes = [...new Set(rows.map(r => str(r.p.archetype)).filter(Boolean))];
+  const wrap = el('div', null);
+  let sortKey = 'level', dir = -1, cls = null;
+  const get = (r, k) => k === 'name' ? str(r.p.name).toLowerCase() : k === 'class' ? str(r.p.archetype)
+    : k === 'power' ? r.pw.val : k === 'seen' ? str(r.p.last_seen) : (+r.p.level || 0);
+  function render() {
+    const shown = rows.filter(r => !cls || str(r.p.archetype) === cls)
+      .sort((a, b) => (get(a, sortKey) > get(b, sortKey) ? 1 : get(a, sortKey) < get(b, sortKey) ? -1 : 0) * dir);
+    const th = (label, key, right) => {
+      const e = el('th', { class: (right ? 'r ' : '') + 'sortable' }, label, sortKey === key ? (dir < 0 ? ' ▾' : ' ▴') : '');
+      e.onclick = () => { dir = sortKey === key ? -dir : -1; sortKey = key; render(); };
+      return e;
+    };
+    wrap.replaceChildren(
+      el('div', { class: 'chips', style: 'margin:0 0 10px' }, [null, ...classes].map(c => {
+        const e = el('span', { class: 'chip' + (c === cls ? ' on' : '') }, c || 'All');
+        e.onclick = () => { cls = c; render(); };
+        return e;
+      })),
+      el('table', null,
+        el('thead', null, el('tr', null, el('th', { class: 'r' }, '#'), th('Name', 'name'),
+          th('Class', 'class'), th('Level', 'level', true), th('Power', 'power', true), th('Last seen', 'seen'))),
+        el('tbody', null, shown.map(r => el('tr', null,
+          el('td', { class: 'r' }, r.rank),
+          el('td', null, el('a', { href: '#/build/' + encodeURIComponent(str(r.p.name)) }, str(r.p.name))),
+          el('td', null, r.p.archetype ? classLink(r.p.archetype) : '—'),
+          el('td', { class: 'r' }, str(r.p.level) || '—'),
+          el('td', { class: 'r', title: r.pw.why }, r.pw.val ? fmt(r.pw.val) + ' ' + r.pw.unit : '—'),
+          el('td', null, seenDay(r.p.last_seen)))))));
+  }
+  render();
+  return wrap;
+}
+
 async function ladder() {
   const [r, { builds, passives }] = await Promise.all([fetch('api/ladder'), staticData()]);
   if (!r.ok) throw new Error('ladder ' + r.status);
@@ -149,15 +212,8 @@ async function ladder() {
       el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, 'Levels'),
         barChart(arr(levels).map(l => ({ label: `${l.bucket}–${l.bucket + 9}`, count: l.count })), 'var(--series-2)'))),
     el('h2', null, 'Top players'),
-    el('table', null,
-      el('thead', null, el('tr', null, el('th', { class: 'r' }, '#'), el('th', null, 'Name'),
-        el('th', null, 'Class'), el('th', { class: 'r' }, 'Level'), el('th', null, 'Last seen'))),
-      el('tbody', null, arr(players).map((p, i) => el('tr', null,
-        el('td', { class: 'r' }, i + 1),
-        el('td', null, el('a', { href: '#/build/' + encodeURIComponent(str(p.name)) }, str(p.name))),
-        el('td', null, p.archetype ? classLink(p.archetype) : '—'),
-        el('td', { class: 'r' }, str(p.level) || '—'),
-        el('td', null, seenDay(p.last_seen)))))),
+    el('p', { class: 'sub' }, 'Power is role-aware — raw DPS for damage classes, effective HP for tanks, effective HPS for healers. Hover a value for the math. Click headers to sort, chips to filter by class.'),
+    playersTable(arr(players), passives),
     builds && arr(builds.interactions).length ? [
       el('h2', null, 'OP interactions watchlist'),
       el('div', { class: 'stack' }, arr(builds.interactions).map(i => el('div', { class: 'card' },
