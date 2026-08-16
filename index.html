@@ -96,6 +96,7 @@
   .toast .tn { font-weight: 700; } .toast .ts { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; }
   .toast .perfect { color: #ffcf5a; font-weight: 700; }
   .toast .tn.sacred { color: #d6f0ff; text-shadow: 0 0 8px rgba(120,200,255,0.6); }
+  .toast .tn.unique { color: #ffd76b; text-shadow: 0 0 6px rgba(255,215,107,0.4); }
   .toast .sacredq { color: #d6f0ff; font-weight: 700; }
   /* Sacred/unique implicit callout — boxed line above the mods, site's treatment */
   .toast .imp { font-size: 0.78rem; color: #d6f0ff; font-weight: 600; line-height: 1.35;
@@ -180,7 +181,7 @@
   <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight Me</button>
-  <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect Quality items when they drop">🔒 Auto-Lock ✨</button>
+  <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop">🔒 Auto-Lock ✨</button>
   <button class="tbtn" title="Refresh now" onclick="loadStats(); pollBag(); pullInterface(false)">🔄 Refresh</button>
   <button class="tbtn" id="updateBtn" title="Check for updates" onclick="updateAction()">Check for Updates</button>
   <button class="tbtn" title="Send feedback / report a bug" onclick="sendFeedback()">🐛 Feedback</button>
@@ -466,8 +467,9 @@
       for (const item of bag.items) {
         if (known.has(item.id)) continue;
         known.add(item.id);
-        // auto-lock Perfect-or-better drops before toasting, so the toast shows it locked
-        if (autoLockOn() && !item.protected && ((item.quality || '').includes('Perfect') || item.sacred)) {
+        // auto-lock Perfect/Sacred/unique (e.g. Celestial Shard) drops before
+        // toasting, so the toast shows it locked
+        if (autoLockOn() && !item.protected && ((item.quality || '').includes('Perfect') || item.sacred || item.unique)) {
           const r = await action('toggle-disenchant-protect', { item_id: item.id, protect: 'on' }).catch(() => null);
           if (r && r.ok) item.protected = true; // only claim locked on confirmed success
         }
@@ -513,7 +515,7 @@
     const qual = item.sacred ? `<span class="sacredq">${item.quality}</span>`
       : item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${item.quality}</span>` : item.quality;
     el.innerHTML = `
-      <div class="th"><span class="tn${item.sacred ? ' sacred' : ''}">${item.name}</span>
+      <div class="th"><span class="tn${item.sacred ? ' sacred' : item.unique ? ' unique' : ''}">${item.name}</span>
         <span class="ts">${item.slot} · ${item.tier} · ${qual}</span></div>
       ${item.implicit ? `<div class="imp${item.implicitGold ? ' gold' : ''}">${item.implicit}</div>` : ''}
       ${mods}
