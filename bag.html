@@ -286,12 +286,14 @@
       <label>Item A <select id="itemA">${inv.craft.options.map(opt).join('')}</select></label>
       <label>Item B (Recombine) <select id="itemB"><option value="">None</option>${inv.craft.options.map(opt).join('')}</select></label>
       <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"> Veil This Craft (+500 dust; Recombine also +500 per combined modifier)</label>
-      <div class="acts">${inv.craft.actions.map(a =>
+      <div class="acts">${inv.craft.actions.filter(a => !a.polish && !a.reforge).map(a =>
         `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}</div>
       <div class="acts" style="align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(160,140,255,0.18)">
-        <span class="muted">Polish / Reforge Batch:</span>
+        <span class="muted">Polish / Reforge:</span>
         <label class="hint" title="Run Polishing/Reforge 5 times in one go"><input type="checkbox" class="batchx" value="5"> ×5</label>
         <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"> ×10</label>
+        ${inv.craft.actions.filter(a => a.polish || a.reforge).map(a =>
+          `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}
       </div>`;
     // x5/x10 are mutually exclusive, like the site's batch-check boxes
     document.querySelectorAll('.batchx').forEach(b => b.onchange = () => {
