@@ -30,6 +30,7 @@
   .perfect { color: #ffcf5a; font-weight: 700; } /* Perfect Quality → gold */
   .sacredq { color: #d6f0ff; font-weight: 700; } /* Sacred → icy blue-white, like the site */
   .item .n.sacred { color: #d6f0ff; text-shadow: 0 0 8px rgba(120,200,255,0.6); }
+  .item .n.unique { color: #ffd76b; text-shadow: 0 0 6px rgba(255,215,107,0.4); }
   .item .n.krangled { color: #b23a3a; } /* Krangled (locked) — matches the site */
   /* Sacred/unique implicit callout — boxed line above the mods, site's treatment */
   .imp { font-size: 0.78rem; color: #d6f0ff; font-weight: 600; line-height: 1.35;
@@ -142,7 +143,7 @@
   };
   const itemCard = (it, acts) => `
     <div class="item">
-      <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
+      <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : it.unique ? ' unique' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
       <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}</div>
       ${it.implicit ? `<div class="imp${it.implicitGold ? ' gold' : ''}">${it.implicit}</div>` : ''}
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
@@ -210,14 +211,15 @@
     const r = await api(endpoint, fields);
     if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
     if (before) {
-      const diff = async () => {
-        try { return craftSummary(before, await fetch('/api/inventory', { cache: 'no-store' }).then(x => x.json()), opts); }
-        catch { return []; }
-      };
-      let parts = await diff();
-      for (let i = 0; !parts.length && i < 4; i++) { // read-after-write lag — up to ~3.2s before calling it rejected
-        await new Promise(z => setTimeout(z, 800));
-        parts = await diff();
+      let parts = [];
+      for (let i = 0; i < 5; i++) { // read-after-write lag — up to ~3.2s before calling it rejected
+        if (i) await new Promise(z => setTimeout(z, 800));
+        let after; try { after = await fetch('/api/inventory', { cache: 'no-store' }).then(x => x.json()); } catch { continue; }
+        // A veiled/token craft doesn't change the inventory — it parks a pending
+        // 3-outcome choice. Don't sit in the retry loop: render it right away.
+        if (after.veil && !before.veil) { toast('🔮 Veiled — pick your outcome below'); load(); return r; }
+        parts = craftSummary(before, after, opts);
+        if (parts.length) break;
       }
       // Empty diff is NOT success: the site 303s on business failures too (e.g.
       // not enough dust), so nothing changing usually means it was rejected.
