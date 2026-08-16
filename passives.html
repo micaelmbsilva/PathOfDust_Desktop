@@ -178,7 +178,7 @@
     $('err').textContent = '';
     let p;
     try { p = await fetch('/api/passives').then(r => r.json()); }
-    catch { $('err').textContent = 'Bridge offline — run server.mjs'; return; }
+    catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
 
     $('bar').innerHTML =
       `<span class="chip">🪓 <strong>${p.points}</strong></span>
