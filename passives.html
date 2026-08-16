@@ -236,14 +236,6 @@
       }
       refresh();
     });
-
-    // size the popup to the tree once — only when standalone, not as an SPA panel
-    if (!window._sized && window.top === window) {
-      window._sized = true;
-      const w = Math.min(screen.availWidth, SW + 48);
-      const h = Math.min(screen.availHeight, SH + 130);
-      try { window.resizeTo(w, h); } catch {}
-    }
   }
   load();
   fetch('/api/me').then(r => r.json()).then(me => { if (me.name) document.title = `${GAME_NAME} — Passives — ${me.name}`; }).catch(() => {});

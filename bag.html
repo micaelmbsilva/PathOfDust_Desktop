@@ -62,7 +62,6 @@
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.18); color: #eae6f5; }
   button:hover { background: rgba(120,90,255,0.34); }
   button.danger { border-color: #a04a4a; background: rgba(200,70,70,0.18); }
-  button:disabled { opacity: 0.45; cursor: default; }
   button:disabled { opacity: 0.5; cursor: default; }
   .locked { color: #ffd479; font-size: 0.72rem; }
   .craft { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 12px; }
@@ -310,8 +309,6 @@
     $('itemA').onchange = () => { localStorage.setItem('craftItemA', $('itemA').value); updateCosts(); };
     $('itemB').onchange = () => { localStorage.setItem('craftItemB', $('itemB').value); updateCosts(); };
     $('veil').onchange = updateCosts;
-
-    wire();
   }
 
   // Replicate the live site's per-item cost calc so button costs are correct
@@ -388,7 +385,6 @@
     } else {
       $('bag').innerHTML = `<div class="grid">${items.map(bagCard).join('')}</div>`;
     }
-    wire();
   }
   // remember the user's sort/group across reloads
   const sSel = document.getElementById('sortBy'), gSel = document.getElementById('groupBy');
@@ -397,21 +393,26 @@
   sSel.onchange = () => { localStorage.setItem('bagSort', sSel.value); renderBag(); };
   gSel.onchange = () => { localStorage.setItem('bagGroup', gSel.value); renderBag(); };
 
-  function wire() {
-    document.querySelectorAll('[data-un]').forEach(b => b.onclick = async () => { await api('unequip', { slot: b.dataset.un }); refresh(); });
-    document.querySelectorAll('[data-eq]').forEach(b => b.onclick = async () => { await api('equip', { item_id: b.dataset.eq }); refresh(); });
-    document.querySelectorAll('[data-lock]').forEach(b => b.onclick = async () => { await api('toggle-disenchant-protect', { item_id: b.dataset.lock, protect: 'on' }); refresh(); });
-    document.querySelectorAll('[data-dis]').forEach(b => b.onclick = async () => {
-      if (!confirm(`Disenchant ${b.dataset.name}? Can't be undone.`)) return;
-      await craftAct('disenchant', { item_id: b.dataset.dis }, 'Disenchant', { currency: true }); refresh();
-    });
-    document.querySelectorAll('[data-veilpick]').forEach(b => b.onclick = async () => { await craftAct('craft/choose-veil', { index: b.dataset.veilpick }, 'Chosen'); refresh(); });
-    document.querySelectorAll('[data-share]').forEach(b => b.onclick = async () => {
-      try { await navigator.clipboard.writeText(b.dataset.share); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
+  // One delegated listener instead of re-binding every button after each render.
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-un],[data-eq],[data-lock],[data-dis],[data-veilpick],[data-share],[data-craft]');
+    if (!b) return;
+    const d = b.dataset;
+    if (d.un !== undefined) { await api('unequip', { slot: d.un }); return refresh(); }
+    if (d.eq !== undefined) { await api('equip', { item_id: d.eq }); return refresh(); }
+    if (d.lock !== undefined) { await api('toggle-disenchant-protect', { item_id: d.lock, protect: 'on' }); return refresh(); }
+    if (d.dis !== undefined) {
+      if (!confirm(`Disenchant ${d.name}? Can't be undone.`)) return;
+      await craftAct('disenchant', { item_id: d.dis }, 'Disenchant', { currency: true }); return refresh();
+    }
+    if (d.veilpick !== undefined) { await craftAct('craft/choose-veil', { index: d.veilpick }, 'Chosen'); return refresh(); }
+    if (d.share !== undefined) {
+      try { await navigator.clipboard.writeText(d.share); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
       catch { $('err').textContent = 'Clipboard blocked'; }
-    });
-    document.querySelectorAll('[data-craft]').forEach(b => b.onclick = async () => {
-      const action = b.dataset.craft;
+      return;
+    }
+    if (d.craft !== undefined) {
+      const action = d.craft;
       const fields = { action, item_a: $('itemA').value };
       if (action === 'recombine' && $('itemB').value) fields.item_b = $('itemB').value;
       if ($('veil').checked) fields.veiled = '1';
@@ -419,8 +420,8 @@
       if (times > 1 && (action === 'polishing' || action === 'reforge')) fields.times = String(times);
       if ((action === 'scour' || action === 'krangle') && !confirm(`${action} this item? Can't be undone.`)) return;
       await craftAct('craft', fields, title(action)); refresh();
-    });
-  }
+    }
+  });
 
   // Disenchant every unlocked bag item (server skips Krangled + 🔒 Keep items).
   document.getElementById('disAll').onclick = async () => {

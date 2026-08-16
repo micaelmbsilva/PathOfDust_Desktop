@@ -410,63 +410,14 @@
     p.classList.toggle('open', open);
     b.classList.toggle('active', open);
   }
-  (function () {
-    const panel = document.getElementById('streampanel');
-    const bar = document.getElementById('streambar');
-    const cbtn = document.getElementById('streamCollapse');
-    const save = persistPanel(panel, 'lay.stream');
-    cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
-    cbtn.onclick = () => {
-      panel.classList.toggle('collapsed');
-      cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
-      save();
-    };
-    let drag = false, dx = 0, dy = 0;
-    bar.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.cbtns')) return;
-      drag = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
-      const r = panel.getBoundingClientRect();
-      dx = e.clientX - r.left; dy = e.clientY - r.top; panel.style.right = 'auto'; panel.style.bottom = 'auto';
-    });
-    bar.addEventListener('pointermove', (e) => {
-      if (!drag) return;
-      panel.style.left = Math.max(0, Math.min(innerWidth - 60, e.clientX - dx)) + 'px';
-      panel.style.top = Math.max(44, Math.min(innerHeight - 40, e.clientY - dy)) + 'px';
-    });
-    bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); save(); });
-  })();
+  wirePanel('streampanel', 'streambar', 'streamCollapse', 'lay.stream');
 
-  // collapse + drag, same pattern as the stats modal
-  (function () {
-    const panel = document.getElementById('chatpanel');
-    const bar = document.getElementById('chatbar');
-    const cbtn = document.getElementById('chatCollapse');
-    const saveChat = persistPanel(panel, 'lay.chat');
-    cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾'; // reflect restored state
-    cbtn.onclick = () => {
-      panel.classList.toggle('collapsed');
-      cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
-      saveChat();
-    };
-    // pop out into a real window — fully interactive Twitch chat, no iframe quirks
-    document.getElementById('chatPop').onclick = () => {
-      window.open(`https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`, 'pdchat', 'width=420,height=640');
-      toggleChat(false);
-    };
-    let drag = false, dx = 0, dy = 0;
-    bar.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.cbtns')) return;
-      drag = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
-      const r = panel.getBoundingClientRect();
-      dx = e.clientX - r.left; dy = e.clientY - r.top; panel.style.right = 'auto';
-    });
-    bar.addEventListener('pointermove', (e) => {
-      if (!drag) return;
-      panel.style.left = Math.max(0, Math.min(innerWidth - 60, e.clientX - dx)) + 'px';
-      panel.style.top = Math.max(44, Math.min(innerHeight - 40, e.clientY - dy)) + 'px';
-    });
-    bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); saveChat(); });
-  })();
+  wirePanel('chatpanel', 'chatbar', 'chatCollapse', 'lay.chat');
+  // pop out into a real window — fully interactive Twitch chat, no iframe quirks
+  document.getElementById('chatPop').onclick = () => {
+    window.open(`https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`, 'pdchat', 'width=420,height=640');
+    toggleChat(false);
+  };
 
   // ---- overlay zoom (wheel) ----
   // The frame always fills the window; we change its INTERNAL size inversely
@@ -601,7 +552,7 @@
     };
     let drag = false, dx = 0, dy = 0;
     bar.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.cbtns')) return;
+      if (e.target.closest('button')) return; // any bar button (collapse/close/pop) — not a drag
       drag = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
       const r = panel.getBoundingClientRect();
       dx = e.clientX - r.left; dy = e.clientY - r.top; panel.style.right = 'auto'; panel.style.bottom = 'auto';
@@ -1069,33 +1020,8 @@
     else { reforgeDismissed = false; if (cur) { cur.remove(); updateDismissAll(); } } // window over — arm the next one
   }
 
-  // ---- collapse ----
-  const stats = document.getElementById('stats'), toggle = document.getElementById('toggle');
-  const saveStats = persistPanel(stats, 'lay.stats');
-  toggle.textContent = stats.classList.contains('collapsed') ? '▸' : '▾'; // reflect restored state
-  toggle.onclick = () => {
-    stats.classList.toggle('collapsed');
-    toggle.textContent = stats.classList.contains('collapsed') ? '▸' : '▾';
-    saveStats();
-  };
-
-  // ---- drag by the bar ----
-  const bar = document.getElementById('statsbar');
-  let dragging = false, dx = 0, dy = 0;
-  bar.addEventListener('pointerdown', (e) => {
-    if (e.target === toggle) return;
-    dragging = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
-    const r = stats.getBoundingClientRect();
-    dx = e.clientX - r.left; dy = e.clientY - r.top;
-    stats.style.right = 'auto'; // switch to left-anchored
-  });
-  bar.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const x = Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dx));
-    const y = Math.max(44, Math.min(window.innerHeight - 40, e.clientY - dy));
-    stats.style.left = x + 'px'; stats.style.top = y + 'px';
-  });
-  bar.addEventListener('pointerup', (e) => { dragging = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); saveStats(); });
+  // ---- collapse + drag: same constructor as every other panel ----
+  wirePanel('stats', 'statsbar', 'toggle', 'lay.stats');
 
   // ---- version + auto-update feedback ----
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
@@ -1212,19 +1138,6 @@
   }
   window.addEventListener('error', (e) => logRemote('error', `${e.message} @ ${e.filename}:${e.lineno}`));
   window.addEventListener('unhandledrejection', (e) => logRemote('error', 'unhandled: ' + (e.reason && e.reason.message || e.reason)));
-  const _upd = new URLSearchParams(location.search).get('updated');
-  if (_upd) {
-    const el = document.createElement('div');
-    el.className = 'toast';
-    el.innerHTML = `<div class="th"><span class="tn">✨ Interface Updated</span></div>` +
-      `<div class="tmods"><span>You're on the latest — the app updates itself on launch.</span></div>` +
-      `<div class="tacts"><button data-act="x">Dismiss</button></div>`;
-    const close = () => { el.remove(); updateDismissAll(); };
-    el.querySelector('[data-act="x"]').onclick = close;
-    document.getElementById('dismissAll').after(el);
-    updateDismissAll();
-    setTimeout(close, 12000);
-  }
 </script>
 <script src="/tooltip.js"></script>
 </body>
