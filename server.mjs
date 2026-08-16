@@ -100,7 +100,12 @@ async function me() {
     options: [...archRegion.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)</g)]
       .map(m => ({ value: m[1], selected: /selected/.test(m[2]), label: strip(m[3]) })),
   };
-  return { name, nav, stats, autoRepair, autoRepairTip, reforge, xp, wings, countdowns, archetype };
+  // Channel-point buff/debuff activity table — only rendered while something is
+  // active, exact markup unseen, so parse it generically: every row's cell texts.
+  const bt = (text.match(/<table class="buff-activity-table"[\s\S]*?<\/table>/) || [])[0] || '';
+  const buffTable = [...bt.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+    .map(m => [...m[1].matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/g)].map(c => strip(c[1])));
+  return { name, nav, stats, autoRepair, autoRepairTip, reforge, xp, wings, countdowns, archetype, buffTable };
 }
 const strip = (s) => s.replace(/<[^>]*>/g, '')
   .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')

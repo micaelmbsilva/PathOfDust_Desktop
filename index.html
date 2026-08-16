@@ -255,6 +255,7 @@
   <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
   <button class="tbtn" title="Open the game's patch notes in your browser" onclick="fetch('/api/open',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'patch-notes'})})">📜 Patch Notes</button>
   <button class="tbtn" id="partyBtn" title="Who's fighting right now — DPS/Heal/Tank, status" onclick="toggleModal('party')">👥 Party</button>
+  <button class="tbtn" id="buffsBtn" title="Active buffs/debuffs — channel-point events and your in-fight buffs" onclick="toggleModal('buffs')">✨ Buffs</button>
   <button class="tbtn" id="fightBtn" title="Live leaderboard + your combat log for the fight in progress" onclick="toggleModal('fight')">🗡️ Fight</button>
   <button class="tbtn" id="battlesBtn" title="Your saved battle reports + per-fight leaderboards" onclick="toggleModal('battles')">⚔️ Battles</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
@@ -295,6 +296,15 @@
       <button title="close" onclick="toggleModal('party', false)">✕</button></span>
   </div>
   <div class="abody" id="partyBody"><p class="muted">Waiting for battle data…</p></div>
+</div>
+
+<div class="apanel" id="buffspanel" style="bottom:14px;left:16px;width:620px;height:150px">
+  <div class="cbar" id="buffsbar">
+    <span class="ctitle">✨ Buffs &amp; Debuffs</span>
+    <span class="cbtns"><button id="buffsCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('buffs', false)">✕</button></span>
+  </div>
+  <div class="abody" id="buffsBody"><p class="muted">Nothing active.</p></div>
 </div>
 
 <div class="apanel" id="fightpanel" style="top:90px;left:60px;width:440px;height:540px">
@@ -542,6 +552,7 @@
       const wr = document.getElementById('wingsRow');
       if (wr) wr.onclick = async () => { await action('toggle-flying', {}); loadStats(); };
       reconcileReforge(r.reforge);
+      lastMe = r; // buffTable etc. for the Buffs panel
       siteFails = 0; setDown(false);
       document.getElementById('overlay').classList.add('live'); // site reachable — reveal the overlay
     } catch {
@@ -597,8 +608,9 @@
     p.classList.toggle('open', open);
     document.getElementById(which + 'Btn').classList.toggle('active', open);
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
+    if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
-      ({ party: renderParty, battles: renderBattles, fight: renderFight })[which]();
+      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
       const r = p.getBoundingClientRect();
@@ -634,6 +646,36 @@
   wirePanel('partypanel', 'partybar', 'partyCollapse', 'lay.party');
   wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
+  wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
+
+  // ---- Buffs & Debuffs: the site's channel-point activity table (scraped
+  // generically via /api/me) + my own in-fight buffs from the replay's
+  // buffSnapshot events. Ticks while open.
+  let buffsTimer = null, lastMe = null;
+  const prettyBuff = (k) => String(k).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  function renderBuffs() {
+    const body = document.getElementById('buffsBody');
+    const parts = [];
+    // site-wide channel-point buffs/debuffs (first row is the header)
+    const t = lastMe?.buffTable;
+    if (t && t.length > 1) {
+      parts.push('<div class="fhead">📢 Channel Events</div>' +
+        `<table class="lb"><tr>${t[0].map(c => `<th style="text-align:left">${esc(c)}</th>`).join('')}</tr>` +
+        t.slice(1).map(rw => `<tr>${rw.map(c => `<td style="text-align:left">${esc(c)}</td>`).join('')}</tr>`).join('') + '</table>');
+    }
+    // my combat buffs, synced with the fight replay
+    if (fight && fight.mySnaps?.length) {
+      const cursor = Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale);
+      let snap = null;
+      for (const s of fight.mySnaps) { if (s.at <= cursor) snap = s; else break; }
+      const live = Date.now() - fight.t0 < fight.dur;
+      if (snap && snap.buffs.length) {
+        parts.push(`<div class="fhead">🗡️ Your Fight Buffs${live ? '' : ' (last fight)'}</div>` +
+          '<div class="rolechips">' + snap.buffs.map(([k, v]) => `<span class="chip">${esc(prettyBuff(k))}: <b>${esc(v)}</b></span>`).join('') + '</div>');
+      }
+    }
+    body.innerHTML = parts.join('') || '<p class="muted">Nothing active.</p>';
+  }
 
   // Party composition classed as DPS / Heal / Tank (not the site's melee/ranged/
   // support): each player gets the metric they rank best at in the latest saved
@@ -793,6 +835,7 @@
     const evs = [...(d.events || [])].sort((a, b) => (a.atMs || 0) - (b.atMs || 0));
     const maxAt = evs.length ? evs[evs.length - 1].atMs || 1 : 1;
     // group my events into 1s sim-time buckets so the log reads, not spams
+    const mySnaps = [];
     const groups = new Map();
     const G = (key, mk) => { let g = groups.get(key); if (!g) { g = mk(); groups.set(key, g); } return g; };
     for (const ev of evs) {
@@ -809,10 +852,12 @@
         G('o' + ev.target + b, () => ({ at: ev.atMs, kind: 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
       } else if (ev.kind === 'defeat' && ev.unit === myId) {
         groups.set('d' + b, { at: ev.atMs, kind: 'death' });
+      } else if (ev.kind === 'buffSnapshot' && ev.unit === myId) {
+        mySnaps.push({ at: ev.atMs || 0, buffs: ev.buffs || [] }); // for the Buffs panel
       }
     }
     const dur = d.displayDurationMs || maxAt;
-    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, agg: {},
+    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, agg: {}, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind };
     if (document.getElementById('fightpanel').classList.contains('open')) startFightTimer();
   }
