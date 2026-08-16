@@ -57,6 +57,12 @@
   .craft label { font-size: 0.85rem; display: block; margin-bottom: 8px; }
   .muted { color: #8a7fb0; }
   #err { color: #ff8080; }
+  #toasts { position: fixed; right: 14px; bottom: 14px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+  .bagtoast { background: rgba(24,20,40,0.97); border: 1px solid #6f5ad9; border-radius: 10px;
+    padding: 10px 12px; font-size: 0.85rem; box-shadow: 0 4px 14px rgba(0,0,0,0.5); }
+  .bagtoast.cost { border-color: #d9a441; }
+  .bagtoast b { color: #ffcf5a; }
+  .bagtoast button { float: right; padding: 0 6px; margin: -2px -4px 0 8px; }
 </style>
 </head>
 <body>
@@ -88,6 +94,7 @@
     <button id="disAll" class="danger" title="Disenchant every unlocked bag item. Krangled and 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All (unlocked)</button>
   </div>
   <div id="bag"></div>
+  <div id="toasts"></div>
 
 <script>
   const $ = (id) => document.getElementById(id);
@@ -125,6 +132,65 @@
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
       <div class="acts">${acts}</div>
     </div>`;
+
+  // ---- action result toasts ----
+  function toast(html, cls) {
+    const el = document.createElement('div');
+    el.className = 'bagtoast' + (cls ? ' ' + cls : '');
+    el.innerHTML = html + ' <button title="Dismiss">✕</button>';
+    el.querySelector('button').onclick = () => el.remove();
+    $('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 9000);
+  }
+  const numCur = (v) => {
+    if (v == null) return 0;
+    const m = String(v).replace(/,/g, '').trim().match(/^([\d.]+)\s*([KM]?)/i);
+    return m ? +m[1] * (/m/i.test(m[2]) ? 1e6 : /k/i.test(m[2]) ? 1e3 : 1) : 0;
+  };
+  const keyItems = (inv) => {
+    const map = {};
+    for (const it of [...(inv.equipped || []), ...(inv.bag || [])])
+      map[it.id != null ? 'id:' + it.id : 'slot:' + it.slot] = it; // bag items have ids; equipped keyed by slot
+    return map;
+  };
+  // Human summary of what an action changed: dust/sand delta (exact, from the
+  // site's data-dust/-sand), any newly-added mod with its roll/tier, and tier
+  // changes. New items (e.g. a recombine result, unseen id) are skipped so their
+  // whole mod set isn't dumped as "new".
+  function craftSummary(before, after) {
+    const parts = [];
+    const dust = Math.round(numCur(after.dust) - numCur(before.dust));
+    const sand = Math.round(numCur(after.sand) - numCur(before.sand));
+    if (dust) parts.push(`<b>${dust > 0 ? '+' : ''}${dust.toLocaleString()}</b> dust`);
+    if (sand) parts.push(`<b>${sand > 0 ? '+' : ''}${sand.toLocaleString()}</b> sand`);
+    const b = keyItems(before), a = keyItems(after);
+    for (const k of Object.keys(a)) {
+      const bi = b[k]; if (!bi) continue;
+      const ai = a[k], had = new Set((bi.mods || []).map(m => m.t));
+      for (const m of (ai.mods || [])) {
+        if (had.has(m.t)) continue;
+        const r = rollOf(m.tip);
+        parts.push(`${ai.name}: ${m.t}${r != null ? ` <b>(T${tierOf(r)}·${r}%)</b>` : ''}`);
+      }
+      if (ai.tier && bi.tier && ai.tier !== bi.tier) parts.push(`${ai.name}: ${bi.tier} → <b>${ai.tier}</b>`);
+    }
+    return parts;
+  }
+  // Run an action, then diff inventory before/after and toast what changed.
+  async function craftAct(endpoint, fields, label) {
+    let before = null;
+    try { before = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); } catch {}
+    const r = await api(endpoint, fields);
+    if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
+    if (before) {
+      try {
+        const after = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json());
+        const parts = craftSummary(before, after);
+        if (parts.length) toast(`${label ? label + ': ' : ''}${parts.join(' · ')}`);
+      } catch {}
+    }
+    return r;
+  }
 
   async function load() {
     $('err').textContent = '';
@@ -259,9 +325,9 @@
     document.querySelectorAll('[data-lock]').forEach(b => b.onclick = async () => { await api('toggle-disenchant-protect', { item_id: b.dataset.lock, protect: 'on' }); refresh(); });
     document.querySelectorAll('[data-dis]').forEach(b => b.onclick = async () => {
       if (!confirm(`Disenchant ${b.dataset.name}? Can't be undone.`)) return;
-      await api('disenchant', { item_id: b.dataset.dis }); refresh();
+      await craftAct('disenchant', { item_id: b.dataset.dis }, 'Disenchant'); refresh();
     });
-    document.querySelectorAll('[data-veilpick]').forEach(b => b.onclick = async () => { await api('craft/choose-veil', { index: b.dataset.veilpick }); refresh(); });
+    document.querySelectorAll('[data-veilpick]').forEach(b => b.onclick = async () => { await craftAct('craft/choose-veil', { index: b.dataset.veilpick }, 'Chosen'); refresh(); });
     document.querySelectorAll('[data-share]').forEach(b => b.onclick = async () => {
       try { await navigator.clipboard.writeText(b.dataset.share); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
       catch { $('err').textContent = 'Clipboard blocked'; }
@@ -272,14 +338,14 @@
       if (action === 'recombine' && $('itemB').value) fields.item_b = $('itemB').value;
       if ($('veil').checked) fields.veiled = '1';
       if ((action === 'scour' || action === 'krangle') && !confirm(`${action} this item? Can't be undone.`)) return;
-      await api('craft', fields); refresh();
+      await craftAct('craft', fields, title(action)); refresh();
     });
   }
 
   // Disenchant every unlocked bag item (server skips Krangled + 🔒 Keep items).
   document.getElementById('disAll').onclick = async () => {
     if (!confirm(`Disenchant ALL unlocked bag items? Krangled and 🔒 Keep-marked items are skipped. Can't be undone.`)) return;
-    await api('disenchant-all', {});
+    await craftAct('disenchant-all', {}, 'Disenchant all');
     refresh();
   };
 
