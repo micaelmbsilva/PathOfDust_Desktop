@@ -82,7 +82,25 @@ async function me() {
     const f = card.match(/<form[^>]*action="([^"]+)"[^>]*>\s*<button([^>]*)>([^<]*)<\/button>/);
     if (f) { reforge.action = f[1]; reforge.canDust = !/disabled/.test(f[2]); reforge.label = strip(f[3]); }
   }
-  return { name, nav, stats, autoRepair, autoRepairTip, reforge };
+  // XP bar ("XP: 832 / 9.1K" + fill %)
+  const xp = { label: strip((text.match(/xp-label">([^<]*)</) || [])[1] || ''),
+    pct: +(text.match(/xp-fill" style="width:(\d+)%/) || [])[1] || 0 };
+  // Wings of Flight: owned when the toggle-flying form is on the page
+  const wingsCard = (text.split('Wings of Flight')[1] || '').split('</form>')[0];
+  const wings = /action="\/toggle-flying"/.test(wingsCard)
+    ? { owned: true, flying: /Flying: ON/.test(wingsCard) } : { owned: false, flying: false };
+  // Every countdown card generically ({title, resetMs}) — Reforge Gear hourly,
+  // and the Retreated banner's auto-repair timer when it appears.
+  const countdowns = [...text.matchAll(/class="card countdown-card[^"]*" data-reset-ms="(\d+)"[^>]*>\s*<h2>([^<]*)<\/h2>/g)]
+    .map(m => ({ title: strip(m[2]), resetMs: +m[1] }));
+  // Archetype: current class + the switcher's options
+  const archRegion = (text.split('<h2>Archetype</h2>')[1] || '').split('</form>')[0];
+  const archetype = {
+    current: strip((archRegion.match(/role-badge[^>]*>([^<]*)</) || [])[1] || ''),
+    options: [...archRegion.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)</g)]
+      .map(m => ({ value: m[1], selected: /selected/.test(m[2]), label: strip(m[3]) })),
+  };
+  return { name, nav, stats, autoRepair, autoRepairTip, reforge, xp, wings, countdowns, archetype };
 }
 const strip = (s) => s.replace(/<[^>]*>/g, '')
   .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
@@ -311,6 +329,14 @@ createServer(async (req, res) => {
       // Open the game wiki in the user's default browser. Fixed URL on purpose —
       // no url parameter, so this can't be steered anywhere else.
       exec('start "" "https://adventure.lokati.net/wiki"');
+      return json(res, { ok: true });
+    }
+    if (url.pathname === '/api/open' && req.method === 'POST') {
+      // Same, generic: allowlisted site pages only.
+      const PAGES = { 'wiki': '/wiki', 'patch-notes': '/patch-notes' };
+      const p = PAGES[JSON.parse(await body(req) || '{}').page];
+      if (!p) { res.writeHead(400); return res.end('bad page'); }
+      exec(`start "" "https://adventure.lokati.net${p}"`);
       return json(res, { ok: true });
     }
     if (url.pathname === '/api/refocus' && req.method === 'POST') {
