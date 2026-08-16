@@ -99,6 +99,19 @@ app.post('/feedback', h(async (req, res) => {
   res.sendStatus(204);
 }));
 
+// Operator broadcast: one current message, shown as a banner by every running
+// app (they poll GET /broadcast every minute). POST with x-pod-key (PING_KEY)
+// sets it; empty/absent message clears it. Fail closed: no PING_KEY env, no posting.
+// ponytail: in-memory — a Railway redeploy clears the message; re-post if needed.
+let broadcast = null;
+app.post('/broadcast', (req, res) => {
+  if (!process.env.PING_KEY || req.get('x-pod-key') !== process.env.PING_KEY) return res.sendStatus(403);
+  const message = (req.body || {}).message;
+  broadcast = message ? { id: Date.now().toString(36), message: String(message).slice(0, 500), ts: new Date().toISOString() } : null;
+  res.json(broadcast || { cleared: true });
+});
+app.get('/broadcast', (_req, res) => { res.set('Cache-Control', 'no-store'); res.json(broadcast || {}); });
+
 // Dashboard JSON — guarded by ?token=STATS_TOKEN
 app.get('/stats', h(async (req, res) => {
   // Fail closed: without STATS_TOKEN configured this dump (install ids + full
