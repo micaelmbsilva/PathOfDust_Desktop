@@ -752,24 +752,31 @@
     const lb = (rep) => lbTable(rep.board, Math.max(1, (rep.durMs || 0) / 1000), 'data-lb');
     document.getElementById('battlesBody').innerHTML = log.map((rep, i) => {
       const m = rep.me, secs = Math.max(1, (rep.durMs || 0) / 1000);
+      // no hits, damage, or healing either way — downed/retreated/just joined
+      const idle = !m.hits && !m.dmg && !m.taken && !m.heal && !m.healRecv;
+      const logSection = !rep.feed
+        ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No log for this fight — recorded before the update.</div>'
+        : !rep.feed.length
+          ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No personal combat events this fight.</div>'
+          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length})</summary><div class="ffeed">${
+              rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * (rep.feedScale || 1))}</span>${FLINE[g.kind](g)}</div>`).join('')}</div></details>`;
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
         <span>Stage ${rep.stage}</span>
-        <span class="bsub">${Math.round(secs)}s · ${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%) · ${ago(rep.at)}</span></div>
+        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`} · ${ago(rep.at)}</span></div>
         <div class="bbody">
-          <div class="bstats">
-            <span><span class="l">Damage</span> <b>${fmtN(m.dmg)}</b> (${(m.share * 100).toFixed(1)}%)</span>
+          ${idle ? '<p class="muted" style="margin:2px 0 8px">🪦 You sat this one out — downed, retreated, or joined late.</p>' : `<div class="bstats">
+            <span><span class="l">Damage Dealt</span> <b>${fmtN(m.dmg)}</b> (${(m.share * 100).toFixed(1)}%)</span>
             <span><span class="l">DPS</span> <b>${fmtN(m.dmg / secs)}</b></span>
-            <span><span class="l">Taken</span> <b>${fmtN(m.taken)}</b></span>
-            <span><span class="l">Healed</span> <b>${fmtN(m.heal)}</b></span>
-            <span><span class="l">Received</span> <b>${fmtN(m.healRecv)}</b></span>
-            <span><span class="l">Crit</span> <b>${m.hits ? Math.round(m.crits / m.hits * 100) : 0}%</b> of ${m.hits}</span>
-            ${m.evaded ? `<span><span class="l">Evaded by boss</span> <b>${m.evaded}</b></span>` : ''}
-            ${rep.deaths.length ? `<span><span class="l">Deaths</span> <b>${rep.deaths.length}</b>${rep.deaths.some(n => n.toLowerCase() === myName.toLowerCase()) ? ' (incl. you)' : ''}</span>` : ''}
-          </div>
+            <span><span class="l">Damage Taken</span> <b>${fmtN(m.taken)}</b></span>
+            <span><span class="l">Healing Done</span> <b>${fmtN(m.heal)}</b></span>
+            <span><span class="l">Healing Received</span> <b>${fmtN(m.healRecv)}</b></span>
+            <span><span class="l">Crit Rate</span> <b>${m.hits ? Math.round(m.crits / m.hits * 100) : 0}%</b> of ${m.hits} hits</span>
+            ${m.evaded ? `<span><span class="l">Evaded by Boss</span> <b>${m.evaded}</b></span>` : ''}
+            ${rep.deaths.length ? `<span><span class="l">Party Deaths</span> <b>${rep.deaths.length}</b>${rep.deaths.some(n => n.toLowerCase() === myName.toLowerCase()) ? ' (incl. you)' : ''}</span>` : ''}
+          </div>`}
           ${rep.myLoot.length ? `<div class="bloot">🎁 ${rep.myLoot.map(l => `${esc(l.item)} (${esc(l.slot)}, ${esc(l.outcome)})`).join(' · ')}</div>` : ''}
-          ${rep.feed?.length ? `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length})</summary><div class="ffeed">${
-            rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * (rep.feedScale || 1))}</span>${FLINE[g.kind](g)}</div>`).join('')}</div></details>` : ''}
+          ${logSection}
           ${lb(rep)}
         </div></div>`;
     }).join('');
@@ -1101,7 +1108,10 @@
     if (document.getElementById(id)) return;
     const el = document.createElement('div');
     el.id = id;
-    el.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:2000;background:${bg};color:${fg};` +
+    el.className = 'sysbanner';
+    let top = 0; // stack below any banners already up instead of overlapping
+    document.querySelectorAll('.sysbanner').forEach(b => top += b.offsetHeight);
+    el.style.cssText = `position:fixed;top:${top}px;left:0;right:0;z-index:2000;background:${bg};color:${fg};` +
       'font-weight:700;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.5)';
     el.innerHTML = html +
       ` <button style="margin-left:10px;background:${fg};color:${bg};border:0;border-radius:4px;padding:3px 9px;cursor:pointer;font-weight:700">Dismiss</button>`;
