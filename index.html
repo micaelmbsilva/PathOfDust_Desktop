@@ -530,42 +530,17 @@
     el.querySelector('[data-act="x"]').onclick = close;
     document.getElementById('dismissAll').after(el); updateDismissAll(); setTimeout(close, 8000);
   }
-  function showUpdateToast(latest) {
-    document.querySelectorAll('.toast.update').forEach(t => t.remove());
-    const el = document.createElement('div');
-    el.className = 'toast update';
-    el.innerHTML = `<div class="th"><span class="tn">⬆️ Update v${latest} available</span></div>` +
-      `<div class="tmods"><span>Restart to apply — your login and layout are kept.</span></div>` +
-      `<div class="tacts"><button data-act="restart">Restart &amp; update</button><button data-act="x">Later</button></div>`;
-    el.querySelector('[data-act="x"]').onclick = () => { el.remove(); updateDismissAll(); };
-    el.querySelector('[data-act="restart"]').onclick = () => fetch('/api/restart', { method: 'POST' });
-    document.getElementById('dismissAll').after(el); updateDismissAll();
+  // "Check for Updates" button — ask electron-updater to look now, then report
+  // using the app's semver. Interface changes apply silently on launch.
+  async function updateAction() {
+    infoToast('🔄 Checking for updates…');
+    try { await fetch('/api/check-update', { cache: 'no-store' }); } catch { infoToast('Update check failed'); return; }
+    await new Promise(r => setTimeout(r, 2500)); // give the updater a moment to respond
+    let u; try { u = await fetch('/api/update-status', { cache: 'no-store' }).then(r => r.json()); } catch {}
+    if (u && u.status === 'ready') showShellUpdateToast(u.version);
+    else if (u && u.status === 'downloading') infoToast(`⬆️ Update v${u.version} downloading…`);
+    else infoToast(`✅ Up to date (v${appVersion})`);
   }
-  let _notifiedVer = 0, pendingUpdate = 0;
-  // Button click: if we know an update is ready, prompt to restart; else check.
-  function updateAction() { if (pendingUpdate) promptRestart(); else checkUpdate(true); }
-  function setPending(v) {
-    pendingUpdate = v;
-    const b = document.getElementById('updateBtn');
-    b.textContent = `⬆️ Update to v${v}`;
-    b.classList.add('active');
-  }
-  function promptRestart() {
-    if (confirm(`Update v${pendingUpdate} is ready.\n\nRestart now to apply it? Your login and layout are kept.`))
-      fetch('/api/restart', { method: 'POST' });
-  }
-  async function checkUpdate(manual) {
-    let r;
-    try { r = await fetch('/api/check-update').then(r => r.json()); } catch { if (manual) infoToast('Update check failed'); return; }
-    if (r.updateAvailable) {
-      setPending(r.latest);
-      if (manual) promptRestart();                                      // manual check → popup now
-      else if (r.latest !== _notifiedVer) { _notifiedVer = r.latest; showUpdateToast(r.latest); } // background → toast
-    } else if (manual && r.error) infoToast('Update check failed');
-    else if (manual) infoToast(`✅ Up to date (v${r.current})`);
-  }
-  setTimeout(() => checkUpdate(false), 15000);        // shortly after launch
-  setInterval(() => checkUpdate(false), 20 * 60000);  // and every 20 min
 
   // ---- shell (installer) update via electron-updater: toast when downloading /
   // ready, and let the user restart to apply.
@@ -612,7 +587,7 @@
   if (_upd) {
     const el = document.createElement('div');
     el.className = 'toast';
-    el.innerHTML = `<div class="th"><span class="tn">✅ Updated to v${_upd}</span></div>` +
+    el.innerHTML = `<div class="th"><span class="tn">✨ Interface updated</span></div>` +
       `<div class="tmods"><span>You're on the latest — the app updates itself on launch.</span></div>` +
       `<div class="tacts"><button data-act="x">Dismiss</button></div>`;
     const close = () => { el.remove(); updateDismissAll(); };
