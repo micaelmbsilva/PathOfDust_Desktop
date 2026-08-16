@@ -267,6 +267,11 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/passives') {
       return json(res, await passives());
     }
+    if (url.pathname === '/api/refocus' && req.method === 'POST') {
+      // Shell-level focus restore (see main.cjs __refocus). No-op on old shells.
+      if (typeof globalThis.__refocus === 'function') globalThis.__refocus();
+      return json(res, { ok: true });
+    }
     if (url.pathname === '/api/raw') {
       // Raw page passthrough for parser debugging — allowlisted site pages only.
       const p = url.searchParams.get('path');

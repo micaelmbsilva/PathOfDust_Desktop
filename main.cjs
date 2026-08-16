@@ -220,6 +220,11 @@ async function start() {
   await relaxTwitchCookies();                     // make the chat embed see the login
   await session.defaultSession.clearCache().catch(() => {}); // drop stale cached app files
   win.loadURL(`http://localhost:${PORT}/${updatedTo ? `?updated=${updatedTo}` : ''}`);
+  // Authoritative keyboard-focus restore for the chat iframe: after toast
+  // interactions the cross-origin (OOPIF) chat frame can go deaf to keys, and
+  // renderer-side focus() alone doesn't always recover it. The bridge exposes
+  // this via /api/refocus.
+  global.__refocus = () => { if (!win.isDestroyed()) { win.focus(); win.webContents.focus(); } };
   initAutoUpdate(); // background: full-app update via electron-updater
 }
 
