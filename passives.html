@@ -9,49 +9,79 @@
   * { box-sizing: border-box; }
   body { margin: 0; padding: 10px 12px; font-family: "Segoe UI", Arial, sans-serif;
     background: #0c0a16; color: #eae6f5; }
+  /* Visual language ported 1:1 from the live site's passives page (its own
+     .ptree-page rules): red #ff3b4e invested dots, gold #ffd76b spec point,
+     pill chips/buttons, per-state name colors. Layout stays ours. */
   h1 { font-size: 1.1rem; margin: 0 0 6px; }
-  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-  .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px; padding: 4px 10px; font-size: 0.85rem; }
+  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(160,140,255,0.18); border-radius: 999px; padding: 6px 14px;
+    font-size: 0.85rem; color: #a394c7; white-space: nowrap; }
+  .chip strong { color: #ff8a8a; font-variant-numeric: tabular-nums; }
+  .btn-save { font: inherit; font-size: 0.78rem; font-weight: 600; color: #0c0a16; background: #ff8a8a;
+    border: 1px solid #ff8a8a; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .btn-save:hover:not(:disabled) { background: #ffa3a3; border-color: #ffa3a3; }
+  .btn-respec { font: inherit; font-size: 0.78rem; color: #a394c7; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(160,140,255,0.18); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .btn-respec:hover { border-color: rgba(160,140,255,0.5); color: #eae6f5; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* legend, like the live page's */
+  #legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin: 4px 0 12px;
+    padding: 8px 14px; background: rgba(255,255,255,0.02); border: 1px solid rgba(160,140,255,0.18);
+    border-radius: 10px; font-size: 0.72rem; color: #a394c7; }
+  .li { display: flex; align-items: center; gap: 6px; }
+  .ld { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #766a99; display: inline-block; }
+  .ld.on { background: #ff3b4e; border-color: #ff3b4e; }
+  .ld.spec { background: #ffd76b; border-color: #ffd76b; }
 
   /* absolute tree canvas, mirrors the live site's coordinate space */
   #stage { position: relative; margin: 0 auto; }
   /* left/top only — NOT inset:0, which would stretch the SVG to the whole
      stage and break the connector-to-node alignment. Its width/height are set
      in JS to match the node coordinate scale exactly. */
-  #stage svg.connectors { position: absolute; left: 0; top: 0; pointer-events: none; }
-  .node { position: absolute; background: rgba(24,20,40,0.95);
-    border: 1px solid rgba(160,140,255,0.3); border-radius: 8px; padding: 5px 7px;
-    display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
-  .node.maxed { border-color: rgba(120,255,160,0.55); }
-  .node.invested { border-color: rgba(120,255,160,0.3); } /* partially ranked */
+  #stage svg.connectors { position: absolute; left: 0; top: 0; pointer-events: none; shape-rendering: crispEdges; }
+  .node { position: absolute; background: #1c1830; border: 1.5px solid rgba(160,140,255,0.18);
+    border-radius: 10px; padding: 6px 8px; text-align: center;
+    display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+  .node .nm { font-weight: 700; font-size: 0.78rem; line-height: 1.2; color: #eae6f5; }
+  .node .tr { font-size: 0.56rem; letter-spacing: 0.06em; text-transform: uppercase; color: #766a99; }
+  .node.maxed { border-color: rgba(255,59,78,0.55);
+    box-shadow: 0 0 0 1px rgba(255,59,78,0.12), 0 8px 22px rgba(255,59,78,0.12); }
+  .node.maxed .nm { color: #ff8a8a; }
+  .node.specialized { border-color: rgba(255,215,107,0.6);
+    box-shadow: 0 0 0 1px rgba(255,215,107,0.15), 0 8px 22px rgba(255,215,107,0.12); }
+  .node.specialized .nm { color: #ffd76b; }
+  .node.invested { border-color: rgba(160,140,255,0.45); }
   .node.locked { opacity: 0.45; }
-  .node.inactive { border-style: dashed; border-color: #b3495a; filter: grayscale(0.5); opacity: 0.65; } /* not implemented in-game */
-  .node.inactive .nm { color: #c98a94; }
-  .node.root { border-color: #d9a441; background: rgba(60,44,20,0.75); } /* class passive — always active */
-  .node.root .nm { color: #ffcf5a; }
-  .node .nm { font-weight: 700; font-size: 0.82rem; line-height: 1.05; }
-  .node .tr { font-size: 0.62rem; color: #8a7fb0; }
-  .node .acts { display: flex; align-items: center; gap: 5px; margin-top: auto; }
-  /* rank pips, like the live site: click any circle to set that rank */
-  .pip { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #7d5560; cursor: pointer; }
-  .pip:hover { border-color: #e0524f; }
-  .pip.on { background: #e0524f; border-color: #e0524f; }
-  .pip.gold { border-color: #a08a4a; }        /* 4th (spec) point */
-  .pip.gold:hover { border-color: #ffcf5a; }
-  .pip.gold.on { background: #ffcf5a; border-color: #ffcf5a; }
+  .node.locked .nm { color: #a394c7; }
+  .node.inactive { border-style: dashed; filter: grayscale(0.4); opacity: 0.7; } /* not implemented in-game */
+  .node.root { background: linear-gradient(160deg, rgba(255,59,78,0.16), rgba(28,24,48,0.9));
+    border-color: rgba(255,59,78,0.5); }
+  .node.root .nm { font-size: 0.92rem; letter-spacing: 0.04em; }
+  .node.root .acts .tr { text-transform: none; letter-spacing: 0; font-size: 0.7rem; color: #a394c7; }
+  .node .acts { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: auto; }
+  /* rank dots, exactly the live page's: red filled + glow, gold spec point */
+  .pip { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #766a99; cursor: pointer; }
+  .pip:hover { border-color: #ff3b4e; }
+  .pip.on { background: #ff3b4e; border-color: #ff3b4e; box-shadow: 0 0 6px rgba(255,59,78,0.7); }
+  .pip.gold:hover { border-color: #ffd76b; }
+  .pip.gold.on { background: #ffd76b; border-color: #ffd76b; box-shadow: 0 0 6px rgba(255,215,107,0.7); }
   .node.locked .pip { pointer-events: none; } /* needs a point in the node above first */
-  button { border-radius: 6px; padding: 2px 9px; font-size: 0.95rem; cursor: pointer;
-    border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.2); color: #eae6f5; }
-  button:hover { background: rgba(120,90,255,0.36); }
-  button:disabled { opacity: 0.4; cursor: default; }
-  .bar .btn-save { background: rgba(120,255,160,0.18); border-color: #4a8a5a; padding: 5px 12px; }
-  .bar .btn-respec { background: rgba(255,180,80,0.16); border-color: #a0824a; padding: 5px 12px; }
   .muted { color: #8a7fb0; } #err { color: #ff8080; }
 </style>
 </head>
 <body>
   <h1>🌳 Passives <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
   <div class="bar" id="bar"></div>
+  <div id="legend">
+    <span class="li"><span class="ld on"></span><span class="ld on"></span><span class="ld on"></span> Maxed</span>
+    <span class="li"><span class="ld on"></span><span class="ld"></span><span class="ld"></span> Partially invested</span>
+    <span class="li"><span class="ld"></span><span class="ld"></span><span class="ld"></span> Not invested</span>
+    <span class="li"><span class="ld on"></span><span class="ld on"></span><span class="ld on"></span><span class="ld spec"></span> 4th (gold) point — specializes</span>
+    <span class="li">Greyed — needs a point in the node above</span>
+    <span class="li">Dashed — not implemented yet (points still bank)</span>
+  </div>
   <div id="err"></div>
   <div id="stage"></div>
 
@@ -151,7 +181,7 @@
     catch { $('err').textContent = 'Bridge offline — run server.mjs'; return; }
 
     $('bar').innerHTML =
-      `<span class="chip">🪓 ${p.points}</span>
+      `<span class="chip">🪓 <strong>${p.points}</strong></span>
        <button class="btn-save" id="save" ${p.canSave ? '' : 'disabled'}>Save Changes</button>
        <button class="btn-respec" id="respec">${p.respecLabel}</button>`;
     $('save').onclick = async () => { await api('passives/save', {}); refresh(); };
@@ -172,16 +202,18 @@
     // Draw our own connectors from the real node positions — the site's SVG
     // stops short of the cards by non-constant offsets, so it can't be reused.
     stage.innerHTML = connectorsSVG(p.nodes, S, offY, SW, SH, p.connectors) + p.nodes.map(n => {
-      const maxed = n.cls.includes('maxed') || n.cls.includes('specialized');
+      const specialized = n.cls.includes('specialized');                        // gold: took the 4th point
+      const maxed = !specialized && n.cls.includes('maxed');                    // red: full ranks
       const locked = n.cls.includes('locked');
       const invested = n.cls.includes('invested');                              // partially ranked
       const inactive = /inactive/.test(n.cls) || /\(inactive\)/i.test(n.name);  // not implemented in-game yet
       const root = n.cls.includes('node-root');                                 // class passive — always active
-      return `<div class="node ${maxed ? 'maxed' : ''} ${locked ? 'locked' : ''} ${invested ? 'invested' : ''} ${inactive ? 'inactive' : ''} ${root ? 'root' : ''}"
+      const kind = root || n.cls.includes('node-skill') ? (n.tier || '') : '';  // site hides the label on spec/mod
+      return `<div class="node ${maxed ? 'maxed' : ''} ${specialized ? 'specialized' : ''} ${locked ? 'locked' : ''} ${invested ? 'invested' : ''} ${inactive ? 'inactive' : ''} ${root ? 'root' : ''}"
         style="left:${n.x * S}px;top:${(n.y - offY) * S}px;width:${n.w * S}px;height:${NODE_H}px;"
         data-tip="${n.desc.replace(/"/g, '&quot;')}">
         <div class="nm">${n.name}</div>
-        <div class="tr">${n.tier || ''}</div>
+        ${kind ? `<div class="tr">${kind}</div>` : ''}
         <div class="acts">${root ? `<span class="tr">${n.desc}</span>` : pips(n)}</div>
       </div>`;
     }).join('');
