@@ -91,6 +91,24 @@
   .spec b { color: var(--accent); }
   .modn { margin: 6px 0 0 20px; font-size: 13px; }
   .modn b { color: var(--ink-2); }
+
+  /* Build progression + roll priority */
+  .lvrow { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+  .lvrow input { width: 70px; background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+                 border-radius: 6px; padding: 4px 8px; font: inherit; }
+  .steps { list-style: none; margin: 8px 0 0; padding: 0; }
+  .steps li { padding: 3px 0 3px 22px; position: relative; }
+  .steps li::before { content: '○'; position: absolute; left: 2px; color: var(--muted); }
+  .steps li.done::before { content: '●'; color: var(--series-1); }
+  .steps li.part::before { content: '◐'; color: var(--series-2); }
+  .steps li.done b { color: var(--ink); }
+  .steps li.todo { color: var(--muted); }
+  .steps .lvat { color: var(--series-2); font-size: 12px; }
+  .rolls { margin: 6px 0 0; padding-left: 20px; }
+  .rolls li { margin: 6px 0; }
+  .rolls b { color: var(--ink); }
+  .rolls .why { color: var(--ink-2); font-size: 13px; }
+  .badge.top { color: #eda100; border-color: #eda10055; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -309,16 +327,84 @@ async function build(name) {
           el('span', { class: 'rank' }, ` — T${str(n.tier)} · rank ${str(n.rank)}`))))] : null);
 }
 
+// Passive points by level (fitted empirically: lv67=17, lv84/85=22, lv91=23).
+const PTS = (lv) => 1 + Math.floor(Math.max(1, +lv || 1) / 4);
+
 function buildCards(archetype, builds) {
   const b = builds && builds.classes && builds.classes[archetype];
   if (!b || !arr(b.builds).length) return null;
+  const input = el('input', { type: 'number', min: 1, max: 120, value: localStorage.getItem('pod.lv') || 85 });
+  const holder = el('div', { class: 'stack' });
+  function render() {
+    const pts = PTS(input.value);
+    localStorage.setItem('pod.lv', input.value);
+    holder.replaceChildren(...arr(b.builds).map(x => {
+      let used = 0;
+      const steps = arr(x.order).map(st => {
+        const from = used; used += (+st.r || 0);
+        const state = used <= pts ? 'done' : from < pts ? 'part' : 'todo';
+        return el('li', { class: 'step ' + state },
+          el('b', null, str(st.n)), ` ${state === 'done' ? st.r : state === 'part' ? pts - from : 0}/${str(st.r)}`,
+          state !== 'done' ? el('span', { class: 'lvat' }, ` — full at Lv ${(used - 1) * 4}`) : null);
+      });
+      return el('div', { class: 'card' },
+        el('div', { class: 'bname' }, str(x.name)),
+        el('div', { class: 'btag' }, str(x.tagline)),
+        el('p', null, str(x.why)),
+        el('p', { class: 'sub', style: 'margin:12px 0 0' }, `Tree order — ${pts} points at Lv ${str(input.value)}:`),
+        el('ol', { class: 'steps' }, steps),
+        el('p', { class: 'sub', style: 'margin:12px 0 0' }, 'Roll priority on gear (in order):'),
+        el('ol', { class: 'rolls' }, arr(x.rolls).map(r => el('li', null,
+          el('b', null, str(r.s)), r.top ? el('span', { class: 'badge top' }, 'biggest impact') : null,
+          el('div', { class: 'why' }, str(r.why))))));
+    }));
+  }
+  input.oninput = render;
+  render();
   return [el('h2', null, 'Suggested builds'),
-    el('div', { class: 'stack' }, arr(b.builds).map(x => el('div', { class: 'card' },
-      el('div', { class: 'bname' }, str(x.name)),
-      el('div', { class: 'btag' }, str(x.tagline)),
-      el('div', { class: 'chips' }, arr(x.passives).map(p => el('span', { class: 'chip' }, str(p)))),
-      el('p', null, str(x.why)),
-      el('p', { class: 'gearline' }, el('b', null, 'Gear: '), str(x.gear)))))];
+    el('div', { class: 'lvrow' }, 'Your level:', input, el('span', { class: 'sub', style: 'margin:0' }, '(1 point per 4 levels, +1)')),
+    holder];
+}
+
+// Hidden route: #/advisor/<player> — scores each class's roll priorities against
+// the player's actual gear mods and recommends what to play. No nav links to it.
+const ROLL_KW = { 'Block': ['block'], 'Evasion': ['evasion'], 'Attack Speed': ['attack speed'],
+  'Crit Chance': ['crit chance'], 'Increased Crit Dmg Dealt': ['crit dmg'], 'Increased Dmg Dealt': ['dmg dealt'],
+  'Max HP': ['max hp'], 'Healing Power': ['healing power'], 'Splash': ['splash'], 'Intervene': ['intervene'],
+  'Lingering Effect': ['lingering'], 'Leech': ['leech'], 'Reduced Dmg Taken': ['dmg taken reduction', 'reduced dmg'] };
+async function advisor(name) {
+  const [r, { builds, passives }] = await Promise.all([fetch('api/build/' + encodeURIComponent(name)), staticData()]);
+  if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
+  const b = await r.json();
+  const corpus = arr(b.equipped).flatMap(it => [...arr(it.mods).map(m => str(m && m.t)), str(it.implicit)])
+    .join(' | ').toLowerCase();
+  const count = (kw) => corpus.split(kw).length - 1;
+  const ranked = Object.entries(builds.classes).map(([cls, cb]) => {
+    const build = arr(cb.builds)[0];
+    let score = 0; const hits = [];
+    arr(build && build.rolls).forEach((roll, i) => {
+      let n = Math.max(...(ROLL_KW[roll.s] || [str(roll.s).toLowerCase()]).map(count), 0);
+      if (roll.s === 'Increased Dmg Dealt') n = Math.max(0, n - count('crit dmg dealt')); // don't double-count crit dmg
+      if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${n}`); }
+    });
+    return { cls, build, score, hits };
+  }).filter(x => x.build).sort((a, z) => z.score - a.score);
+  const best = ranked[0];
+  view(
+    el('p', null, el('a', { href: '#/' }, '← Ladder')),
+    el('h1', null, 'Gear advisor'),
+    el('p', { class: 'sub' }, `What ${str(b.name)}'s current gear wants to be — scored against every class build's roll priorities.`),
+    el('div', { class: 'card' },
+      el('div', { class: 'bname' }, best.score ? `Play ${best.cls} — ${str(best.build.name)}` : 'No clear signal from this gear'),
+      best.score ? el('div', { class: 'btag' }, `Gear matches: ${best.hits.join(' · ')}`) : null,
+      best.score ? el('p', null, str(best.build.why)) : el('p', null, 'No rolled mods matched any build priority — level up or roll gear first.'),
+      best.score ? el('p', null, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} build + tree order →`)) : null),
+    ranked.filter(x => x.score && x !== best).length ? [
+      el('h2', null, 'Runners-up'),
+      el('div', { class: 'stack' }, ranked.filter(x => x.score && x !== best).slice(0, 3).map(x =>
+        el('div', { class: 'card' },
+          el('div', { class: 'bname' }, el('a', { href: '#/class/' + encodeURIComponent(x.cls) }, x.cls), ` — ${str(x.build.name)}`),
+          el('div', { class: 'btag' }, `score ${x.score} · ${x.hits.join(' · ')}`))))] : null);
 }
 
 function treeSection(archetype, passives) {
@@ -363,8 +449,8 @@ async function classView(archetype) {
 }
 
 async function route() {
-  const m = location.hash.match(/^#\/(build|class)\/(.+)$/);
-  try { m ? await (m[1] === 'build' ? build : classView)(decodeURIComponent(m[2])) : await ladder(); }
+  const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
+  try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
   catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); }
   window.scrollTo(0, 0);
 }
