@@ -51,11 +51,13 @@
   #down .p:nth-child(7) { left: 86%; width: 4px; height: 4px; animation-duration: 11s; animation-delay: 5s; }
   #down .p:nth-child(8) { left: 94%; width: 5px; height: 5px; animation-duration: 14s; animation-delay: 7s; }
 
-  /* top button bar */
+  /* top button bar — scrolls horizontally instead of overflowing on small windows */
   #topbar { position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 20;
     display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    overflow-x: auto; scrollbar-width: none;
     background: linear-gradient(#1c1830ee, #1c183099); backdrop-filter: blur(4px);
     border-bottom: 1px solid rgba(160,140,255,0.25); }
+  #topbar .tbtn { white-space: nowrap; flex: none; }
   #topbar .title { font-weight: 600; color: #c9bdf0; font-size: 0.95rem; }
   #topbar .ver { color: #8a7fb0; font-size: 0.72rem; margin-right: auto; }
   .tbtn { background: rgba(120,90,255,0.18); color: #eae6f5; border: 1px solid rgba(160,140,255,0.35);
@@ -141,6 +143,62 @@
   #chatpanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
 
+  /* Party / Battles — draggable, resizable, collapsible panels like the chat
+     and stream ones. Sized to fit small windows too (mobile-ish). */
+  .apanel { position: fixed; z-index: 37; width: 400px; height: 480px;
+    max-width: calc(100vw - 20px); max-height: calc(100vh - 60px);
+    display: none; flex-direction: column; background: rgba(24,20,40,0.96);
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 30px #0009; resize: both; min-width: 250px; min-height: 200px; }
+  .apanel.open { display: flex; }
+  .apanel .cbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    cursor: grab; user-select: none; border-bottom: 1px solid rgba(160,140,255,0.2); }
+  .apanel .cbar.grabbing { cursor: grabbing; }
+  .apanel .ctitle { font-weight: 700; font-size: 0.9rem; }
+  .apanel .cbtns { margin-left: auto; display: flex; gap: 2px; }
+  .apanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 2px 6px; }
+  .apanel.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
+  .apanel.collapsed .abody { display: none; }
+  .apanel.collapsed .cbar { border-bottom: 0; }
+  .apanel .abody { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px; }
+  .rolechips { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
+    padding: 3px 9px; font-size: 0.78rem; }
+  /* MMO raid-frame grid: compact member cells, status-tinted */
+  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
+  .pcell { border: 1px solid rgba(160,140,255,0.22); border-radius: 8px; padding: 4px 7px;
+    font-size: 0.74rem; background: rgba(255,255,255,0.03); min-width: 0; }
+  .pcell .pn { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcell .ps { color: #8a7fb0; font-size: 0.68rem; white-space: nowrap; }
+  .pcell.down { border-color: #a04a4a; background: rgba(200,70,70,0.14); }
+  .pcell.down .ps { color: #ff9d9d; }
+  .pcell.ret { opacity: 0.45; filter: grayscale(0.6); }
+  .pcell.mme { border-color: #ffcf5a; box-shadow: 0 0 0 1px rgba(255,207,90,0.25); }
+  .pcell.mme .pn { color: #ffcf5a; }
+  /* battle entries */
+  .bent { border: 1px solid rgba(160,140,255,0.2); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+  .bent > .bh { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer;
+    font-size: 0.85rem; background: rgba(255,255,255,0.03); }
+  .bent > .bh:hover { background: rgba(120,90,255,0.12); }
+  .bent .bwon { font-weight: 700; } .bwon.w { color: #7fdba3; } .bwon.l { color: #ff8080; }
+  .bent .bsub { color: #8a7fb0; font-size: 0.75rem; margin-left: auto; }
+  .bent .bbody { display: none; padding: 8px 10px 10px; }
+  .bent.open .bbody { display: block; }
+  .bstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px;
+    font-size: 0.82rem; margin-bottom: 8px; }
+  .bstats .l { color: #b0a2d9; } .bstats b { font-variant-numeric: tabular-nums; }
+  .btabs { display: flex; gap: 6px; margin: 6px 0; }
+  .btabs button { border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
+    border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.15); color: #eae6f5; }
+  .btabs button.on { background: rgba(120,90,255,0.45); }
+  table.lb { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  table.lb th, table.lb td { text-align: right; padding: 2px 6px; border-bottom: 1px solid rgba(160,140,255,0.08); }
+  table.lb th { color: #8a7fb0; font-weight: 600; }
+  table.lb td:first-child, table.lb th:first-child { text-align: left; }
+  table.lb tr.mme td { color: #ffcf5a; }
+  .bloot { font-size: 0.8rem; color: #c9bdf0; margin-top: 6px; }
+
   /* stream picture-in-picture — same panel pattern as the chat */
   #streampanel { position: fixed; bottom: 16px; right: 16px; z-index: 35; width: 480px; height: 302px;
     display: none; flex-direction: column; background: rgba(24,20,40,0.96);
@@ -179,6 +237,8 @@
   <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
   <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
   <button class="tbtn" title="Open the game wiki in your browser" onclick="fetch('/api/open-wiki',{method:'POST'})">📖 Wiki</button>
+  <button class="tbtn" id="partyBtn" title="Who's fighting right now — DPS/Heal/Tank, status" onclick="toggleModal('party')">👥 Party</button>
+  <button class="tbtn" id="battlesBtn" title="Your saved battle reports + per-fight leaderboards" onclick="toggleModal('battles')">⚔️ Battles</button>
   <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
   <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight Me</button>
   <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop">🔒 Auto-Lock ✨</button>
@@ -208,6 +268,24 @@
     </span>
   </div>
   <div class="swrap"><iframe id="streamFrame" title="Twitch stream" allow="autoplay; fullscreen"></iframe></div>
+</div>
+
+<div class="apanel" id="partypanel" style="top:60px;left:300px">
+  <div class="cbar" id="partybar">
+    <span class="ctitle">👥 Party</span>
+    <span class="cbtns"><button id="partyCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('party', false)">✕</button></span>
+  </div>
+  <div class="abody" id="partyBody"><p class="muted">Waiting for battle data…</p></div>
+</div>
+
+<div class="apanel" id="battlespanel" style="top:80px;left:340px;width:460px">
+  <div class="cbar" id="battlesbar">
+    <span class="ctitle">⚔️ Combat History</span>
+    <span class="cbtns"><button id="battlesCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('battles', false)">✕</button></span>
+  </div>
+  <div class="abody" id="battlesBody"><p class="muted">No battles recorded yet — reports appear after each boss fight.</p></div>
 </div>
 
 <div id="stats">
@@ -470,6 +548,183 @@
     lastDust = dust;
   }
 
+  // ---- Party modal + battle reports (all data from the game WS) ----
+  let lastRoster = null; // latest `state` message
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  function toggleModal(which, show) {
+    const p = document.getElementById(which + 'panel');
+    const open = show === undefined ? !p.classList.contains('open') : show;
+    p.classList.toggle('open', open);
+    document.getElementById(which + 'Btn').classList.toggle('active', open);
+    if (open) {
+      (which === 'party' ? renderParty : renderBattles)();
+      // clamp into the viewport — a position saved on a big window must still
+      // be reachable on a small (mobile-ish) one
+      const r = p.getBoundingClientRect();
+      if (r.right > innerWidth) { p.style.left = Math.max(4, innerWidth - r.width - 8) + 'px'; p.style.right = 'auto'; }
+      if (r.bottom > innerHeight) p.style.top = Math.max(48, innerHeight - r.height - 8) + 'px';
+      if (r.left < 0) p.style.left = '4px';
+    }
+  }
+  // drag + collapse + geometry persistence — same behavior as the chat/stream panels
+  function wirePanel(panelId, barId, cbtnId, key) {
+    const panel = document.getElementById(panelId), bar = document.getElementById(barId), cbtn = document.getElementById(cbtnId);
+    const save = persistPanel(panel, key);
+    cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+    cbtn.onclick = () => {
+      panel.classList.toggle('collapsed');
+      cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+      save();
+    };
+    let drag = false, dx = 0, dy = 0;
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.cbtns')) return;
+      drag = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
+      const r = panel.getBoundingClientRect();
+      dx = e.clientX - r.left; dy = e.clientY - r.top; panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      panel.style.left = Math.max(0, Math.min(innerWidth - 60, e.clientX - dx)) + 'px';
+      panel.style.top = Math.max(44, Math.min(innerHeight - 40, e.clientY - dy)) + 'px';
+    });
+    bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); save(); });
+  }
+  wirePanel('partypanel', 'partybar', 'partyCollapse', 'lay.party');
+  wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
+
+  // Party composition classed as DPS / Heal / Tank (not the site's melee/ranged/
+  // support): each player gets the metric they rank best at in the latest saved
+  // battle (damage dealt / healing / damage taken). No battle data yet -> the
+  // WS role is the fallback (support = Heal, rest = DPS).
+  const CLASS_ICON = { dps: '🗡️', heal: '🩹', tank: '🛡️' };
+  function classifyParty() {
+    const rep = LS.get('battleLog', [])[0];
+    const cls = {};
+    if (rep && rep.board?.length) {
+      const n = rep.board.length;
+      const tot = (k) => rep.board.reduce((s, p) => s + p[k], 0) || 1;
+      const totH = tot('h'), totT = tot('t');
+      // Heal: does >1.5x a fair share of the party's healing. Tank: soaks >2x a
+      // fair share of the damage taken. Everyone else is DPS. Heal wins ties —
+      // dedicated healers get hit too.
+      for (const p of rep.board) {
+        cls[p.n.toLowerCase()] = p.h / totH > 1.5 / n ? 'heal' : p.t / totT > 2 / n ? 'tank' : 'dps';
+      }
+    }
+    return cls;
+  }
+  function renderParty() {
+    if (!lastRoster) return; // placeholder stays
+    const cls = classifyParty();
+    const of = (c) => cls[c.displayName.toLowerCase()] || (c.role === 'support' ? 'heal' : 'dps');
+    // retreated players sort last and don't count toward the composition
+    const cs = [...lastRoster.characters].sort((a, b) => (a.retreated - b.retreated) || b.level - a.level);
+    const counts = { dps: 0, heal: 0, tank: 0 };
+    let retreated = 0;
+    for (const c of cs) c.retreated ? retreated++ : counts[of(c)]++;
+    const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
+    document.getElementById('partyBody').innerHTML =
+      `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
+      ['dps', 'heal', 'tank'].map(k => `<span class="chip">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
+      `<span class="chip">Active ${cs.length - retreated}</span>${retreated ? `<span class="chip">🏳️ ${retreated} Retreated</span>` : ''}</div>` +
+      // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
+      `<div class="pgrid">` + cs.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}">
+        <div class="pn">${CLASS_ICON[of(c)]} ${esc(c.displayName)}</div>
+        <div class="ps">Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
+      </div>`).join('') + '</div>';
+  }
+
+  // Fold an encounter's ~15-45k events into a small report (raw events are never kept).
+  function buildReport(d) {
+    const players = {}; // id -> displayName (bosses/adds excluded)
+    for (const u of d.units || []) if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName;
+    const agg = {}; // id -> {d,h,t}
+    const A = (id) => agg[id] || (agg[id] = { d: 0, h: 0, t: 0 });
+    const myId = Object.keys(players).find(id => players[id].toLowerCase() === myName.toLowerCase());
+    const me = { dmg: 0, taken: 0, heal: 0, healRecv: 0, hits: 0, crits: 0, evaded: 0 };
+    const deaths = [];
+    for (const ev of d.events || []) {
+      if (ev.kind === 'attack') {
+        if (players[ev.attacker]) {
+          if (!ev.evaded) A(ev.attacker).d += ev.damage || 0;
+          if (ev.attacker === myId) { me.hits++; if (ev.isCrit) me.crits++; if (ev.evaded) me.evaded++; else me.dmg += ev.damage || 0; }
+        }
+        if (players[ev.target] && !ev.evaded) {
+          A(ev.target).t += ev.damage || 0;
+          if (ev.target === myId) me.taken += ev.damage || 0;
+        }
+      } else if (ev.kind === 'heal' || ev.kind === 'shield') {
+        if (players[ev.healer]) { A(ev.healer).h += ev.amount || 0; if (ev.healer === myId) me.heal += ev.amount || 0; }
+        if (ev.target === myId) me.healRecv += ev.amount || 0;
+      } else if (ev.kind === 'defeat' && players[ev.unit]) deaths.push(players[ev.unit]);
+    }
+    const totalDmg = Object.values(agg).reduce((n, a) => n + a.d, 0);
+    me.share = totalDmg ? me.dmg / totalDmg : 0;
+    const lootText = (o) => o && o.autoDisenchanted ? `auto-disenchanted → +${(o.autoDisenchanted.dust || 0).toLocaleString()} dust` : 'kept';
+    return {
+      at: Date.now(), stage: d.stage, won: !!d.won, durMs: d.displayDurationMs || 0,
+      partySize: (d.participants || []).length, me, deaths,
+      myLoot: (d.loot || []).filter(l => l.displayName.toLowerCase() === myName.toLowerCase())
+        .map(l => ({ item: l.itemName, slot: l.slot, outcome: lootText(l.outcome) })),
+      board: Object.entries(agg).map(([id, a]) => ({ n: players[id], ...a })),
+    };
+  }
+  function saveBattle(rep) {
+    const log = LS.get('battleLog', []);
+    log.unshift(rep);
+    LS.set('battleLog', log.slice(0, 40));
+    if (document.getElementById('battlespanel').classList.contains('open')) renderBattles();
+  }
+
+  const fmtN = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+  const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''} ago`; };
+  function renderBattles() {
+    const log = LS.get('battleLog', []);
+    if (!log.length) return; // placeholder stays
+    const metric = localStorage.getItem('lbMetric') || 'd';
+    const cols = { d: 'DPS', h: 'Heal', t: 'Tank' };
+    const lb = (rep) => {
+      const secs = Math.max(1, (rep.durMs || 0) / 1000);
+      const keys = metric === 'all' ? ['d', 'h', 't'] : [metric];
+      const rows = [...rep.board].sort((a, b) => b[keys[0]] - a[keys[0]]);
+      return `<div class="btabs">${['d', 'h', 't', 'all'].map(k =>
+          `<button class="${metric === k ? 'on' : ''}" data-lb="${k}">${cols[k] || 'All'}</button>`).join('')}</div>
+        <table class="lb"><tr><th>#</th><th style="text-align:left">Player</th>${keys.map(k => `<th>${cols[k]}</th>`).join('')}${metric === 'd' ? '<th>/s</th>' : ''}</tr>
+        ${rows.map((r, i) => `<tr class="${r.n.toLowerCase() === myName.toLowerCase() ? 'mme' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(r.n)}</td>` +
+          keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table>`;
+    };
+    document.getElementById('battlesBody').innerHTML = log.map((rep, i) => {
+      const m = rep.me, secs = Math.max(1, (rep.durMs || 0) / 1000);
+      return `<div class="bent" data-i="${i}"><div class="bh">
+        <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
+        <span>Stage ${rep.stage}</span>
+        <span class="bsub">${Math.round(secs)}s · ${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%) · ${ago(rep.at)}</span></div>
+        <div class="bbody">
+          <div class="bstats">
+            <span><span class="l">Damage</span> <b>${fmtN(m.dmg)}</b> (${(m.share * 100).toFixed(1)}%)</span>
+            <span><span class="l">DPS</span> <b>${fmtN(m.dmg / secs)}</b></span>
+            <span><span class="l">Taken</span> <b>${fmtN(m.taken)}</b></span>
+            <span><span class="l">Healed</span> <b>${fmtN(m.heal)}</b></span>
+            <span><span class="l">Received</span> <b>${fmtN(m.healRecv)}</b></span>
+            <span><span class="l">Crit</span> <b>${m.hits ? Math.round(m.crits / m.hits * 100) : 0}%</b> of ${m.hits}</span>
+            ${m.evaded ? `<span><span class="l">Evaded by boss</span> <b>${m.evaded}</b></span>` : ''}
+            ${rep.deaths.length ? `<span><span class="l">Deaths</span> <b>${rep.deaths.length}</b>${rep.deaths.some(n => n.toLowerCase() === myName.toLowerCase()) ? ' (incl. you)' : ''}</span>` : ''}
+          </div>
+          ${rep.myLoot.length ? `<div class="bloot">🎁 ${rep.myLoot.map(l => `${esc(l.item)} (${esc(l.slot)}, ${esc(l.outcome)})`).join(' · ')}</div>` : ''}
+          ${lb(rep)}
+        </div></div>`;
+    }).join('');
+    document.querySelectorAll('.bent .bh').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
+    document.querySelectorAll('[data-lb]').forEach(b => b.onclick = (e) => {
+      e.stopPropagation();
+      localStorage.setItem('lbMetric', b.dataset.lb);
+      const openIdxs = [...document.querySelectorAll('.bent.open')].map(el => el.dataset.i);
+      renderBattles();
+      for (const i of openIdxs) document.querySelector(`.bent[data-i="${i}"]`)?.classList.add('open');
+    });
+  }
+
   let bagBusy = false;
   async function pollBag() {
     if (bagBusy) return;
@@ -518,8 +773,13 @@
       // readout (checkBattleDust) for the refresh below.
       try {
         const d = JSON.parse(e.data);
+        if (d.type === 'state') {
+          lastRoster = d;
+          if (document.getElementById('partypanel').classList.contains('open')) renderParty();
+        }
         if (d.type === 'encounter' && myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
           battleAt = Date.now(); battleWon = !!d.won;
+          try { saveBattle(buildReport(d)); } catch {}
         }
       } catch {}
       clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700);
