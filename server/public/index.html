@@ -95,15 +95,16 @@ function seenDay(ts) { // last_seen arrives day-truncated
        : d.toISOString().slice(0, 10);
 }
 
-function barChart(rows, color) { // rows: [{label, count}]
+function barChart(rows, color) { // rows: [{label: string|Node, count, num?}]
   const max = Math.max(1, ...rows.map(r => r.count));
   return el('div', { class: 'chart' }, rows.map(r => [
-    el('span', { class: 'lbl' }, str(r.label) || '—'),
+    el('span', { class: 'lbl' }, r.label instanceof Node ? r.label : str(r.label) || '—'),
     el('div', { class: 'track' },
       el('div', { class: 'bar', style: `width:${(100 * r.count / max).toFixed(1)}%;background:${color}` })),
-    el('span', { class: 'num' }, r.count),
+    el('span', { class: 'num' }, r.num != null ? r.num : r.count),
   ]));
 }
+const classLink = (a) => el('a', { href: '#/class/' + encodeURIComponent(str(a)) }, str(a));
 
 async function ladder() {
   const r = await fetch('api/ladder');
@@ -114,7 +115,7 @@ async function ladder() {
     el('p', { class: 'sub' }, `${total} players tracked · updates as players play`),
     el('div', { class: 'grid2' },
       el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, 'Classes'),
-        barChart(arr(byClass).map(c => ({ label: c.archetype, count: c.count })), 'var(--series-1)')),
+        barChart(arr(byClass).map(c => ({ label: c.archetype ? classLink(c.archetype) : '—', count: c.count })), 'var(--series-1)')),
       el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, 'Levels'),
         barChart(arr(levels).map(l => ({ label: `${l.bucket}–${l.bucket + 9}`, count: l.count })), 'var(--series-2)'))),
     el('h2', null, 'Top players'),
@@ -124,7 +125,7 @@ async function ladder() {
       el('tbody', null, arr(players).map((p, i) => el('tr', null,
         el('td', { class: 'r' }, i + 1),
         el('td', null, el('a', { href: '#/build/' + encodeURIComponent(str(p.name)) }, str(p.name))),
-        el('td', null, str(p.archetype) || '—'),
+        el('td', null, p.archetype ? classLink(p.archetype) : '—'),
         el('td', { class: 'r' }, str(p.level) || '—'),
         el('td', null, seenDay(p.last_seen)))))));
 }
@@ -167,9 +168,37 @@ async function build(name) {
           el('span', { class: 'rank' }, ` — T${str(n.tier)} · rank ${str(n.rank)}`))))] : null);
 }
 
+async function classView(archetype) {
+  const r = await fetch('api/class/' + encodeURIComponent(archetype));
+  if (r.status === 404) { view(el('p', { class: 'status' }, 'No players of this class yet. ', el('a', { href: '#/' }, 'Back to ladder'))); return; }
+  if (!r.ok) throw new Error('class ' + r.status);
+  const c = await r.json();
+  const pct = (n) => Math.round(100 * n / c.players) + '%';
+  view(
+    el('p', null, el('a', { href: '#/' }, '← Ladder')),
+    el('h1', null, str(c.archetype)),
+    el('p', { class: 'sub' }, `What ${c.players} tracked player${c.players === 1 ? '' : 's'} run · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`),
+    arr(c.passives).length ? [el('h2', null, 'Popular passives'),
+      el('div', { class: 'card' }, barChart(arr(c.passives).map(p => ({
+        label: str(p.name) + (p.tier != null ? ` (T${str(p.tier)})` : ''),
+        count: p.players,
+        num: pct(p.players) + (p.avg_rank != null ? ` · rank ${str(p.avg_rank)}` : ''),
+      })), 'var(--series-1)'))] : null,
+    arr(c.mods).length ? [el('h2', null, 'Popular gear mods'),
+      el('div', { class: 'card' }, barChart(arr(c.mods).map(m => ({
+        label: m.mod, count: m.players, num: pct(m.players),
+      })), 'var(--series-2)'))] : null,
+    arr(c.items).length ? [el('h2', null, 'Most used per slot'),
+      el('table', null,
+        el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Item'), el('th', { class: 'r' }, 'Used by'))),
+        el('tbody', null, arr(c.items).map(i => el('tr', null,
+          el('td', null, str(i.slot)), el('td', null, str(i.name)),
+          el('td', { class: 'r' }, pct(i.players))))))] : null);
+}
+
 async function route() {
-  const m = location.hash.match(/^#\/build\/(.+)$/);
-  try { m ? await build(decodeURIComponent(m[1])) : await ladder(); }
+  const m = location.hash.match(/^#\/(build|class)\/(.+)$/);
+  try { m ? await (m[1] === 'build' ? build : classView)(decodeURIComponent(m[2])) : await ladder(); }
   catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); }
   window.scrollTo(0, 0);
 }

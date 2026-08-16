@@ -140,6 +140,35 @@ app.get('/api/ladder', h(async (_req, res) => {
   res.json({ players: players.rows, byClass: byClass.rows, levels: levels.rows, total: +total.rows[0].count });
 }));
 
+// Per-class meta: what this class's players actually run. Pick rates over the
+// public population; numeric casts are regex-guarded since JSONB values are
+// client-supplied. ponytail: unweighted by level — small playerbase; weight by
+// top players if the meta ever gets noisy.
+app.get('/api/class/:archetype', h(async (req, res) => {
+  if (!pool) return res.sendStatus(503);
+  const a = String(req.params.archetype).slice(0, 64);
+  const W = `${PUB} AND archetype = $1`;
+  const [meta, passives, mods, items] = await Promise.all([
+    pool.query(`SELECT count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level ${W}`, [a]),
+    pool.query(`SELECT n->>'name' AS name, count(*)::int AS players,
+                       max(CASE WHEN n->>'tier' ~ '^\\d+$' THEN (n->>'tier')::int END) AS tier,
+                       round(avg(CASE WHEN n->>'rank' ~ '^\\d+$' THEN (n->>'rank')::int END), 1) AS avg_rank
+                ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'passives'->'nodes') n`)}
+                AND n->>'name' IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
+    pool.query(`SELECT m->>'t' AS mod, count(DISTINCT id)::int AS players
+                ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m`)}
+                AND m->>'t' IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
+    pool.query(`SELECT DISTINCT ON (slot) slot, name, players FROM (
+                  SELECT it->>'slot' AS slot, it->>'name' AS name, count(*)::int AS players
+                  ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'equipped') it`)}
+                  AND it->>'slot' IS NOT NULL AND it->>'name' IS NOT NULL GROUP BY 1, 2) t
+                ORDER BY slot, players DESC, name`, [a]),
+  ]);
+  if (!meta.rows[0].players) return res.sendStatus(404);
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ archetype: a, ...meta.rows[0], passives: passives.rows, mods: mods.rows, items: items.rows });
+}));
+
 app.get('/api/build/:name', h(async (req, res) => {
   if (!pool) return res.sendStatus(503);
   // Whitelist in SQL — id, bag, and currency never leave the DB.
