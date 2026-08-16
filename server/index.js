@@ -150,11 +150,12 @@ app.get('/api/class/:archetype', h(async (req, res) => {
   const W = `${PUB} AND archetype = $1`;
   const [meta, passives, mods, items] = await Promise.all([
     pool.query(`SELECT count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level ${W}`, [a]),
+    // Only allocated nodes count as picks (rank "2/4" or "2"; "0/4" = unallocated).
     pool.query(`SELECT n->>'name' AS name, count(*)::int AS players,
-                       max(CASE WHEN n->>'tier' ~ '^\\d+$' THEN (n->>'tier')::int END) AS tier,
-                       round(avg(CASE WHEN n->>'rank' ~ '^\\d+$' THEN (n->>'rank')::int END), 1) AS avg_rank
+                       max(CASE WHEN n->>'tier' ~ '\\d' THEN (substring(n->>'tier' from '\\d+'))::int END) AS tier,
+                       round(avg((substring(n->>'rank' from '^\\d+'))::int), 1) AS avg_rank
                 ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'passives'->'nodes') n`)}
-                AND n->>'name' IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
+                AND n->>'name' IS NOT NULL AND n->>'rank' ~ '^[1-9]' GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
     pool.query(`SELECT m->>'t' AS mod, count(DISTINCT id)::int AS players
                 ${W.replace('FROM installs', `FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m`)}
                 AND m->>'t' IS NOT NULL GROUP BY 1 ORDER BY 2 DESC, 1 LIMIT 15`, [a]),
@@ -195,7 +196,12 @@ const GAME_URL = process.env.GAME_URL || 'https://adventure.lokati.net';
 const strip = (s) => String(s).replace(/<[^>]*>/g, '').replace(/&middot;/g, '·').replace(/&amp;/g, '&')
   .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#?\w+;/g, '').trim();
 const getPage = async (p) => {
-  const r = await fetch(GAME_URL + p, { signal: AbortSignal.timeout(15000) });
+  // Character pages sit behind the game's Twitch login — GAME_COOKIE holds the
+  // operator's 'adv_session=…' cookie (Railway env; refresh when it expires,
+  // currently ~monthly). Without it the site serves its login page and the
+  // scrape no-ops with a log line.
+  const headers = process.env.GAME_COOKIE ? { cookie: process.env.GAME_COOKIE } : {};
+  const r = await fetch(GAME_URL + p, { headers, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`GET ${p} -> ${r.status}`);
   return r.text();
 };
@@ -224,11 +230,27 @@ function parseCharacter(text) {
   return { name, archetype, level, stats, equipped };
 }
 
+// Public read-only tree page: nodes have no node_key, so key stays null; rank
+// reads "2/4". Mirrors the app ping's passives shape.
+function parsePassives(text) {
+  const points = strip((text.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || '');
+  const nodes = [];
+  for (const chunk of text.split('class="node ').slice(1)) {
+    const head = chunk.slice(0, 1200);
+    const grab = (cls) => strip((head.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+    const name = grab('node-name');
+    if (!name || head.startsWith('node-root')) continue;
+    nodes.push({ key: null, name, tier: grab('node-kind'), rank: grab('node-rank') });
+  }
+  return { points, nodes };
+}
+
 async function scrapeRoster() {
   if (!pool) return;
   try {
     const listing = await getPage('/characters');
     const slugs = [...new Set([...listing.matchAll(/href="\/characters\/([^"/]+)"/g)].map(m => m[1]))];
+    if (!slugs.length) { console.error('roster scrape: no roster links — GAME_COOKIE missing or expired?'); return; }
     let ok = 0;
     for (const slug of slugs) {
       try {
@@ -236,6 +258,10 @@ async function scrapeRoster() {
         if (!c.name) continue;
         const id = 'web:' + slug.slice(0, 60);
         const data = { scraped: new Date().toISOString(), name: c.name, stats: c.stats, equipped: c.equipped };
+        try {
+          const p = parsePassives(await getPage('/characters/' + encodeURIComponent(slug) + '/passives'));
+          if (p.nodes.length) data.passives = p;
+        } catch (e) { console.error('scrape passives', slug + ':', e.message); }
         await pool.query(`DELETE FROM installs WHERE id = $1 AND name <> $2`, [id, c.name]); // renamed char
         await pool.query(
           `INSERT INTO installs (id, name, archetype, level, data) VALUES ($1,$2,$3,$4,$5)
