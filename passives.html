@@ -29,8 +29,15 @@
   .node.inactive .nm { color: #c98a94; }
   .node .nm { font-weight: 700; font-size: 0.82rem; line-height: 1.05; }
   .node .tr { font-size: 0.62rem; color: #8a7fb0; }
-  .node .acts { display: flex; align-items: center; gap: 6px; margin-top: auto; }
-  .node .rk { font-size: 0.78rem; color: #c9bdf0; min-width: 26px; text-align: center; }
+  .node .acts { display: flex; align-items: center; gap: 5px; margin-top: auto; }
+  /* rank pips, like the live site: click any circle to set that rank */
+  .pip { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #7d5560; cursor: pointer; }
+  .pip:hover { border-color: #e0524f; }
+  .pip.on { background: #e0524f; border-color: #e0524f; }
+  .pip.gold { border-color: #a08a4a; }        /* 4th (spec) point */
+  .pip.gold:hover { border-color: #ffcf5a; }
+  .pip.gold.on { background: #ffcf5a; border-color: #ffcf5a; }
+  .node.locked .pip { pointer-events: none; } /* needs a point in the node above first */
   button { border-radius: 6px; padding: 2px 9px; font-size: 0.95rem; cursor: pointer;
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.2); color: #eae6f5; }
   button:hover { background: rgba(120,90,255,0.36); }
@@ -113,6 +120,19 @@
     }
     return `<svg class="connectors" width="${SW}" height="${SH}">${out}</svg>`;
   }
+  // Rank circles from "cur/max" — the 4th pip on a Specialization is the gold
+  // specialize point (reveals its modifiers), mirroring the live site.
+  function pips(n) {
+    const m = (n.rank || '').match(/(\d+)\s*\/\s*(\d+)/);
+    if (!m) return `<span class="tr">${n.rank || ''}</span>`;
+    const cur = +m[1], max = +m[2];
+    let out = '';
+    for (let i = 1; i <= max; i++) {
+      const gold = n.cls.includes('node-spec') && i === max;
+      out += `<span class="pip ${i <= cur ? 'on' : ''} ${gold ? 'gold' : ''}" data-key="${n.key}" data-i="${i}" data-cur="${cur}" title="${i}/${max}"></span>`;
+    }
+    return out;
+  }
   async function api(endpoint, fields) {
     const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
@@ -159,16 +179,24 @@
         data-tip="${n.desc.replace(/"/g, '&quot;')}">
         <div class="nm">${n.name}</div>
         <div class="tr">${n.tier || ''}</div>
-        <div class="acts">
-          <button data-dec="${n.key}" ${n.canDec ? '' : 'disabled'}>−</button>
-          <span class="rk">${n.rank}</span>
-          <button data-inc="${n.key}" ${n.canInc ? '' : 'disabled'}>+</button>
-        </div>
+        <div class="acts">${pips(n)}</div>
       </div>`;
     }).join('');
 
-    stage.querySelectorAll('[data-inc]').forEach(b => b.onclick = async () => { await api('passives/allocate', { node_key: b.dataset.inc, delta: '1' }); refresh(); });
-    stage.querySelectorAll('[data-dec]').forEach(b => b.onclick = async () => { await api('passives/allocate', { node_key: b.dataset.dec, delta: '-1' }); refresh(); });
+    // Click a pip to jump to that rank (clicking the current top pip steps down
+    // one). Inactive nodes stay allocatable — points persist and take effect if
+    // the game implements them; only locked nodes (need parent point) don't.
+    stage.querySelectorAll('.pip').forEach(el => el.onclick = async () => {
+      const cur = +el.dataset.cur;
+      let target = +el.dataset.i;
+      if (target === cur) target = cur - 1;
+      const step = target > cur ? 1 : -1;
+      for (let r = cur; r !== target; r += step) {
+        const res = await api('passives/allocate', { node_key: el.dataset.key, delta: String(step) });
+        if (!res.ok) break; // out of points / rejected — stop, refresh shows truth
+      }
+      refresh();
+    });
 
     // size the popup to the tree once — only when standalone, not as an SPA panel
     if (!window._sized && window.top === window) {
