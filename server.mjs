@@ -113,7 +113,7 @@ async function bag(pageText) {
       id, name: grab('gear-name'), slot: grab('gear-slot-label'),
       quality: grab('gear-quality'), qtip: qtipOf(chunk), tier: grab('gear-tier'),
       primary: grab('gear-primary'), mods: modsOf(chunk),
-      sacred: /gear-name-sacred/.test(chunk),
+      sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
       implicit: implicitOf(chunk), implicitGold: /class="gear-unique"/.test(chunk),
       krangled: /gear-name-locked/.test(chunk),
       protected: /name="protect"[^>]*checked/.test(chunk),
@@ -145,7 +145,7 @@ async function inventory() {
     equipped.push({
       slot, name: grab('gear-name'), quality: grab('gear-quality'), qtip: qtipOf(chunk),
       tier: grab('gear-tier'), primary: grab('gear-primary'), mods: modsOf(chunk),
-      sacred: /gear-name-sacred/.test(chunk),
+      sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
       implicit: implicitOf(chunk), implicitGold: /class="gear-unique"/.test(chunk),
       krangled: /gear-name-locked/.test(chunk),
     });
