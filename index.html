@@ -202,10 +202,17 @@
   .pcell .phpf.ok { background: #5aa469; } .pcell .phpf.warn { background: #d9a441; }
   .pcell .phpf.low { background: #d05a5a; }
   .pcell .phpf.dead { background: #7a2f2f; }
+  /* HP bar glow, coloured by remaining HP — the same energy-shield treatment,
+     put on .php (the parent) so overflow:hidden doesn't clip it. Only the live
+     fight applies a level class, so idle/neutral bars don't glow. */
+  .pcell .php.ok { box-shadow: 0 0 5px 1px rgba(90,164,105,0.65); }
+  .pcell .php.warn { box-shadow: 0 0 5px 1px rgba(217,164,65,0.7); }
+  .pcell .php.low { box-shadow: 0 0 6px 1px rgba(208,90,90,0.85); }
+  .pcell .php.dead { box-shadow: 0 0 5px 1px rgba(160,60,60,0.55); }
   /* Absorb shield (shield_hp buff) — a bluish-white overlay riding on top of the
      HP fill, MMO energy-shield style. Its width tracks the remaining shield and
-     transitions, so it visibly shrinks as the shield is spent. The outer glow on
-     .php.sh is on the parent, so overflow:hidden doesn't clip it. */
+     transitions, so it visibly shrinks as the shield is spent. Listed last so a
+     shielded bar glows blue over its HP-colour glow. */
   .pcell .php.sh { box-shadow: 0 0 5px 1px rgba(140,185,255,0.75); }
   .pcell .pshd { position: absolute; top: 0; left: 0; height: 100%; border-radius: 2px;
     background: linear-gradient(90deg, rgba(190,220,255,0.9), rgba(150,195,255,0.5));
@@ -1244,14 +1251,14 @@
     // empty/red regardless of the last HP sample. No fight data → full/neutral.
     // A shield_hp absorb rides on top as a bluish glow that shrinks as it's spent.
     const hpBar = (c) => {
-      if (c.downedUntilMs) return `<div class="php"><div class="phpf dead" style="width:100%"></div></div>`;
+      if (c.downedUntilMs) return `<div class="php dead"><div class="phpf dead" style="width:100%"></div></div>`;
       const u = unitOf(c);
       if (!u || !u.max) return `<div class="php"><div class="phpf" style="width:100%"></div></div>`;
       const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
       const lvl = pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'low';
       const shPct = u.shield > 0 ? Math.max(0, Math.min(100, u.shield / u.max * 100)) : 0;
       const tip = `${fmtN(u.hp)} / ${fmtN(u.max)} HP${u.shield > 0 ? ` · \u{1F6E1} ${fmtN(u.shield)} shield` : ''}`;
-      return `<div class="php${shPct > 0 ? ' sh' : ''}" title="${tip}"><div class="phpf ${lvl}" style="width:${pct.toFixed(1)}%"></div>${
+      return `<div class="php ${lvl}${shPct > 0 ? ' sh' : ''}" title="${tip}"><div class="phpf ${lvl}" style="width:${pct.toFixed(1)}%"></div>${
         shPct > 0 ? `<div class="pshd" style="width:${shPct.toFixed(1)}%"></div>` : ''}</div>`;
     };
     const pf = (k) => `class="chip pf${partyFilter === k ? ' on' : ''}" data-pf="${k}"`;
