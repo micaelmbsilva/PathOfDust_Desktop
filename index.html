@@ -427,6 +427,19 @@
   };
   // Restore a draggable/resizable/collapsible panel's geometry, and return a
   // save() to call after drags/collapses (resizes autosave via ResizeObserver).
+  // Geometry writes are suppressed while the saved layout is being reapplied,
+  // otherwise restoring a panel fires its ResizeObserver and writes back
+  // whatever mid-startup position it happens to hold.
+  //
+  // This is a DEADLINE, not a flag someone has to remember to clear. The
+  // previous version cleared a boolean from inside requestAnimationFrame, which
+  // never runs while a window is minimised, occluded or in the background — and
+  // a window that starts that way left saving disabled for the entire session,
+  // so nothing was ever persisted and every launch looked like a factory reset.
+  // A deadline expires on its own no matter what does or doesn't fire.
+  let restoreUntil = Date.now() + 20000; // generous cap if restore never runs at all
+  const restoring = () => Date.now() < restoreUntil;
+
   function persistPanel(el, key) {
     const s = LS.get(key, null);
     if (s) {
@@ -442,7 +455,7 @@
       // write back whatever position it happens to have mid-startup — including
       // one the clamp below just nudged. That overwrote the real saved geometry
       // and compounded on every launch, walking panels across the screen.
-      if (restoringPanels) return;
+      if (restoring()) return;
       const r = el.getBoundingClientRect(), prev = LS.get(key, {}), collapsed = el.classList.contains('collapsed');
       LS.set(key, {
         left: Math.round(r.left), top: Math.round(r.top), width: Math.round(el.offsetWidth),
@@ -781,10 +794,6 @@
   // Panels open at close reopen next launch (positions already persist via lay.*)
   const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
   let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
-  // True until the saved layout has been reapplied and the window has settled.
-  // Guards both geometry writes and the viewport clamp, so restoring a layout
-  // can never rewrite the layout it is restoring.
-  let restoringPanels = true;
   const persistPanels = () => LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
     document.getElementById(w + 'panel')?.classList.contains('open')));
   function toggleModal(which, show) {
@@ -804,7 +813,7 @@
       // anything that merely overhangs moved panels that were perfectly fine.
       const r = p.getBoundingClientRect();
       const lost = r.left > innerWidth - 40 || r.top > innerHeight - 40 || r.right < 40 || r.bottom < 40;
-      if (restoringPanels && !lost) return;
+      if (restoring() && !lost) return;
       if (r.right > innerWidth) { p.style.left = Math.max(4, innerWidth - r.width - 8) + 'px'; p.style.right = 'auto'; }
       if (r.bottom > innerHeight) p.style.top = Math.max(48, innerHeight - r.height - 8) + 'px';
       if (r.left < 0) p.style.left = '4px';
@@ -812,9 +821,11 @@
     }
   }
   // drag + collapse + geometry persistence — same behavior as the chat/stream panels
+  const panelSaves = [];
   function wirePanel(panelId, barId, cbtnId, key) {
     const panel = document.getElementById(panelId), bar = document.getElementById(barId), cbtn = document.getElementById(cbtnId);
     const save = persistPanel(panel, key);
+    panelSaves.push(save);
     cbtn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
     cbtn.onclick = () => {
       panel.classList.toggle('collapsed');
@@ -1826,13 +1837,23 @@
         } catch (e) { console.error('restore', w, e); }
       }
     } finally {
-      // Two frames after layout: geometry is final, so saves resume and the
-      // clamp goes back to its normal job.
-      requestAnimationFrame(() => requestAnimationFrame(() => { restoringPanels = false; }));
+      // Restore is done; give layout a moment to settle, then resume saving.
+      restoreUntil = Date.now() + 600;
     }
   }
   if (document.readyState === 'complete') restorePanels();
   else addEventListener('load', restorePanels, { once: true });
+
+  // Persist on the way out as well as on interaction. autoreload.js reloads the
+  // page whenever the interface revision moves, and pagehide is the last point
+  // at which the live geometry can still be read.
+  addEventListener('pagehide', () => {
+    try {
+      restoreUntil = 0; // whatever is on screen now IS the truth
+      for (const save of panelSaves) save();
+      persistPanels();
+    } catch {}
+  });
 
   // Full-width system banner across the top; one per id. Used for restart
   // notices, the legacy-shell warning, and operator broadcasts.
