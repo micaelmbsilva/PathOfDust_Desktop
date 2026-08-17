@@ -184,9 +184,9 @@
   .pcell { border: 1px solid rgba(160,140,255,0.22); border-radius: 8px; padding: 4px 7px;
     font-size: 0.74rem; background: rgba(255,255,255,0.03); min-width: 0; }
   .pcell .pn { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pcell .pc { color: #c9bdf0; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pcell .pc .pr { font-size: 0.6rem; margin-left: 3px; opacity: 0.85; }
-  .pcell .ps { color: #8a7fb0; font-size: 0.68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcell .ps { color: #8a7fb0; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcell .ps .pcls { color: #c9bdf0; }
+  .pcell .pr { font-size: 0.6rem; margin-left: 3px; opacity: 0.85; }
   .pcell.down { border-color: #a04a4a; background: rgba(200,70,70,0.14); }
   .pcell.down .ps { color: #ff9d9d; }
   .pcell.ret { opacity: 0.45; filter: grayscale(0.6); }
@@ -196,7 +196,7 @@
   /* HP bar — fed by the live/last fight replay; width transitions so the
      server-thinned samples glide rather than jump. Only meaningful during a
      fight; full/neutral otherwise. */
-  .pcell .php { position: relative; height: 6px; border-radius: 2px; background: rgba(255,255,255,0.08);
+  .pcell .php { position: relative; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.08);
     overflow: hidden; margin-top: 4px; transition: box-shadow 0.3s ease; }
   /* Damage trail: a pale ghost behind the fill. On a hit the fill drops fast and
      the ghost eases down after a short delay, so the gap between them is the HP
@@ -1244,13 +1244,14 @@
   let lastPartySig = null;
   const lastMaxHp = {};
   // Notch period as a % of a member's own bar. One fixed HP-per-notch across the
-  // party (refMax/12, so the tankiest shows ~12), but each bar's notch COUNT is
+  // party (refMax/16, so the tankiest shows ~16), but each bar's notch COUNT is
   // rounded to a whole number and the period is 100/count — so notches always
   // spread evenly edge to edge (no ragged last segment) while a higher-max member
-  // still shows more of them. null when there's no HP scale yet.
+  // still shows more of them. Floor of 4 so even the squishiest bar reads as a
+  // bar, not one block. null when there's no HP scale yet.
   const tickPctOf = (refMax, max) => {
     if (!(refMax > 0) || !(max > 0)) return null;
-    const count = Math.max(3, Math.min(18, Math.round(max / (refMax / 12))));
+    const count = Math.max(4, Math.min(18, Math.round(max / (refMax / 16))));
     return 100 / count;
   };
   function renderParty(opts = {}) {
@@ -1344,8 +1345,7 @@
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
       `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${isOut(c) ? ' out' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" data-pid="${esc(c.displayName.toLowerCase())}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
         <div class="pn">${esc(c.displayName)}</div>
-        ${classOf(c) ? `<div class="pc" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></div>` : ''}
-        <div class="ps">Lv ${c.level}${c.downedUntilMs ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
+        <div class="ps">Lv ${c.level}${classOf(c) ? ` · <span class="pcls" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></span>` : ''}${c.downedUntilMs ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
         ${hpBar(c)}
       </div>`).join('') +
       (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
