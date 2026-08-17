@@ -58,7 +58,7 @@
     background: linear-gradient(#1c1830ee, #1c183099); backdrop-filter: blur(4px);
     border-bottom: 1px solid rgba(160,140,255,0.25); }
   #topbar .tbtn { white-space: nowrap; flex: none; }
-  #topbar .title { font-weight: 600; color: #c9bdf0; font-size: 0.95rem; }
+  #topbar .title { font-weight: 600; color: #c9bdf0; font-size: 0.95rem; white-space: nowrap; flex: none; }
   #topbar .ver { color: #8a7fb0; font-size: 0.72rem; margin-right: auto; }
   .tbtn { background: rgba(120,90,255,0.18); color: #eae6f5; border: 1px solid rgba(160,140,255,0.35);
     border-radius: 8px; padding: 6px 14px; font-size: 0.9rem; cursor: pointer; }
@@ -201,6 +201,18 @@
     min-width: 240px; min-height: 160px; }
   #streampanel .swrap { flex: 1; min-height: 0; background: #000; }
 
+  /* customizable toolbar */
+  #toolbarItems { display: flex; gap: 8px; align-items: center; }
+  #toolbarItems .tbtn.dragging { opacity: 0.4; }
+  .drop-before { box-shadow: -3px 0 0 0 #b98bff; }
+  .drop-after { box-shadow: 3px 0 0 0 #b98bff; }
+  .drop-into { outline: 2px dashed #b98bff; outline-offset: -2px; }
+  #gnamePop { position: fixed; top: 46px; z-index: 60; background: rgba(24,20,40,0.98);
+    border: 1px solid rgba(160,140,255,0.35); border-radius: 10px; box-shadow: 0 8px 30px #0009;
+    padding: 8px 10px; }
+  #gnamePop input { background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.35);
+    border-radius: 6px; padding: 4px 6px; width: 150px; font: inherit; font-size: 0.85rem; }
+
   /* topbar dropdown menus */
   .tmenu { position: fixed; top: 46px; z-index: 50; display: none; flex-direction: column;
     min-width: 180px; background: rgba(24,20,40,0.98); border: 1px solid rgba(160,140,255,0.35);
@@ -239,29 +251,7 @@
 <div id="topbar">
   <span class="title" id="appTitle"></span>
   <span class="ver" id="ver" title="App version — updates automatically on launch"></span>
-  <button class="tbtn" onclick="openWin('/bag.html','bag',1140,880)">🎒 Bag</button>
-  <button class="tbtn" onclick="openWin('/passives.html','passives',1840,860)">🌳 Passives</button>
-  <button class="tbtn" id="chatBtn" onclick="toggleChat()">💬 Chat</button>
-  <button class="tbtn" data-menu="combatMenu" title="Combat panels — party, buffs, live fight, history">⚔️ Combat ▾</button>
-  <button class="tbtn" id="streamBtn" onclick="toggleStream()" title="Watch the stream in a small panel">📺 Stream</button>
-  <button class="tbtn" id="hlBtn" onclick="toggleHighlight()" title="Dim other players, highlight your character">✨ Highlight Me</button>
-  <button class="tbtn" id="alBtn" onclick="toggleAutoLock()" title="Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop">🔒 Auto-Lock ✨</button>
-  <button class="tbtn" data-menu="moreMenu" title="Wiki, patch notes, refresh, updates, feedback">⋯ More ▾</button>
-</div>
-
-<div class="tmenu" id="combatMenu">
-  <button data-m="party" title="Who's fighting right now — DPS/Heal/Tank, status">👥 Party</button>
-  <button data-m="buffs" title="Active buffs/debuffs — channel-point events and your in-fight buffs">✨ Buffs &amp; Debuffs</button>
-  <button data-m="fight" title="Live leaderboard + your combat log for the fight in progress">🗡️ Live Fight</button>
-  <button data-m="battles" title="Your saved battle reports, fight logs, and per-fight leaderboards">⚔️ Combat History</button>
-</div>
-<div class="tmenu" id="moreMenu">
-  <button data-mm="settings" data-m="settings" title="App options — notifications, display, performance, history retention">⚙️ Settings</button>
-  <button data-mm="wiki" title="Open the game wiki in your browser">📖 Wiki</button>
-  <button data-mm="patch-notes" title="Open the game's patch notes in your browser">📜 Patch Notes</button>
-  <button data-mm="refresh" title="Refresh now">🔄 Refresh</button>
-  <button data-mm="update" title="Check for updates">⬆️ Check for Updates</button>
-  <button data-mm="feedback" title="Send feedback / report a bug">🐛 Feedback</button>
+  <span id="toolbarItems" title="Drag buttons to rearrange · drop one onto another to make a group · drop into a group's ▾ button to file it there"></span>
 </div>
 
 <div class="apanel" id="chatpanel">
@@ -397,7 +387,7 @@
     const src = on && myName ? `${OVERLAY}?highlight=${encodeURIComponent(myName)}` : OVERLAY;
     const ov = document.getElementById('overlay');
     if (ov.getAttribute('src') !== src) ov.setAttribute('src', src); // reload only if changed
-    document.getElementById('hlBtn').classList.toggle('active', on);
+    setActive('highlight', on);
   }
   function toggleHighlight() {
     localStorage.setItem('highlight', localStorage.getItem('highlight') === '1' ? '0' : '1');
@@ -408,15 +398,13 @@
   const autoLockOn = () => localStorage.getItem('autolockPerfect') === '1';
   function toggleAutoLock() {
     localStorage.setItem('autolockPerfect', autoLockOn() ? '0' : '1');
-    document.getElementById('alBtn').classList.toggle('active', autoLockOn());
+    setActive('autolock', autoLockOn());
   }
-  document.getElementById('alBtn').classList.toggle('active', autoLockOn());
 
   // Twitch chat panel — embed loads lazily; `parent` must be the serving host.
   const TWITCH_LOGIN = 'lokati_gaming';
   function toggleChat(show) {
-    const p = document.getElementById('chatpanel'), b = document.getElementById('chatBtn'),
-          f = document.getElementById('chatFrame');
+    const p = document.getElementById('chatpanel'), f = document.getElementById('chatFrame');
     const open = show === undefined ? !p.classList.contains('open') : show;
     const src = f.getAttribute('src');
     if (open && (!src || src === 'about:blank'))
@@ -424,17 +412,16 @@
       f.src = `https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`;
     if (!open && S().chatUnload) f.src = 'about:blank'; // free CPU/RAM while hidden (setting)
     p.classList.toggle('open', open);
-    b.classList.toggle('active', open);
+    setActive('chat', open);
   }
   // stream picture-in-picture — lazy iframe (only loads while open, saves CPU)
   function toggleStream(show) {
-    const p = document.getElementById('streampanel'), b = document.getElementById('streamBtn'),
-          f = document.getElementById('streamFrame');
+    const p = document.getElementById('streampanel'), f = document.getElementById('streamFrame');
     const open = show === undefined ? !p.classList.contains('open') : show;
     if (open) f.src = `https://player.twitch.tv/?channel=${TWITCH_LOGIN}&parent=localhost&muted=${S().streamMuted}`;
     else f.removeAttribute('src'), f.src = 'about:blank'; // stop playback when hidden
     p.classList.toggle('open', open);
-    b.classList.toggle('active', open);
+    setActive('stream', open);
   }
   wirePanel('streampanel', 'streambar', 'streamCollapse', 'lay.stream');
   wirePanel('chatpanel', 'chatbar', 'chatCollapse', 'lay.chat');
@@ -585,8 +572,8 @@
     battleToastT = setTimeout(() => {
       if (pendingBattle !== battle) return; // superseded by a newer fight
       pendingBattle = null;
-      const bt = S().battleToast;
-      if (bt === 'off' || (bt === 'wins' && !battle.won)) return; // user muted these
+      const st = S();
+      if (battle.won ? !st.battleWins : !st.battleLosses) return; // muted in settings
       const f = battle.frozen; // no qualified poll landed -> plain result, no stale recompute
       const money = f && f.parts.length
         ? ` — 💰 net ${f.dirty ? '~' : ''}${f.parts.join(' · ')}${f.dirty ? ' (mixed with crafting)' : ''}` : '';
@@ -614,11 +601,22 @@
   }, 1000);
 
   // ---- app settings: one JSON blob merged over defaults; knobs apply live ----
-  const SET_DEFAULTS = { lootToast: 'all', lootTtl: 0, battleToast: 'all', reforgeRemind: true,
+  const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
+    lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
     histCap: 40, histAgeH: 0 };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
   const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
+  (function migrateSettings() { // one-time: rev-78 preset selects -> per-kind checkboxes
+    const s = LS.get('settings', {});
+    if (!('lootToast' in s) && !('battleToast' in s)) return;
+    if (s.lootToast === 'rare') s.lootNormal = false;
+    if (s.lootToast === 'off') s.lootNormal = s.lootPerfect = s.lootSacred = s.lootUnique = false;
+    if (s.battleToast === 'wins') s.battleLosses = false;
+    if (s.battleToast === 'off') s.battleWins = s.battleLosses = false;
+    delete s.lootToast; delete s.battleToast;
+    LS.set('settings', s);
+  })();
   const rerenderIfOpen = (which, fn) => { if (document.getElementById(which + 'panel').classList.contains('open')) fn(); };
 
   // Battle history read + retention in one place (age filter then cap; list is
@@ -642,7 +640,7 @@
     const p = document.getElementById(which + 'panel');
     const open = show === undefined ? !p.classList.contains('open') : show;
     p.classList.toggle('open', open);
-    document.querySelector(`.tmenu [data-m="${which}"]`)?.classList.toggle('active', open);
+    setActive(which, open);
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
@@ -685,29 +683,216 @@
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
   wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
 
-  // ---- topbar dropdown menus (⚔️ Combat / ⋯ More) ----
+  // ---- customizable toolbar ----
+  // Data-driven topbar: an item registry + a persisted layout of loose items and
+  // named dropdown groups. Users drag to reorder, drag into/out of groups, and
+  // drop one item onto another to create a new named group.
+  const openPage = (page) => fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page }) });
+  const panelOpen = (which) => () => document.getElementById(which + 'panel').classList.contains('open');
+  const ITEMS = {
+    bag: { label: '🎒 Bag', act: () => openWin('/bag.html', 'bag', 1140, 880) },
+    passives: { label: '🌳 Passives', act: () => openWin('/passives.html', 'passives', 1840, 860) },
+    chat: { label: '💬 Chat', act: () => toggleChat(), isActive: panelOpen('chat') },
+    party: { label: '👥 Party', title: "Who's fighting right now — DPS/Heal/Tank, status", act: () => toggleModal('party'), isActive: panelOpen('party') },
+    buffs: { label: '✨ Buffs &amp; Debuffs', title: 'Active buffs/debuffs — channel-point events and your in-fight buffs', act: () => toggleModal('buffs'), isActive: panelOpen('buffs') },
+    fight: { label: '🗡️ Live Fight', title: 'Live leaderboard + your combat log for the fight in progress', act: () => toggleModal('fight'), isActive: panelOpen('fight') },
+    battles: { label: '⚔️ Combat History', title: 'Your saved battle reports, fight logs, and per-fight leaderboards', act: () => toggleModal('battles'), isActive: panelOpen('battles') },
+    stream: { label: '📺 Stream', title: 'Watch the stream in a small panel', act: () => toggleStream(), isActive: panelOpen('stream') },
+    highlight: { label: '✨ Highlight Me', title: 'Dim other players, highlight your character', act: () => toggleHighlight(), isActive: () => localStorage.getItem('highlight') === '1' },
+    autolock: { label: '🔒 Auto-Lock ✨', title: 'Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop', act: () => toggleAutoLock(), isActive: () => autoLockOn() },
+    settings: { label: '⚙️ Settings', title: 'App options — notifications, display, performance, history retention', act: () => toggleModal('settings'), isActive: panelOpen('settings') },
+    wiki: { label: '📖 Wiki', title: 'Open the game wiki in your browser', act: () => openPage('wiki') },
+    'patch-notes': { label: '📜 Patch Notes', title: "Open the game's patch notes in your browser", act: () => openPage('patch-notes') },
+    refresh: { label: '🔄 Refresh', title: 'Refresh now', act: () => { loadStats(); pollBag(); pullInterface(false); } },
+    update: { label: '⬆️ Check for Updates', title: 'Check for updates', act: () => updateAction() },
+    feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
+  };
+  const DEFAULT_LAYOUT = [
+    { i: 'bag' }, { i: 'passives' }, { i: 'chat' },
+    { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'battles'] } },
+    { i: 'stream' }, { i: 'highlight' }, { i: 'autolock' },
+    { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'refresh', 'update', 'feedback'] } },
+  ];
+  function loadToolbar() {
+    const raw = LS.get('topbar', null);
+    const base = raw && raw.v === 1 && Array.isArray(raw.entries) ? raw.entries : JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+    const seen = new Set(), out = [];
+    for (const e of base) { // validate: known ids only, dedupe, well-formed groups
+      if (e && e.i && ITEMS[e.i] && !seen.has(e.i)) { seen.add(e.i); out.push({ i: e.i }); }
+      else if (e && e.g && Array.isArray(e.g.items)) {
+        const items = e.g.items.filter(id => ITEMS[id] && !seen.has(id));
+        items.forEach(id => seen.add(id));
+        if (items.length) out.push({ g: { id: String(e.g.id || 'g' + Math.random().toString(36).slice(2, 7)), name: String(e.g.name || 'Group').slice(0, 24), items } });
+      }
+    }
+    for (const id of Object.keys(ITEMS)) if (!seen.has(id)) out.push({ i: id }); // items added in future revs appear at the end
+    return out;
+  }
+  let toolbarLayout = loadToolbar();
+  const saveToolbar = () => { LS.set('topbar', { v: 1, entries: toolbarLayout }); renderToolbar(); };
+
   const closeMenus = () => document.querySelectorAll('.tmenu.open').forEach(m => m.classList.remove('open'));
-  document.querySelectorAll('[data-menu]').forEach(btn => btn.onclick = () => {
-    const m = document.getElementById(btn.dataset.menu);
-    const wasOpen = m.classList.contains('open');
+  function renderToolbar() {
     closeMenus();
-    if (!wasOpen) {
-      m.classList.add('open'); // open first so offsetWidth is real
-      m.style.left = Math.max(4, Math.min(btn.getBoundingClientRect().left, innerWidth - m.offsetWidth - 8)) + 'px';
+    document.querySelectorAll('.tmenu.gen').forEach(m => m.remove());
+    const wrap = document.getElementById('toolbarItems');
+    wrap.innerHTML = '';
+    const mkBtn = (id, inMenu) => {
+      const b = document.createElement('button');
+      if (!inMenu) b.className = 'tbtn';
+      b.dataset.item = id; b.draggable = true;
+      if (ITEMS[id].title) b.title = ITEMS[id].title;
+      b.innerHTML = ITEMS[id].label; // registry labels are our own strings
+      return b;
+    };
+    for (const e of toolbarLayout) {
+      if (e.i) { wrap.appendChild(mkBtn(e.i, false)); continue; }
+      const b = document.createElement('button');
+      b.className = 'tbtn'; b.dataset.menu = e.g.id; b.dataset.group = e.g.id; b.draggable = true;
+      b.textContent = e.g.name + ' ▾'; // user-supplied name — textContent only
+      wrap.appendChild(b);
+      const m = document.createElement('div');
+      m.className = 'tmenu gen'; m.id = e.g.id;
+      for (const id of e.g.items) m.appendChild(mkBtn(id, true));
+      document.body.appendChild(m);
+    }
+    syncToolbarActive();
+  }
+  function setActive(id, on) { document.querySelectorAll(`[data-item="${id}"]`).forEach(el => el.classList.toggle('active', on)); }
+  function syncToolbarActive() { for (const id of Object.keys(ITEMS)) if (ITEMS[id].isActive) setActive(id, ITEMS[id].isActive()); }
+
+  // one delegated handler: group buttons open their menu, item buttons run their action
+  let didDrag = false;
+  document.addEventListener('click', (e) => {
+    if (didDrag) { didDrag = false; return; } // swallow the click a drag can leave behind
+    const mb = e.target.closest('[data-menu]');
+    if (mb) {
+      const m = document.getElementById(mb.dataset.menu);
+      const wasOpen = m.classList.contains('open');
+      closeMenus();
+      if (!wasOpen) {
+        m.classList.add('open'); // open first so offsetWidth is real
+        m.style.left = Math.max(4, Math.min(mb.getBoundingClientRect().left, innerWidth - m.offsetWidth - 8)) + 'px';
+      }
+      return;
+    }
+    const ib = e.target.closest('[data-item]');
+    if (ib && ITEMS[ib.dataset.item]) {
+      ITEMS[ib.dataset.item].act();
+      if (ib.closest('.tmenu')) closeMenus();
+      syncToolbarActive();
     }
   });
   document.addEventListener('click', (e) => { if (!e.target.closest('.tmenu') && !e.target.closest('[data-menu]')) closeMenus(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
-  document.querySelectorAll('#combatMenu [data-m]').forEach(b => b.onclick = () => { toggleModal(b.dataset.m); closeMenus(); });
-  const MORE = {
-    'settings': () => toggleModal('settings'),
-    'wiki': () => fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: 'wiki' }) }),
-    'patch-notes': () => fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: 'patch-notes' }) }),
-    'refresh': () => { loadStats(); pollBag(); pullInterface(false); },
-    'update': () => updateAction(),
-    'feedback': () => sendFeedback(),
+  // fixed-position menus go stale if the bar scrolls or the window resizes
+  document.getElementById('topbar').addEventListener('scroll', closeMenus);
+  window.addEventListener('resize', closeMenus);
+
+  // ---- toolbar drag & drop ----
+  // ponytail: no drag-autoscroll of an overflowed bar — drop near an edge, then
+  // drag again if the destination was off-screen.
+  let dragSrc = null; // { id } item drag or { gid } group drag
+  const clearDropMarks = () => document.querySelectorAll('.drop-before, .drop-after, .drop-into').forEach(el => el.classList.remove('drop-before', 'drop-after', 'drop-into'));
+  function removeFromLayout(key) { // by item id or group id; prunes emptied groups
+    toolbarLayout = toolbarLayout.filter(e => e.i !== key && e.g?.id !== key);
+    for (const e of toolbarLayout) if (e.g) e.g.items = e.g.items.filter(id => id !== key);
+    toolbarLayout = toolbarLayout.filter(e => !e.g || e.g.items.length);
+  }
+  const entryIndex = (el) => { // top-level layout index of a bar button
+    const key = el.dataset.group || el.dataset.item;
+    return toolbarLayout.findIndex(e => e.i === key || e.g?.id === key);
   };
-  document.querySelectorAll('#moreMenu [data-mm]').forEach(b => b.onclick = () => { MORE[b.dataset.mm](); closeMenus(); });
+  // zone of a dragover on a bar button: reorder near the edges, combine/file in the middle
+  function dropZone(e, b) {
+    const r = b.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    if (b.dataset.group) return dragSrc.id ? 'into' : (x < 0.5 ? 'before' : 'after'); // items file into groups; groups only reorder
+    if (dragSrc.id && x >= 0.3 && x <= 0.7 && b.closest('#toolbarItems')) return 'combine';
+    return x < 0.5 ? 'before' : 'after';
+  }
+  document.addEventListener('dragstart', (e) => {
+    const b = e.target.closest('#toolbarItems [draggable], .tmenu.gen [data-item]');
+    if (!b) return;
+    dragSrc = b.dataset.group
+      // dragging a whole group: snapshot its entry so reinsert keeps its contents
+      ? { gid: b.dataset.group, gEntry: JSON.parse(JSON.stringify(toolbarLayout.find(x => x.g?.id === b.dataset.group)?.g || null)) }
+      : { id: b.dataset.item };
+    b.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragSrc.id || dragSrc.gid);
+  });
+  document.addEventListener('dragend', (e) => {
+    didDrag = true; setTimeout(() => { didDrag = false; }, 0);
+    e.target.classList?.remove('dragging');
+    clearDropMarks();
+    dragSrc = null;
+  });
+  document.addEventListener('dragover', (e) => {
+    if (!dragSrc) return;
+    const b = e.target.closest('#toolbarItems .tbtn');
+    if (b) {
+      if ((b.dataset.item || b.dataset.group) === (dragSrc.id || dragSrc.gid)) return; // itself
+      e.preventDefault();
+      clearDropMarks();
+      b.classList.add('drop-' + ({ combine: 'into', into: 'into' }[dropZone(e, b)] || dropZone(e, b)));
+    } else if (e.target.closest('#toolbarItems')) { e.preventDefault(); clearDropMarks(); } // bare bar = append at end
+  });
+  document.addEventListener('drop', (e) => {
+    if (!dragSrc) return;
+    const src = dragSrc; // dragend nulls dragSrc; keep our own reference
+    const b = e.target.closest('#toolbarItems .tbtn');
+    if (!b && !e.target.closest('#toolbarItems')) return;
+    e.preventDefault();
+    clearDropMarks();
+    if (!b) { // dropped on empty bar space — move to the end
+      if (src.gid && !src.gEntry) return;
+      removeFromLayout(src.id || src.gid);
+      toolbarLayout.push(src.id ? { i: src.id } : { g: src.gEntry });
+      saveToolbar(); return;
+    }
+    const zone = dropZone(e, b);
+    const targetKey = b.dataset.group || b.dataset.item;
+    if (targetKey === (src.id || src.gid)) return;
+    if (zone === 'into') { // file the item into this group
+      removeFromLayout(src.id);
+      toolbarLayout.find(x => x.g?.id === b.dataset.group)?.g.items.push(src.id);
+      toolbarLayout = toolbarLayout.filter(x => !x.g || x.g.items.length);
+      saveToolbar(); return;
+    }
+    if (zone === 'combine') { // name a new group holding target + dragged
+      groupNamePopover(e.clientX, (name) => {
+        removeFromLayout(src.id);
+        const at = toolbarLayout.findIndex(x => x.i === b.dataset.item);
+        if (at < 0) return; // target moved away meanwhile — abort untouched
+        toolbarLayout.splice(at, 1, { g: { id: 'g' + Date.now().toString(36), name, items: [b.dataset.item, src.id] } });
+        saveToolbar();
+      });
+      return;
+    }
+    // reorder: remove, then insert next to the target's (recomputed) slot
+    if (src.gid && !src.gEntry) return;
+    removeFromLayout(src.id || src.gid);
+    let at = toolbarLayout.findIndex(x => x.i === targetKey || x.g?.id === targetKey);
+    if (at < 0) at = toolbarLayout.length;
+    toolbarLayout.splice(zone === 'after' ? at + 1 : at, 0, src.id ? { i: src.id } : { g: src.gEntry });
+    saveToolbar();
+  });
+  function groupNamePopover(x, done) {
+    document.getElementById('gnamePop')?.remove();
+    const p = document.createElement('div');
+    p.id = 'gnamePop';
+    p.style.left = Math.max(4, Math.min(x, innerWidth - 240)) + 'px';
+    p.innerHTML = `<div style="font-size:0.8rem;margin-bottom:6px;color:#c9bdf0">Name the new group</div>
+      <input id="gnameIn" maxlength="20" placeholder="e.g. 🧰 Tools"><button class="tbtn" id="gnameOk" style="margin-left:6px;padding:4px 10px">OK</button>`;
+    document.body.appendChild(p);
+    const inp = p.querySelector('#gnameIn');
+    inp.focus();
+    const finish = (ok) => { const v = inp.value.trim(); p.remove(); if (ok && v) done(v); }; // cancel = layout untouched
+    p.querySelector('#gnameOk').onclick = () => finish(true);
+    inp.onkeydown = (ev) => { if (ev.key === 'Enter') finish(true); if (ev.key === 'Escape') finish(false); ev.stopPropagation(); };
+  }
+  renderToolbar();
 
   // ---- Buffs & Debuffs: the site's channel-point activity table (scraped
   // generically via /api/me) + my own in-fight buffs from the replay's
@@ -922,11 +1107,13 @@
       `<option value="${v}"${String(s[key]) === String(v) ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
     const chk = (key) => `<input type="checkbox" data-set="${key}"${s[key] ? ' checked' : ''}>`;
     const row = (label, ctrl, tip) => `<div class="srow"${tip ? ` data-tip="${tip.replace(/"/g, '&quot;')}"` : ''}><span class="l">${label}</span><span class="v">${ctrl}</span></div>`;
+    const chks = (pairs) => `<span style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 10px">${pairs.map(([key, cap]) =>
+      `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">${chk(key)} ${cap}</label>`).join('')}</span>`;
     document.getElementById('settingsBody').innerHTML =
       `<div class="fhead">🔔 Notifications</div>` +
-      row('Loot Toasts', sel('lootToast', [['all', 'All Drops'], ['rare', 'Perfect / Sacred / Unique'], ['off', 'Off']]), 'Which new drops pop a toast. Auto-Lock keeps working either way.') +
+      row('Loot Toasts', chks([['lootNormal', 'Normal'], ['lootPerfect', 'Perfect'], ['lootSacred', 'Sacred'], ['lootUnique', 'Unique']]), 'Which new drops pop a toast. Auto-Lock keeps working either way.') +
       row('Auto-Dismiss Loot Toasts', sel('lootTtl', [[0, 'Never'], [10, '10s'], [30, '30s'], [60, '60s']])) +
-      row('Battle Results', sel('battleToast', [['all', 'All'], ['wins', 'Wins Only'], ['off', 'Off']]), 'The battle-end toast with the dust/sand readout.') +
+      row('Battle Results', chks([['battleWins', 'Wins'], ['battleLosses', 'Losses']]), 'The battle-end toast with the dust/sand readout.') +
       row('Reforge Reminder', chk('reforgeRemind'), 'The hourly ⚒️ Reforge Gear Ready toast.') +
       `<div class="fhead" style="margin-top:10px">🖥️ Display</div>` +
       row('Show Next-Battle ETA', chk('showEta'), 'Countdown estimated from recent battle cadence.') +
@@ -942,6 +1129,7 @@
       <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
         <button class="tbtn" id="clearHist">🗑️ Clear Combat History (${battleLog().length})</button>
         <button class="tbtn" id="resetLay" title="Puts every panel back at its default spot and resets overlay zoom/pan — reloads the app page">📐 Reset Panels &amp; Zoom</button>
+        <button class="tbtn" id="resetBar" title="Restores the top toolbar's default buttons and groups">🧭 Reset Toolbar</button>
       </div>`;
     document.querySelectorAll('#settingsBody [data-set]').forEach(el => el.onchange = () => {
       setS(el.dataset.set, el.type === 'checkbox' ? el.checked : (/^\d+$/.test(el.value) ? +el.value : el.value));
@@ -968,6 +1156,11 @@
     arm(document.getElementById('resetLay'), () => {
       Object.keys(localStorage).filter(k => k.startsWith('lay.')).forEach(k => localStorage.removeItem(k));
       location.reload();
+    });
+    arm(document.getElementById('resetBar'), () => {
+      localStorage.removeItem('topbar');
+      toolbarLayout = loadToolbar(); // re-derive from defaults BEFORE rendering
+      renderToolbar();
     });
   }
 
@@ -1080,8 +1273,11 @@
           const r = await action('toggle-disenchant-protect', { item_id: item.id, protect: 'on' }).catch(() => null);
           if (r && r.ok) item.protected = true; // only claim locked on confirmed success
         }
-        const lt = S().lootToast; // settings filter — auto-lock above still ran
-        if (lt === 'all' || (lt === 'rare' && rare)) toast(item);
+        // settings filter — one category per drop (sacred > unique > perfect > normal);
+        // auto-lock above already ran regardless
+        const cat = item.sacred ? 'lootSacred' : item.unique ? 'lootUnique'
+          : (item.quality || '').includes('Perfect') ? 'lootPerfect' : 'lootNormal';
+        if (S()[cat]) toast(item);
       }
       // forget ids no longer in the bag so they'd re-notify if they come back
       known = new Set([...known].filter(id => ids.has(id)));
