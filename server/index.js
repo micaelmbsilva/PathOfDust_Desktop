@@ -129,6 +129,18 @@ app.post('/broadcast', (req, res) => {
 });
 app.get('/broadcast', (_req, res) => { res.set('Cache-Control', 'no-store'); res.json(broadcast || {}); });
 
+// Feedback feed for the in-app operator inbox — same shared-key trust as
+// posting /broadcast (the key ships in the app; the data is messages users
+// chose to send, plus their optional contact line). Newest first, id-ordered
+// so clients can diff "new since last seen".
+app.get('/feedback-recent', h(async (req, res) => {
+  if (!process.env.PING_KEY || req.get('x-pod-key') !== process.env.PING_KEY) return res.sendStatus(403);
+  if (!pool) return res.sendStatus(503);
+  res.set('Cache-Control', 'no-store');
+  res.json((await pool.query(
+    `SELECT id, ts, version, message, contact FROM feedback ORDER BY id DESC LIMIT 50`)).rows);
+}));
+
 // Dashboard JSON — guarded by ?token=STATS_TOKEN
 app.get('/stats', h(async (req, res) => {
   // Fail closed: without STATS_TOKEN configured this dump (install ids + full

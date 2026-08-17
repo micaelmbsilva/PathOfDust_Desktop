@@ -195,6 +195,9 @@
   .fl { font-size: 0.76rem; padding: 1px 0; }
   .fl .ft { color: #8a7fb0; font-variant-numeric: tabular-nums; margin-right: 6px; }
   .fl.taken { color: #ff9d9d; } .fl.healed { color: #7fdba3; } .fl.death { color: #ff8080; font-weight: 700; }
+  .fl.healout { color: #7fdba3; }
+  .fl.myevaded, .fl.dodged { color: #9ad4d4; }
+  .fchips { margin: 2px 0 4px; }
   .fl.shielded, .fl.shieldout { color: #82aaff; }
   .fl.buffgain { color: #c792ea; } .fl.bufflost { color: #8a7fb0; }
   .fl .mit { color: #8a7fb0; font-size: 0.92em; }
@@ -287,6 +290,15 @@
       <button title="close" onclick="toggleModal('party', false)">✕</button></span>
   </div>
   <div class="abody" id="partyBody"><p class="muted">Waiting for battle data…</p></div>
+</div>
+
+<div class="apanel" id="inboxpanel" style="top:80px;left:340px;width:460px">
+  <div class="cbar" id="inboxbar">
+    <span class="ctitle">📬 Feedback Inbox</span>
+    <span class="cbtns"><button id="inboxCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('inbox', false)">✕</button></span>
+  </div>
+  <div class="abody" id="inboxBody"><p class="muted">Loading…</p></div>
 </div>
 
 <div class="apanel" id="buffspanel" style="bottom:14px;left:16px;width:620px;height:150px">
@@ -479,7 +491,7 @@
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
-      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); } // enable highlight once we know the name
+      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); renderToolbar(); pollFeedback(); } // enable highlight + operator items once we know the name
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
@@ -498,7 +510,7 @@
       // interval). Rendered with its live value — a hidden default would blink
       // out on every stats refresh until the next tick.
       const eta0 = S().showEta ? nextBattleEta() : null;
-      const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time"><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') : ''}</span></div>`;
+      const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time. The 💀 counter tracks the usual 3-normals-then-boss pattern (a guess, not a schedule)."><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') + bossHint() : ''}</span></div>`;
       document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
@@ -594,20 +606,27 @@
     if (gap < 30000 || gap > 30 * 60000) return null; // nonsense cadence — hide
     return encTimes[encTimes.length - 1] + gap;
   }
+  // "since boss" suffix for the ETA row — 3 normals then a boss is the usual
+  // stream pattern; unknown until the first boss is seen after install
+  const bossHint = () => {
+    const sb = LS.get('sinceBoss', null); // null until a boss anchors the cycle
+    if (!sb || Date.now() - sb.at > 30 * 60000) return '';
+    return sb.n >= 3 ? ' · 💀 boss next?' : ` · ${sb.n}/3 to 💀`;
+  };
   setInterval(() => {
     const el = document.getElementById('nextBattle');
     if (!el) return;
     const eta = S().showEta ? nextBattleEta() : null;
     el.style.display = eta ? '' : 'none';
     if (eta) el.querySelector('.v').textContent =
-      eta > Date.now() ? `~${mmss(eta - Date.now())}` : 'any moment…';
+      (eta > Date.now() ? `~${mmss(eta - Date.now())}` : 'any moment…') + bossHint();
   }, 1000);
 
   // ---- app settings: one JSON blob merged over defaults; knobs apply live ----
   const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
     lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
-    histCap: 40, histAgeH: 0 };
+    histCap: 40, histAgeH: 0, logToDisk: true, feedCat: 'all' };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
   const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
   (function migrateSettings() { // one-time: rev-78 preset selects -> per-kind checkboxes
@@ -647,7 +666,7 @@
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
-      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings })[which]();
+      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
       const r = p.getBoundingClientRect();
@@ -685,6 +704,7 @@
   wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
   wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
+  wirePanel('inboxpanel', 'inboxbar', 'inboxCollapse', 'lay.inbox');
 
   // ---- customizable toolbar ----
   // Data-driven topbar: an item registry + a persisted layout of loose items and
@@ -709,7 +729,13 @@
     refresh: { label: '🔄 Refresh', title: 'Refresh now', act: () => { loadStats(); pollBag(); pullInterface(false); } },
     update: { label: '⬆️ Check for Updates', title: 'Check for updates', act: () => updateAction() },
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
+    broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
+    inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
   };
+  // Operator-only toolbar items, keyed by character name. UI gating only — the
+  // backend's PING_KEY (sent by the bridge) is the actual auth.
+  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'] };
+  const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'chat' },
     { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'battles'] } },
@@ -749,14 +775,17 @@
       return b;
     };
     for (const e of toolbarLayout) {
+      if (e.i && itemHidden(e.i)) continue;
       if (e.i) { wrap.appendChild(mkBtn(e.i, false)); continue; }
+      const vis = e.g.items.filter(id => !itemHidden(id));
+      if (!vis.length) continue; // group holds only hidden items — skip button, keep saved layout
       const b = document.createElement('button');
       b.className = 'tbtn'; b.dataset.menu = e.g.id; b.dataset.group = e.g.id; b.draggable = true;
       b.textContent = e.g.name + ' ▾'; // user-supplied name — textContent only
       wrap.appendChild(b);
       const m = document.createElement('div');
       m.className = 'tmenu gen'; m.id = e.g.id;
-      for (const id of e.g.items) m.appendChild(mkBtn(id, true));
+      for (const id of vis) m.appendChild(mkBtn(id, true));
       document.body.appendChild(m);
     }
     syncToolbarActive();
@@ -931,6 +960,24 @@
   // battle (damage dealt / healing / damage taken). No battle data yet -> the
   // WS role is the fallback (support = Heal, rest = DPS).
   const CLASS_ICON = { dps: '🗡️', heal: '🩹', tank: '🛡️' };
+  // Class → role kit, mirroring the ladder site's redefinition (server/public/
+  // index.html ROLES). Dual-role classes count toward BOTH composition pips —
+  // the counts read as "role coverage", not headcount. Unknown class = dps.
+  const CLASS_ROLES = { Warrior: ['tank', 'dps'], Paladin: ['heal', 'tank'], Druid: ['heal', 'tank'],
+    Monk: ['dps', 'tank'], Cleric: ['heal'] };
+  let rosterCls = {}; // name(lower) -> { cls, level }, scraped from /characters via the bridge
+  async function loadRosterClasses() {
+    try {
+      const r = await fetch('/api/roster-classes').then(r => r.json());
+      if (r && typeof r === 'object' && !r.expired) rosterCls = r;
+    } catch {}
+    rerenderIfOpen('party', renderParty);
+  }
+  setTimeout(loadRosterClasses, 3000); setInterval(loadRosterClasses, 30 * 60000);
+  const classOf = (c) => (rosterCls[c.displayName.toLowerCase()] || {}).cls || '';
+  // null = class unknown (roster scrape unavailable) — caller falls back to the
+  // observed-behavior role. A Split Personality 2nd class isn't visible here.
+  const kitRolesOf = (c) => { const k = classOf(c); return k ? (CLASS_ROLES[k] || ['dps']) : null; };
   function classifyParty() {
     const rep = battleLog()[0]; // via retention — an expired report must not drive roles
     const cls = {};
@@ -958,20 +1005,25 @@
     const cs = [...lastRoster.characters].sort((a, b) => (a.retreated - b.retreated) || b.level - a.level);
     const counts = { dps: 0, heal: 0, tank: 0 };
     let retreated = 0;
-    for (const c of cs) c.retreated ? retreated++ : counts[of(c)]++;
+    // pips count class-kit role coverage (dual-role classes count twice);
+    // observed behavior is the fallback when the class is unknown
+    for (const c of cs) {
+      if (c.retreated) { retreated++; continue; }
+      for (const r of kitRolesOf(c) || [of(c)]) counts[r]++;
+    }
     const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
     const pf = (k) => `class="chip pf${partyFilter === k ? ' on' : ''}" data-pf="${k}"`;
     // retreated are hidden by default; the Retreated pip is the only way to see them
     const shown = cs.filter(c => partyFilter === 'ret' ? c.retreated
-      : partyFilter ? !c.retreated && of(c) === partyFilter : !c.retreated);
+      : partyFilter ? !c.retreated && (kitRolesOf(c) || [of(c)]).includes(partyFilter) : !c.retreated);
     document.getElementById('partyBody').innerHTML =
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
-      ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)}>${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
+      ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)} data-tip="Role coverage by class kit — dual-role classes (Warrior, Paladin, Druid, Monk) count in each of their roles, so the pips can sum past the party size.">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
       `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
       `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}">
         <div class="pn">${CLASS_ICON[of(c)]} ${esc(c.displayName)}</div>
-        <div class="ps">Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
+        <div class="ps">${classOf(c) ? `<b>${esc(classOf(c))}</b>${(kitRolesOf(c) || []).length > 1 ? ` <span class="muted">(${(kitRolesOf(c) || []).map(r => r.toUpperCase()).join('·')})</span>` : ''} · ` : ''}Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
       </div>`).join('') +
       (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
     document.querySelectorAll('#partyBody [data-pf]').forEach(el => el.onclick = () => {
@@ -1009,7 +1061,7 @@
     me.share = totalDmg ? me.dmg / totalDmg : 0;
     const lootText = (o) => o && o.autoDisenchanted ? `auto-disenchanted → +${(o.autoDisenchanted.dust || 0).toLocaleString()} dust` : 'kept';
     return {
-      at: Date.now(), stage: d.stage, won: !!d.won, durMs: d.displayDurationMs || 0,
+      at: Date.now(), stage: d.stage, kind: d.kind, won: !!d.won, durMs: d.displayDurationMs || 0,
       partySize: (d.participants || []).length, me, deaths,
       myLoot: (d.loot || []).filter(l => l.displayName.toLowerCase() === myName.toLowerCase())
         .map(l => ({ item: l.itemName, slot: l.slot, outcome: lootText(l.outcome) })),
@@ -1017,6 +1069,11 @@
     };
   }
   function saveBattle(rep) {
+    // Disk archive (userData/fight-logs, bridge keeps newest 100) — independent
+    // of the localStorage history and its retention; Clear Combat History
+    // deliberately leaves the disk files alone.
+    if (S().logToDisk) fetch('/api/log-fight', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rep) }).catch(() => {});
     const log = battleLog();
     log.unshift(rep);
     LS.set('battleLog', log);
@@ -1056,11 +1113,11 @@
         ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No log for this fight — recorded before the update.</div>'
         : !rep.feed.length
           ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No personal combat events this fight.</div>'
-          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length}) <button data-poplog="${i}" title="Open in its own window">⧉</button></summary><div class="ffeed">${
-              rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${fmtT(g.at)}</span>${FLINE[g.kind](g)}</div>`).join('')}</div></details>`;
+          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length}) <button data-poplog="${i}" title="Open in its own window">⧉</button></summary>${feedChips()}<div class="ffeed">${
+              feedLines(rep.feed) || '<p class="muted">Nothing in this category.</p>'}</div></details>`;
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
-        <span>Stage ${rep.stage}</span>
+        <span>Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''}</span>
         <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`} · ${ago(rep.at)}</span></div>
         <div class="bbody">
           ${idle ? '<p class="muted" style="margin:2px 0 8px">🪦 You sat this one out — downed, retreated, or joined late.</p>' : `<div class="bstats">
@@ -1079,6 +1136,13 @@
         </div></div>`;
     }).join('');
     document.querySelectorAll('.bent .bh').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
+    bindFeedChips(document.getElementById('battlesBody'), () => { // keep expanded entries open across the rerender
+      const openIdxs = [...document.querySelectorAll('.bent.open')].map(el => el.dataset.i);
+      const openLogs = [...document.querySelectorAll('.bent details[open]')].map(d => d.closest('.bent')?.dataset.i);
+      renderBattles();
+      for (const i of openIdxs) document.querySelector(`.bent[data-i="${i}"]`)?.classList.add('open');
+      for (const i of openLogs) document.querySelector(`.bent[data-i="${i}"] details`)?.setAttribute('open', '');
+    });
     // fight log in its own window — a blank popup we write the log into
     document.querySelectorAll('[data-poplog]').forEach(b => b.onclick = (e) => {
       e.preventDefault(); e.stopPropagation(); // don't toggle the <details>
@@ -1089,8 +1153,10 @@
         body{background:#0c0a16;color:#eae6f5;font:13px "Segoe UI",Arial,sans-serif;padding:12px}
         h2{font-size:1rem;color:#c9bdf0;margin:0 0 10px}
         .fl{font-size:0.85rem;padding:2px 0}.ft{color:#8a7fb0;font-variant-numeric:tabular-nums;margin-right:6px}
-        .fl.taken{color:#ff9d9d}.fl.healed{color:#7fdba3}.fl.death{color:#ff8080;font-weight:700}</style>
-        <h2>📜 Stage ${rep.stage} — ${rep.won ? '🏆 Won' : '💀 Lost'} · ${new Date(rep.at).toLocaleTimeString()}</h2>` +
+        .fl.taken{color:#ff9d9d}.fl.healed{color:#7fdba3}.fl.death{color:#ff8080;font-weight:700}
+        .fl.healout{color:#7fdba3}.fl.shielded,.fl.shieldout{color:#82aaff}
+        .fl.buffgain{color:#c792ea}.fl.bufflost{color:#8a7fb0}.fl.myevaded,.fl.dodged{color:#9ad4d4}</style>
+        <h2>📜 Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''} — ${rep.won ? '🏆 Won' : '💀 Lost'} · ${new Date(rep.at).toLocaleTimeString()}</h2>` +
         rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${fmtT(g.at)}</span>${FLINE[g.kind](g)}</div>`).join('');
       w.focus();
     });
@@ -1128,8 +1194,10 @@
       `<div class="fhead" style="margin-top:10px">📜 Combat History</div>` +
       row('Keep Battles', sel('histCap', HIST_CAPS.map(v => [v, String(v)]))) +
       row('Auto-Delete Older Than', sel('histAgeH', [[0, 'Never'], [24, '1 Day'], [72, '3 Days'], [168, '7 Days'], [720, '30 Days']]), 'Old reports are removed when history is next used.') +
+      row('Save Fight Logs to Disk', chk('logToDisk'), 'One JSON file per fight in the app\'s fight-logs folder (newest 100 kept). Independent of the history above — clearing history keeps the files.') +
       `<div class="fhead" style="margin-top:10px">🧹 Maintenance</div>
       <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        <button class="tbtn" id="openLogs" title="Show the saved fight-log files in Explorer">📂 Open Logs Folder</button>
         <button class="tbtn" id="clearHist">🗑️ Clear Combat History (${battleLog().length})</button>
         <button class="tbtn" id="resetLay" title="Puts every panel back at its default spot and resets overlay zoom/pan — reloads the app page">📐 Reset Panels &amp; Zoom</button>
         <button class="tbtn" id="resetBar" title="Restores the top toolbar's default buttons and groups">🧭 Reset Toolbar</button>
@@ -1150,6 +1218,16 @@
       }
       btn.dataset.armed = ''; fn();
     };
+    if (caps.fightLogs === false) { // old shell (main.cjs) — no logs dir; hot-pull can't fix this
+      const cb = document.querySelector('#settingsBody [data-set="logToDisk"]');
+      if (cb) cb.disabled = true;
+      const ob = document.getElementById('openLogs');
+      ob.disabled = true; ob.title = 'Needs the latest app install — update the app itself, not just a restart';
+    }
+    document.getElementById('openLogs').onclick = () =>
+      fetch('/api/open-logs', { method: 'POST' }).then(r => r.json())
+        .then(r => { if (!r.ok) infoToast('Logs folder unavailable — restart the app if it just updated.'); })
+        .catch(() => infoToast('Logs folder unavailable — restart the app if it just updated.'));
     arm(document.getElementById('clearHist'), () => {
       localStorage.removeItem('battleLog');
       rerenderIfOpen('battles', renderBattles);
@@ -1198,11 +1276,14 @@
       } else if (ev.kind === 'attack' && ev.target === myId) {
         if (ev.evaded) G('g' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'dodged', src: names[ev.attacker], n: 0 })).n++;
         else { const g = G('t' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'taken', src: names[ev.attacker], n: 0, dmg: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); }
-      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.target === myId && ev.healer !== myId) {
-        // shields get their own line kind — a shield isn't a heal
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.target === myId && ev.healer !== myId) {
+        // shields get their own line kind — a shield isn't a heal. Zero-amount
+        // events (heal at full HP, capped shield) make noise lines ("healed you
+        // 0"), so they don't get a feed group at all; totals elsewhere sum the
+        // raw events and are unaffected.
         const sh = ev.kind === 'shield';
         G((sh ? 's' : 'h') + ev.healer + b, () => ({ at: ev.atMs, kind: sh ? 'shielded' : 'healed', src: names[ev.healer], amt: 0 })).amt += ev.amount || 0;
-      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.healer === myId && ev.target !== myId) {
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.healer === myId && ev.target !== myId) {
         const sh = ev.kind === 'shield';
         G((sh ? 'so' : 'o') + ev.target + b, () => ({ at: ev.atMs, kind: sh ? 'shieldout' : 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
       } else if (ev.kind === 'defeat' && ev.unit === myId) {
@@ -1233,6 +1314,29 @@
   // shields, and damage-reduction buffs all land in unmitigated-vs-actual
   const mitTxt = (g, who) => g.mit > (g.dmg + g.mit) * 0.02 ? ` <span class="mit">(${fmtN(g.mit)} absorbed by ${who})</span>` : '';
   const buffNames = (g) => g.names.map(k => esc(prettyBuff(k))).join(', ');
+  // Feed category filter (persisted in settings) + consecutive-duplicate
+  // collapse — shared by the live feed, Combat History logs, and the pop-out.
+  const FEED_CATS = { dmg: ['hit', 'taken', 'myevaded', 'dodged', 'death'],
+    heals: ['healed', 'healout', 'shielded', 'shieldout'], buffs: ['buffgain', 'bufflost'] };
+  const feedPass = (g) => { const f = S().feedCat; return !f || f === 'all' || (FEED_CATS[f] || []).includes(g.kind); };
+  const feedChips = () => `<div class="rolechips fchips">` +
+    [['all', 'All'], ['dmg', '⚔️ Damage'], ['heals', '💚 Heals'], ['buffs', '✨ Buffs']].map(([v, l]) =>
+      `<span class="chip pf${(S().feedCat || 'all') === v ? ' on' : ''}" data-fcat="${v}">${l}</span>`).join('') + '</div>';
+  const feedLines = (gs) => { // filter -> collapse identical consecutive lines -> render
+    const out = [];
+    for (const g of gs) {
+      if (!feedPass(g)) continue;
+      const txt = FLINE[g.kind](g);
+      const prev = out[out.length - 1];
+      // collapse only near-adjacent repeats (≤2s apart) — a repeat minutes later
+      // is its own event and keeps its own timestamp
+      if (prev && prev.txt === txt && (g.at || 0) - (prev.lastAt || 0) <= 2000) { prev.n++; prev.lastAt = g.at; continue; }
+      out.push({ at: g.at, lastAt: g.at, kind: g.kind, txt, n: 1 });
+    }
+    return out.map(l => `<div class="fl ${l.kind}"><span class="ft">${fmtT(l.at)}</span>${l.txt}${l.n > 1 ? ` <b>×${l.n}</b>` : ''}</div>`).join('');
+  };
+  const bindFeedChips = (root, rerender) => root.querySelectorAll('[data-fcat]').forEach(el =>
+    el.onclick = () => { setS('feedCat', el.dataset.fcat); rerender(); });
   const FLINE = {
     hit: (g) => `⚔️ You → ${esc(g.tgt)}: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits${g.crits ? `, ${g.crits} crit` : ''})` : g.crits ? ' (crit)' : ''}${mitTxt(g, 'their defenses')}`,
     myevaded: (g) => `🌫️ ${esc(g.tgt)} evaded you${g.n > 1 ? ` ×${g.n}` : ''}`,
@@ -1266,9 +1370,11 @@
     const atBottom = (el) => !el || el.scrollHeight - el.scrollTop - el.clientHeight < 30;
     const keepScroll = atBottom(body.querySelector('.ffeed'));
     body.innerHTML =
-      `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${over ? '' : ' · live'}</div>
+      `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}</div>
       <div class="flb">${lbTable(board, Math.max(1, cursor / 1000), 'data-lbf')}</div>
-      <div class="ffeed">${feedShown.map(g => `<div class="fl ${g.kind}"><span class="ft">${fmtT(g.at)}</span>${FLINE[g.kind](g)}</div>`).join('') || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
+      ${feedChips()}
+      <div class="ffeed">${feedLines(feedShown) || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
+    bindFeedChips(body, renderFight);
     body.querySelectorAll('[data-lbf]').forEach(b => b.onclick = () => { localStorage.setItem('lbMetric', b.dataset.lbf); renderFight(); });
     const fe = body.querySelector('.ffeed');
     if (keepScroll) fe.scrollTop = fe.scrollHeight;
@@ -1343,6 +1449,17 @@
         if (d.type === 'encounter') {
           encTimes.push(Date.now()); if (encTimes.length > 6) encTimes.shift(); // cadence sample for the next-battle ETA
           LS.set('encTimes', encTimes);
+          // boss-cadence tracker: the stream's usual pattern is ~3 normal fights
+          // then a boss. Anchored only by seeing a boss — unanchored basics show
+          // nothing, and a >30 min gap (app closed mid-pattern) drops the count
+          // rather than guessing across missed encounters.
+          {
+            const basic = (d.kind || 'basic') === 'basic';
+            const sb = LS.get('sinceBoss', null);
+            if (!basic) LS.set('sinceBoss', { n: 0, at: Date.now() });
+            else if (sb && Date.now() - sb.at < 30 * 60000) LS.set('sinceBoss', { n: sb.n + 1, at: Date.now() });
+            else if (sb) localStorage.removeItem('sinceBoss');
+          }
           let replayOk = false;
           try { startFight(d); replayOk = true; } catch {} // live replay — even if we're not in it
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
@@ -1372,7 +1489,7 @@
   function toast(item) {
     const el = document.createElement('div');
     el.className = 'toast';
-    const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span data-tip="${(m.tip || '').replace(/"/g, '&quot;')}">${m.t}</span>`).join('')}</div>` : '';
+    const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span${m.crit ? ' style="color:#6ee08a;font-weight:600"' : ''} data-tip="${(m.tip || '').replace(/"/g, '&quot;')}">${m.t}</span>`).join('')}</div>` : '';
     const qual = item.sacred ? `<span class="sacredq">${item.quality}</span>`
       : item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${item.quality}</span>` : item.quality;
     el.innerHTML = `
@@ -1514,6 +1631,7 @@
   wirePanel('stats', 'statsbar', 'toggle', 'lay.stats'); // stats shares the panel shell (no close button — always open)
 
   // ---- version + auto-update feedback ----
+  let caps = {}; // /api/version payload — shell/bridge capability flags
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
     appVersion = v.version;
     document.getElementById('ver').textContent = 'v' + v.version;
@@ -1522,7 +1640,8 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 71) showRestartBanner();
+    if (!v.bridgeRev || v.bridgeRev < 73) showRestartBanner(); // 73: chancing wizard, expiry detection, /api/broadcast, fight logs
+    caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
   // Full-width system banner across the top; one per id. Used for restart
@@ -1649,6 +1768,54 @@
     document.getElementById('dismissAll').after(el); updateDismissAll();
     document.getElementById('fbText').focus();
   }
+  // Operator broadcast composer (button gated by OPERATOR_ITEMS). Same inline-toast
+  // pattern as feedback; empty message + Send clears the current broadcast.
+  function sendBroadcast() {
+    if (document.getElementById('bcToast')) return; // one at a time
+    const el = document.createElement('div');
+    el.className = 'toast'; el.id = 'bcToast';
+    el.innerHTML = `<div class="th"><span class="tn">📣 Broadcast to all running apps</span></div>
+      <textarea id="bcText" rows="3" placeholder="Message… (send empty to clear the current broadcast)" style="width:100%;background:#1c1830;color:#eae6f5;border:1px solid rgba(160,140,255,0.35);border-radius:7px;padding:6px;font:inherit;resize:vertical"></textarea>
+      <div class="tacts" style="margin-top:8px"><button data-act="send">Send</button><button data-act="x">Cancel</button></div>`;
+    const close = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="x"]').onclick = close;
+    el.querySelector('[data-act="send"]').onclick = (e) => {
+      const msg = document.getElementById('bcText').value.trim(); // empty = clear
+      e.target.disabled = true; // no concurrent sends — out-of-order posts could resurrect an older message
+      fetch('/api/broadcast', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+        .then(r => r.json()).then(r => infoToast(r.ok ? (msg ? '📣 Broadcast live.' : '📣 Broadcast cleared.') : 'Broadcast failed.'))
+        .catch(() => infoToast('Broadcast failed — restart the app if it just updated.'))
+        .finally(close);
+    };
+    document.getElementById('dismissAll').after(el); updateDismissAll();
+    document.getElementById('bcText').focus();
+  }
+  // Operator feedback inbox: newest-50 list + a new-feedback toast. Gated by
+  // the same OPERATOR_ITEMS name check as the toolbar item; non-operators never
+  // poll. Opening the panel marks everything read.
+  function renderInbox() {
+    const bodyEl = document.getElementById('inboxBody');
+    fetch('/api/feedback-list').then(r => r.json()).then(list => {
+      if (!Array.isArray(list)) list = [];
+      if (list.length) LS.set('inboxSeen', list[0].id);
+      bodyEl.innerHTML = list.length ? list.map(f => `
+        <div class="bent open"><div class="bh"><span class="bsub">${new Date(f.ts).toLocaleString()}${f.version ? ` · v${esc(f.version)}` : ''}${f.contact ? ` · 📇 ${esc(f.contact)}` : ''}</span></div>
+        <div class="bbody" style="white-space:pre-wrap">${esc(f.message)}</div></div>`).join('')
+        : '<p class="muted">No feedback yet.</p>';
+    }).catch(() => { bodyEl.innerHTML = '<p class="muted">Couldn\'t load — restart the app if it just updated.</p>'; });
+  }
+  async function pollFeedback() {
+    if (itemHidden('inbox')) return; // not an operator (or name not known yet)
+    try {
+      const list = await fetch('/api/feedback-list').then(r => r.json());
+      if (!Array.isArray(list) || !list.length) return;
+      const seen = Math.max(+LS.get('inboxSeen', 0), +LS.get('inboxNotified', 0));
+      const fresh = list.filter(f => f.id > seen).length;
+      if (fresh) { infoToast(`📬 ${fresh} new feedback message${fresh > 1 ? 's' : ''} — see the Feedback Inbox`); LS.set('inboxNotified', list[0].id); }
+    } catch {}
+  }
+  setTimeout(pollFeedback, 15000); setInterval(pollFeedback, 5 * 60000);
+
   let _lastLog = 0;
   function logRemote(level, message) {
     const now = Date.now(); if (now - _lastLog < 2000) return; _lastLog = now; // throttle
