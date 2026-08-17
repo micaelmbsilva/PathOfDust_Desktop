@@ -35,18 +35,22 @@
       "!twitch.json",
       "!harvest.mjs",
       "!twitch-login.mjs",
-      "!*.md"
+      "!*.md",
+      "!.claude/**",
+      "!wiki/**",
+      "!scrape.test.mjs",
+      "!findings-*.json",
+      "!intel-*.json",
+      "!run.txt"
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.png"
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "artifactName": "PathOfDust-Setup.${ext}",
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico"
+      "artifactName": "PathOfDust-Setup.${ext}"
     },
     "publish": {
       "provider": "github",

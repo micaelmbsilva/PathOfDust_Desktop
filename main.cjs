@@ -221,8 +221,9 @@ async function start() {
     ...(mb.x != null && mb.y != null ? { x: mb.x, y: mb.y } : {}),
     backgroundColor: '#0c0a16', autoHideMenuBar: true, title: GAME_NAME,
     // Always the bundled copy, never the hot-updated dir — the updater writes
-    // files as text, so binaries only ever arrive with the installer.
-    icon: path.join(__dirname, 'assets', 'icon.ico'),
+    // files as text, so binaries only ever arrive with the installer. Packaged
+    // builds take the icon off the exe anyway; this is what dev runs show.
+    icon: path.join(__dirname, 'assets', 'icon.png'),
   });
   initWindowPersistence(win, winState); // remember main + child windows across launches
 
