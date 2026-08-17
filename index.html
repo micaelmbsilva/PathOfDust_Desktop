@@ -603,7 +603,7 @@
         ` data-tip="${r.repairAll.disabled ? 'Not enough dust to repair everything' : 'Repair every damaged equipped item with dust'}">` +
         `<span class="l">🛠️ Repair All</span><span class="v">${r.repairAll.cost.toLocaleString()}d</span></div>` : '';
       // XP progress (from the character sheet's own bar)
-      const xpRow = r.xp?.label ? `<div class="srow"><span class="l">${r.xp.label}</span></div><div class="xpbar"><div style="width:${r.xp.pct}%"></div></div>` : '';
+      const xpRow = r.xp?.label ? `<div class="srow"><span class="l">${esc(r.xp.label)}</span></div><div class="xpbar"><div style="width:${r.xp.pct}%"></div></div>` : '';
       // Wings of Flight — owners only; click toggles flying
       const wingsRow = r.wings?.owned ? `<div class="srow wings ${r.wings.flying ? 'on' : ''}" id="wingsRow" title="Wings of Flight — hover above the crowd. Click to toggle.">` +
         `<span class="l">🕊️ Flying</span><span class="v">${r.wings.flying ? 'On' : 'Off'}</span></div>`
@@ -614,7 +614,7 @@
       // Retreated (any non-Reforge countdown card the site shows): banner + time left
       const mmssLeft = (ms) => { const s = Math.max(0, Math.round((ms - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
       const retreatRow = (r.countdowns || []).filter(c => !/Reforge/i.test(c.title))
-        .map(c => `<div class="srow retreat"><span class="l">🏳️ ${c.title}</span><span class="v">${mmssLeft(c.resetMs)}</span></div>`).join('');
+        .map(c => `<div class="srow retreat"><span class="l">🏳️ ${esc(c.title)}</span><span class="v">${mmssLeft(c.resetMs)}</span></div>`).join('');
       // Next-battle ETA (estimated from recent battle cadence; ticked by its 1s
       // interval). Rendered with its live value — a hidden default would blink
       // out on every stats refresh until the next tick.
@@ -624,7 +624,7 @@
         `<span class="l">🎉 Join the Adventure</span><span class="v">Start</span></div>` : '';
       document.getElementById('rows').innerHTML = joinRow + nextRow + retreatRow + arRow + raRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
-        `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
+        `<span class="l">${esc(s.label)}</span><span class="v">${esc(s.value)}</span></div>`).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
       const raEl = document.getElementById('raRow');
       if (raEl && !r.repairAll.disabled) raEl.onclick = async () => {
@@ -804,7 +804,8 @@
 
   // ---- Party modal + battle reports (all data from the game WS) ----
   let lastRoster = null; // latest `state` message
-  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   // Panels open at close reopen next launch (positions already persist via lay.*)
   const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
   let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
@@ -1747,13 +1748,13 @@
   function toast(item) {
     const el = document.createElement('div');
     el.className = 'toast';
-    const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span${m.crit ? ' style="color:#6ee08a;font-weight:600"' : ''} data-tip="${(m.tip || '').replace(/"/g, '&quot;')}">${m.t}</span>`).join('')}</div>` : '';
-    const qual = item.sacred ? `<span class="sacredq">${item.quality}</span>`
-      : item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${item.quality}</span>` : item.quality;
+    const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span${m.crit ? ' style="color:#6ee08a;font-weight:600"' : ''} data-tip="${esc(m.tip || '')}">${esc(m.t)}</span>`).join('')}</div>` : '';
+    const qual = item.sacred ? `<span class="sacredq">${esc(item.quality)}</span>`
+      : item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${esc(item.quality)}</span>` : esc(item.quality);
     el.innerHTML = `
-      <div class="th"><span class="tn${item.sacred ? ' sacred' : item.unique ? ' unique' : ''}">${item.name}</span>
-        <span class="ts">${item.slot} · ${item.tier} · ${qual}</span></div>
-      ${(item.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${i.t}</div>`).join('')}
+      <div class="th"><span class="tn${item.sacred ? ' sacred' : item.unique ? ' unique' : ''}">${esc(item.name)}</span>
+        <span class="ts">${esc(item.slot)} · ${esc(item.tier)} · ${qual}</span></div>
+      ${(item.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${esc(i.t)}</div>`).join('')}
       ${mods}
       <div class="tacts">
         <button class="danger" data-act="dis">Disenchant</button>
@@ -1784,7 +1785,7 @@
       const before = await dust();
       stampCraft(); // currency action — keep it out of the battle-toast delta
       await action('disenchant', { item_id: item.id });
-      if (before != null) { const after = await dust(); if (after > before) infoToast(`💰 +${(after - before).toLocaleString()} dust from ${item.name}`); }
+      if (before != null) { const after = await dust(); if (after > before) infoToast(`💰 +${(after - before).toLocaleString()} dust from ${esc(item.name)}`); }
       close();
     };
     const dismissAll = document.getElementById('dismissAll');
@@ -1999,7 +2000,7 @@
     if (opts.dedupe) document.querySelectorAll(opts.dedupe).forEach(t => t.remove());
     const el = document.createElement('div');
     el.className = 'toast' + (opts.cls ? ' ' + opts.cls : '');
-    el.innerHTML = `<div class="th"><span class="tn">${title}</span>${opts.sub ? `<span class="ts">${opts.sub}</span>` : ''}</div>` +
+    el.innerHTML = `<div class="th"><span class="tn">${esc(title)}</span>${opts.sub ? `<span class="ts">${esc(opts.sub)}</span>` : ''}</div>` +
       (body ? `<div class="tmods"><span>${body}</span></div>` : '') +
       `<div class="tacts">${actions.map((a, i) => `<button data-mk="${i}">${a.label}</button>`).join('')}<button data-mk="x">${opts.dismissLabel || 'Dismiss'}</button></div>`;
     const close = () => { el.remove(); updateDismissAll(); };

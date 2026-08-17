@@ -44,6 +44,8 @@
 <script src="/tree.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   $('legend').innerHTML = PodTree.legend;
 
   async function api(endpoint, fields) {
@@ -66,7 +68,7 @@
     const wrap = document.createElement('span');
     wrap.className = 'chip';
     wrap.innerHTML = `Class <select id="archSel">` +
-      a.options.map(o => `<option value="${o.value}"${o.selected ? ' selected' : ''}>${o.label}</option>`).join('') + `</select>`;
+      a.options.map(o => `<option value="${esc(o.value)}"${o.selected ? ' selected' : ''}>${esc(o.label)}</option>`).join('') + `</select>`;
     $('bar').appendChild(wrap);
     $('archSel').onchange = async () => {
       const v = $('archSel').value;
@@ -84,10 +86,10 @@
     catch { $('err').textContent = 'Can\'t reach the game right now'; loadArchetype(); return; } // still sets the title (+ class chip) if /api/me works
 
     $('bar').innerHTML =
-      `<span class="chip">🪓 <strong>${p.points}</strong></span>
+      `<span class="chip">🪓 <strong>${esc(p.points)}</strong></span>
        <button class="btn-save" id="save" ${p.canSave ? '' : 'disabled'}>Save Changes</button>
        ${p.canReset ? '<button class="btn-respec" id="reset">Reset Preview</button>' : ''}
-       <button class="btn-respec" id="respec">${p.respecLabel}</button>
+       <button class="btn-respec" id="respec">${esc(p.respecLabel)}</button>
        ${p.dirty ? '<span class="chip" style="color:#ffd76b;border-color:rgba(255,215,107,0.4)">Unsaved Changes</span>' : ''}`;
     $('save').onclick = async () => { await api('passives/save', {}); refresh(); };
     loadArchetype(); // class switcher chip (async, appended to the bar)
@@ -112,7 +114,7 @@
     $('secBar').innerHTML = `<h2 style="width:100%">🧠 2nd Class — Split Personality</h2>
       <span class="chip">Class <select id="secSel">
         ${cur ? '' : '<option value="">— pick one —</option>'}
-        ${s.options.map(o => `<option value="${o.value}"${o.selected ? ' selected' : ''}>${o.label}</option>`).join('')}
+        ${s.options.map(o => `<option value="${esc(o.value)}"${o.selected ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
       </select></span>
       <span class="chip muted">Points come from the same pool as your primary tree.</span>`;
     $('secSel').onchange = async () => {
