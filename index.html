@@ -607,7 +607,7 @@
   const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
     lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
-    histCap: 40, histAgeH: 0 };
+    histCap: 40, histAgeH: 0, logToDisk: true };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
   const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
   (function migrateSettings() { // one-time: rev-78 preset selects -> per-kind checkboxes
@@ -1017,7 +1017,7 @@
     me.share = totalDmg ? me.dmg / totalDmg : 0;
     const lootText = (o) => o && o.autoDisenchanted ? `auto-disenchanted → +${(o.autoDisenchanted.dust || 0).toLocaleString()} dust` : 'kept';
     return {
-      at: Date.now(), stage: d.stage, won: !!d.won, durMs: d.displayDurationMs || 0,
+      at: Date.now(), stage: d.stage, kind: d.kind, won: !!d.won, durMs: d.displayDurationMs || 0,
       partySize: (d.participants || []).length, me, deaths,
       myLoot: (d.loot || []).filter(l => l.displayName.toLowerCase() === myName.toLowerCase())
         .map(l => ({ item: l.itemName, slot: l.slot, outcome: lootText(l.outcome) })),
@@ -1025,6 +1025,11 @@
     };
   }
   function saveBattle(rep) {
+    // Disk archive (userData/fight-logs, bridge keeps newest 100) — independent
+    // of the localStorage history and its retention; Clear Combat History
+    // deliberately leaves the disk files alone.
+    if (S().logToDisk) fetch('/api/log-fight', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rep) }).catch(() => {});
     const log = battleLog();
     log.unshift(rep);
     LS.set('battleLog', log);
@@ -1136,8 +1141,10 @@
       `<div class="fhead" style="margin-top:10px">📜 Combat History</div>` +
       row('Keep Battles', sel('histCap', HIST_CAPS.map(v => [v, String(v)]))) +
       row('Auto-Delete Older Than', sel('histAgeH', [[0, 'Never'], [24, '1 Day'], [72, '3 Days'], [168, '7 Days'], [720, '30 Days']]), 'Old reports are removed when history is next used.') +
+      row('Save Fight Logs to Disk', chk('logToDisk'), 'One JSON file per fight in the app\'s fight-logs folder (newest 100 kept). Independent of the history above — clearing history keeps the files.') +
       `<div class="fhead" style="margin-top:10px">🧹 Maintenance</div>
       <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        <button class="tbtn" id="openLogs" title="Show the saved fight-log files in Explorer">📂 Open Logs Folder</button>
         <button class="tbtn" id="clearHist">🗑️ Clear Combat History (${battleLog().length})</button>
         <button class="tbtn" id="resetLay" title="Puts every panel back at its default spot and resets overlay zoom/pan — reloads the app page">📐 Reset Panels &amp; Zoom</button>
         <button class="tbtn" id="resetBar" title="Restores the top toolbar's default buttons and groups">🧭 Reset Toolbar</button>
@@ -1158,6 +1165,16 @@
       }
       btn.dataset.armed = ''; fn();
     };
+    if (caps.fightLogs === false) { // old shell (main.cjs) — no logs dir; hot-pull can't fix this
+      const cb = document.querySelector('#settingsBody [data-set="logToDisk"]');
+      if (cb) cb.disabled = true;
+      const ob = document.getElementById('openLogs');
+      ob.disabled = true; ob.title = 'Needs the latest app install — update the app itself, not just a restart';
+    }
+    document.getElementById('openLogs').onclick = () =>
+      fetch('/api/open-logs', { method: 'POST' }).then(r => r.json())
+        .then(r => { if (!r.ok) infoToast('Logs folder unavailable — restart the app if it just updated.'); })
+        .catch(() => infoToast('Logs folder unavailable — restart the app if it just updated.'));
     arm(document.getElementById('clearHist'), () => {
       localStorage.removeItem('battleLog');
       rerenderIfOpen('battles', renderBattles);
@@ -1206,11 +1223,14 @@
       } else if (ev.kind === 'attack' && ev.target === myId) {
         if (ev.evaded) G('g' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'dodged', src: names[ev.attacker], n: 0 })).n++;
         else { const g = G('t' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'taken', src: names[ev.attacker], n: 0, dmg: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); }
-      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.target === myId && ev.healer !== myId) {
-        // shields get their own line kind — a shield isn't a heal
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.target === myId && ev.healer !== myId) {
+        // shields get their own line kind — a shield isn't a heal. Zero-amount
+        // events (heal at full HP, capped shield) make noise lines ("healed you
+        // 0"), so they don't get a feed group at all; totals elsewhere sum the
+        // raw events and are unaffected.
         const sh = ev.kind === 'shield';
         G((sh ? 's' : 'h') + ev.healer + b, () => ({ at: ev.atMs, kind: sh ? 'shielded' : 'healed', src: names[ev.healer], amt: 0 })).amt += ev.amount || 0;
-      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.healer === myId && ev.target !== myId) {
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.healer === myId && ev.target !== myId) {
         const sh = ev.kind === 'shield';
         G((sh ? 'so' : 'o') + ev.target + b, () => ({ at: ev.atMs, kind: sh ? 'shieldout' : 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
       } else if (ev.kind === 'defeat' && ev.unit === myId) {
@@ -1522,6 +1542,7 @@
   wirePanel('stats', 'statsbar', 'toggle', 'lay.stats'); // stats shares the panel shell (no close button — always open)
 
   // ---- version + auto-update feedback ----
+  let caps = {}; // /api/version payload — shell/bridge capability flags
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
     appVersion = v.version;
     document.getElementById('ver').textContent = 'v' + v.version;
@@ -1530,7 +1551,8 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 72) showRestartBanner(); // 72: chancing-wizard parse + expiry detection + /api/broadcast
+    if (!v.bridgeRev || v.bridgeRev < 73) showRestartBanner(); // 73: chancing wizard, expiry detection, /api/broadcast, fight logs
+    caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
   // Full-width system banner across the top; one per id. Used for restart
