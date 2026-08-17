@@ -1808,14 +1808,25 @@
   // Clicking a toast strands keyboard focus in the parent page — the cross-origin
   // chat iframe then ignores typing until refocused. Hand focus back after any
   // toast interaction while the chat panel is open.
-  document.getElementById('toasts').addEventListener('click', () => setTimeout(() => {
-    const p = document.getElementById('chatpanel');
-    if (p.classList.contains('open') && !p.classList.contains('collapsed')) {
-      if (document.activeElement) document.activeElement.blur(); // release parent-page focus first
-      fetch('/api/refocus', { method: 'POST' }).catch(() => {});  // shell-level focus (authoritative)
-      document.getElementById('chatFrame').focus();
-    }
-  }, 50));
+  //
+  // BUT the feedback/broadcast composers are toasts with a textarea, and this
+  // used to blur it 50ms after you clicked into it — you had to hold the mouse
+  // to type. So bail whenever the click is into (or leaves focus in) an editable
+  // field: those toasts want the focus kept, not handed to chat.
+  const EDITABLE = 'textarea, input, select, [contenteditable]';
+  document.getElementById('toasts').addEventListener('click', (e) => {
+    if (e.target.closest(EDITABLE)) return;
+    setTimeout(() => {
+      const ae = document.activeElement;
+      if (ae && ae.matches && ae.matches(EDITABLE)) return; // focus moved into a field — leave it
+      const p = document.getElementById('chatpanel');
+      if (p.classList.contains('open') && !p.classList.contains('collapsed')) {
+        if (ae) ae.blur(); // release parent-page focus first
+        fetch('/api/refocus', { method: 'POST' }).catch(() => {}); // shell-level focus (authoritative)
+        document.getElementById('chatFrame').focus();
+      }
+    }, 50);
+  });
 
   // ---- Reforge Gear reminder: once per hour, shared between a 1k-dust option
   // and the 1k channel-points redemption. Driven by the live card state from
