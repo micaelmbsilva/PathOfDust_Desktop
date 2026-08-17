@@ -1555,6 +1555,9 @@
     saveNetStats();
   }
 
+  // Cross-window notifications (Fight History follows fight ends off this).
+  const podChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('pod') : null;
+
   function watchEvents() {
     let ws, t = null;
     try { ws = new WebSocket('wss://adventure.lokati.net/ws'); } catch { return; }
@@ -1583,6 +1586,11 @@
             else if (sb && Date.now() - sb.at < 30 * 60000) LS.set('sinceBoss', { n: sb.n + 1, at: Date.now() });
             else if (sb) localStorage.removeItem('sinceBoss');
           }
+          // Tell the other windows a fight just resolved. The game saves its
+          // summary before broadcasting, so /fights.json already has this fight
+          // by the time anyone reacts. Same-origin channel, so it reaches the
+          // Fight History pane whether it's a panel iframe or popped out.
+          try { podChannel?.postMessage({ type: 'encounter', at: Date.now(), stage: d.stage }); } catch {}
           try { startFight(d); } catch {} // live replay — even if we're not in it
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
             armBattleToast(d);
