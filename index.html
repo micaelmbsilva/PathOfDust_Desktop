@@ -1156,9 +1156,9 @@
       `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
       `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
-        <div class="pn">${CLASS_ICON[of(c)]} ${esc(c.displayName)}</div>
+        <div class="pn">${esc(c.displayName)}</div>
         ${classOf(c) ? `<div class="pc" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></div>` : ''}
-        <div class="ps">Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
+        <div class="ps">Lv ${c.level}${c.downedUntilMs ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
       </div>`).join('') +
       (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
     document.querySelectorAll('#partyBody [data-pf]').forEach(el => el.onclick = () => {
@@ -1918,14 +1918,18 @@
   // ---- version + auto-update feedback ----
   let caps = {}; // /api/version payload — shell/bridge capability flags (before restorePanels: renderSettings reads it)
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
-    appVersion = v.version;
-    document.getElementById('ver').textContent = 'v' + v.version;
+    // App version and interface revision are separate numbers — the second only
+    // moves on a hot-pull, so it's the one that tells you a same-shell update landed.
+    appVersion = v.version + (v.ui ? ` · ui${v.ui}` : '');
+    const ver = document.getElementById('ver');
+    ver.textContent = 'v' + appVersion;
+    ver.title = `App ${v.version}${v.ui ? ` · interface revision ${v.ui}` : ''}`;
     const n = document.getElementById('hname').textContent;
     setTitle(n && n !== 'Character' ? n : '');
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 81) showRestartBanner(); // 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 82) showRestartBanner(); // 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 

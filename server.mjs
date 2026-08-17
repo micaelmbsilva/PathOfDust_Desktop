@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 81;
+const BRIDGE_REV = 82;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -576,14 +576,17 @@ const srv = createServer(async (req, res) => {
       let webRev = 0;
       try { webRev = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
       // Displayed version is derived, not the raw semver: the shell major splits
-      // into major.minor (29 -> "2.9", 30 -> "3.0") and the patch slot shows the
-      // interface revision — e.g. shell 29.0.0 + interface 38 -> "2.9.38". The
-      // real semver keeps rising 29.x/30.x so electron-updater ordering and
-      // release tags are untouched; this is purely the user-facing number.
+      // into major.minor (29 -> "2.9", 30 -> "3.0") and the rest of the semver
+      // follows, so 30.0.0 reads "3.0.0". The real semver keeps rising so
+      // electron-updater ordering and release tags are untouched; this is purely
+      // the user-facing number. The interface revision is reported SEPARATELY as
+      // `ui` rather than occupying the patch slot — parking it there meant a
+      // fresh 30.0.0 shell announced itself as "3.0.99", which reads like a
+      // 99th patch of a release that just came out.
       // Old shells without global.__version fall back to the bare revision.
-      const maj = +((globalThis.__version || '').split('.')[0]);
-      const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${webRev}` : String(webRev);
-      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV,
+      const [maj, min, patch] = (globalThis.__version || '').split('.').map(Number);
+      const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${min || 0}${patch ? '.' + patch : ''}` : String(webRev);
+      return json(res, { version, ui: webRev, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV,
         fightLogs: !!globalThis.__fightLogsDir }); // shell capability — old main.cjs never sets the dir
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
