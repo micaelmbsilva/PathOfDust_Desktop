@@ -297,19 +297,37 @@ const siteKey = () => localStorage.getItem('pod.key') || '';
 const keyDenied = () => view(el('p', { class: 'status' }, 'This page needs a key — open it once with ?key=… appended.'));
 
 // Hidden route: #/watchlist — the OP interactions list, no nav links to it.
+// Filterable by entry type and by class.
 async function watchlist() {
   const r = await fetch('api/watchlist?key=' + encodeURIComponent(siteKey()));
   if (r.status === 403) return keyDenied();
   if (!r.ok) throw new Error('watchlist ' + r.status);
   const { interactions } = await r.json();
-  view(
-    el('p', null, el('a', { href: '#/' }, '← Ladder')),
-    el('h1', null, 'OP interactions watchlist'),
-    el('div', { class: 'stack' }, arr(interactions).map(i => el('div', { class: 'card' },
-      el('div', { class: 'bname' }, str(i.title)),
-      el('div', { class: 'chips', style: 'margin:6px 0 0' },
-        arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
-      el('p', null, str(i.text))))));
+  const items = arr(interactions);
+  const types = [...new Set(items.map(i => str(i.type)).filter(Boolean))];
+  const classes = [...new Set(items.flatMap(i => arr(i.classes).map(str)))].sort();
+  let typeF = null, clsF = null;
+  const wrap = el('div', null);
+  function render() {
+    const shown = items.filter(i => (!typeF || str(i.type) === typeF) && (!clsF || arr(i.classes).map(str).includes(clsF)));
+    const chip = (label, on, fn) => { const e = el('span', { class: 'chip' + (on ? ' on' : '') }, label); e.onclick = fn; return e; };
+    wrap.replaceChildren(
+      el('div', { class: 'chips', style: 'margin:0 0 8px' }, [
+        chip('All types', !typeF, () => { typeF = null; render(); }),
+        ...types.map(t => chip(t, typeF === t, () => { typeF = typeF === t ? null : t; render(); }))]),
+      el('div', { class: 'chips', style: 'margin:0 0 14px' }, [
+        chip('All classes', !clsF, () => { clsF = null; render(); }),
+        ...classes.map(c => chip(c, clsF === c, () => { clsF = clsF === c ? null : c; render(); }))]),
+      el('div', { class: 'stack' }, shown.map(i => el('div', { class: 'card' },
+        el('div', { class: 'bname' }, str(i.title)),
+        el('div', { class: 'chips', style: 'margin:6px 0 0' },
+          i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
+          arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
+        el('p', null, str(i.text))))),
+      shown.length ? null : el('p', { class: 'status' }, 'Nothing matches this filter.'));
+  }
+  render();
+  view(el('p', null, el('a', { href: '#/' }, '← Ladder')), el('h1', null, 'OP interactions watchlist'), wrap);
 }
 
 function itemCard(it) {
@@ -412,11 +430,16 @@ async function advisor(name) {
     for (const kw of kws) { const x = rates.find(q => str(q.affix).includes(kw)); if (x) return +x.per_tier; }
     return 0;
   };
-  const mods = arr(b.equipped).flatMap(it => arr(it.mods).map(m => str(m && m.t).toLowerCase()));
-  const corpus = mods.concat(arr(b.equipped).map(it => str(it.implicit).toLowerCase())).join(' | ');
-  const count = (kw) => corpus.split(kw).length - 1;
-  const modValsOf = (kws) => mods.filter(t => kws.some(kw => t.includes(kw))
-    && !(kws[0] === 'dmg dealt' && t.includes('crit dmg'))).reduce((s, t) => s + num(t.match(/[\d.]+/)?.[0]), 0);
+  const mods = arr(b.equipped).flatMap(it => arr(it.mods).map(m => str(m && m.t).toLowerCase()))
+    .concat(arr(b.equipped).map(it => str(it.implicit).toLowerCase()).filter(Boolean));
+  const matchOf = (kws) => mods.filter(t => kws.some(kw => t.includes(kw))
+    && !(kws[0] === 'dmg dealt' && t.includes('crit dmg')));
+  const modValsOf = (kws) => matchOf(kws).reduce((s, t) => s + num(t.match(/[\d.]+/)?.[0]), 0);
+  // A match's weight = its rolled value in "t100 average mod" units (a t100 avg
+  // roll ≈ 1.0), so a +200% mod counts for far more than a +10% one. Affixes
+  // with no live rate data fall back to 0.5 per line.
+  const matchWeight = (kws) => { const rate = rateOf(kws);
+    return matchOf(kws).reduce((s, t) => s + (rate ? num(t.match(/[\d.]+/)?.[0]) / (rate * 100) : 0.5), 0); };
 
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
   function render() {
@@ -426,10 +449,11 @@ async function advisor(name) {
         const build = arr(cb.builds)[0];
         let score = 0; const hits = [];
         arr(build && build.rolls).forEach((roll, i) => {
-          let n = Math.max(...(ROLL_KW[roll.s] || [str(roll.s).toLowerCase()]).map(count), 0);
-          if (roll.s === 'Increased Dmg Dealt') n = Math.max(0, n - count('crit dmg dealt'));
-          if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${n}`); }
+          const kws = ROLL_KW[roll.s] || [str(roll.s).toLowerCase()];
+          const n = matchWeight(kws);
+          if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${(Math.round(n * 10) / 10)}`); }
         });
+        score = Math.round(score * 10) / 10;
         return { cls, build, score, hits };
       }).filter(x => x.build).sort((a, z) => z.score - a.score);
     const best = ranked[0];

@@ -532,7 +532,7 @@
     {
      "name": "Evergrowth Engine",
      "tagline": "Healing power that compounds into action speed, DoT heals and shields",
-     "why": "Regrowth and Blooming Field are separate MULTIPLICATIVE ×1.3 healing multipliers. Evergrowth turns 9% of total healing power into Lingering Effect, Seed of Life turns every tick into shields, and Wild Surge makes healing power above 100% shorten your action interval further. Every stat purchase accelerates the others.",
+     "why": "Regrowth and Blooming Field are separate MULTIPLICATIVE ×1.3 healing multipliers. Evergrowth turns 9% of total healing power into Lingering Effect and Seed of Life turns every tick into shields; healing power past 100% already shortens your action interval on its own. Nature's Blessing + Bloom Strike add +60% crit chance for heal-crits. (Wild Surge/Overgrowth are still inactive — banked points, avoid for now.)",
      "order": [
       {
        "n": "Regrowth",
@@ -555,11 +555,11 @@
        "r": 3
       },
       {
-       "n": "Wild Surge",
+       "n": "Nature's Blessing",
        "r": 4
       },
       {
-       "n": "Overgrowth",
+       "n": "Bloom Strike",
        "r": 3
       }
      ],
