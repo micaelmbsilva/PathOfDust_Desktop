@@ -444,14 +444,14 @@ async function checkFeedback() {
   } catch {}
 }
 
-// Hidden route: #/intel — the investigation console. One button pulls every
-// public source (roster, wiki, patch notes), packs it with the observed-play
-// aggregates and has Claude look for broken/OP interactions; the findings become
-// the watchlist and feed the advisor. Keyed, no nav links to it.
+// Hidden route: #/intel — the investigation console. Rescrapes every public
+// source on demand and shows the newest findings; the analysis itself runs in
+// Claude Code (the pod-investigate skill reads api/dossier and posts back to
+// api/findings), so nothing here spends API credit. Keyed, no nav links to it.
 async function intelData() {
-  const r = await fetch('api/investigate?key=' + encodeURIComponent(siteKey()));
+  const r = await fetch('api/intel?key=' + encodeURIComponent(siteKey()));
   if (r.status === 403) return null;
-  if (!r.ok) throw new Error('investigate ' + r.status);
+  if (!r.ok) throw new Error('intel ' + r.status);
   return r.json();
 }
 
@@ -459,23 +459,13 @@ async function intel() {
   const d = await intelData();
   if (!d) return keyDenied();
   const wrap = el('div', null);
-  let force = false, notice = null; // set when the server refuses a too-soon rerun
   const paint = (data) => {
-    const run = data.run || {}, latest = data.latest;
-    const busy = run.status === 'running';
-    const btn = el('button', busy ? { disabled: 'disabled' } : null,
-      busy ? 'Pulling…' : force ? 'Run anyway' : 'Pull everything + investigate');
+    const latest = data.latest;
+    const btn = el('button', data.scraping ? { disabled: 'disabled' } : null,
+      data.scraping ? 'Pulling…' : 'Pull fresh game data');
     btn.onclick = async () => {
       btn.disabled = true;
-      const r = await fetch('api/investigate?key=' + encodeURIComponent(siteKey())
-        + (force ? '&force=1' : ''), { method: 'POST' });
-      if (r.status === 429) { // cooldown — offer the override rather than silently doing nothing
-        notice = str((await r.json()).error);
-        force = true;
-        paint(data);
-        return;
-      }
-      notice = null;
+      await fetch('api/rescrape?key=' + encodeURIComponent(siteKey()), { method: 'POST' });
       poll();
     };
     // Wrapped in one element: replaceChildren stringifies arrays and nulls,
@@ -484,15 +474,22 @@ async function intel() {
       el('div', { class: 'card' },
         el('div', { class: 'lvrow' }, btn,
           el('span', { class: 'sub', style: 'margin:0' },
-            notice ? notice
-              : !data.configured ? 'ANTHROPIC_API_KEY is not set on the server — the run will fail.'
-              : busy ? `running: ${str(run.step) || 'working'} — started ${agoText(run.startedAt)}`
-              : run.status === 'failed' ? `last run failed: ${str(run.error)}`
-              : run.finishedAt ? `last run finished ${agoText(run.finishedAt)}`
-              : 'takes a few minutes: rescrapes the roster, wiki and patch notes, then analyses.')),
+            data.scraping ? 'walking the roster, wiki and patch notes — a couple of minutes'
+              : data.lastScrape ? `game data last pulled ${agoText(data.lastScrape)}`
+              : 'no scrape has completed yet')),
+        // Each scrape logs and swallows its own failure, so name what is missing
+        // rather than letting an analysis run against a half-empty dossier.
+        (data.sources && (!data.sources.wikiLoaded || !data.sources.patchNoteDates))
+          ? el('p', { style: 'margin:12px 0 0' }, '⚠ ' + [
+              !data.sources.wikiLoaded && 'the wiki has not loaded',
+              !data.sources.patchNoteDates && 'no patch notes have loaded',
+            ].filter(Boolean).join(' and ') + ' — the dossier is incomplete until a pull succeeds.') : null,
+        el('p', { class: 'sub', style: 'margin:12px 0 0' },
+          'Then run /pod-investigate in Claude Code: it reads the compiled dossier, hunts broken and OP interactions, and posts the findings back here — they become the watchlist and steer the advisor.'),
         latest ? el('p', { style: 'margin:12px 0 0' }, str(latest.summary)) : null,
         latest ? el('p', { class: 'sub', style: 'margin:8px 0 0' },
-          `last investigation ${agoText(latest.ts)} · ${str(latest.model)}`) : null),
+          `last investigation ${agoText(latest.ts)} · ${str(latest.model)}`)
+          : el('p', { class: 'sub', style: 'margin:8px 0 0' }, 'No investigation yet — the watchlist is still the hand-curated file.')),
       latest && arr(latest.interactions).length ? [
         el('h2', null, `Interactions (${arr(latest.interactions).length})`),
         el('div', { class: 'stack' }, arr(latest.interactions).map(i => el('div', { class: 'card' },
@@ -520,18 +517,18 @@ async function intel() {
       ] : null,
     ]));
   };
-  // Poll only while a run is in flight, and only while this page is open.
+  // Poll only while a scrape is in flight, and only while this page is open.
   async function poll() {
     if (location.hash !== '#/intel') return;
     try {
       const data = await intelData();
       if (!data) return;
       paint(data);
-      if (data.run && data.run.status === 'running') setTimeout(poll, 10000);
+      if (data.scraping) setTimeout(poll, 10000);
     } catch {}
   }
   paint(d);
-  if (d.run && d.run.status === 'running') setTimeout(poll, 10000);
+  if (d.scraping) setTimeout(poll, 10000);
   view(el('p', null, el('a', { href: '#/' }, '← Ladder')), el('h1', null, 'Investigation'), wrap);
 }
 

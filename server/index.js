@@ -7,7 +7,11 @@ const express = require('express');
 const { Pool } = require('pg');
 
 const app = express();
-app.use(express.json({ limit: '256kb' }));
+// Pings, logs and feedback are small and arrive unauthenticated — keep their
+// parse budget tight. Only the keyed findings route needs room for a full list.
+const smallJson = express.json({ limit: '256kb' });
+const bigJson = express.json({ limit: '1mb' });
+app.use((req, res, next) => (req.path === '/api/findings' ? bigJson : smallJson)(req, res, next));
 app.use((req, res, next) => { // open receiver — the app posts from anywhere
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Headers', 'Content-Type');
@@ -253,16 +257,16 @@ app.get('/api/feedback', h(async (req, res) => {
 }));
 
 // ---- Investigation ----------------------------------------------------------
-// One keyed trigger pulls everything the game exposes (roster, wiki, patch notes),
-// packs it with the observed-play aggregates into a dossier, and has Claude look
-// for broken/OP interactions and patterns. The result replaces the watchlist and
-// feeds the advisor's scoring. Manual only — a run costs real money.
+// Everything the game exposes (roster, wiki, patch notes) plus the observed-play
+// aggregates, packed into one dossier for an operator-run analysis of broken/OP
+// interactions and patterns. The findings post back here, replace the watchlist,
+// and feed the advisor's scoring. The analysis itself happens in Claude Code
+// (see .claude/skills/pod-investigate) — this server never calls an LLM.
 
 const arr = (x) => Array.isArray(x) ? x : [];
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5';
 
-// Kept small on purpose: the model gets derived aggregates plus a handful of full
-// builds, not the whole DB. Everything here is already public on the site.
+// Kept small on purpose: derived aggregates plus a handful of full builds, not
+// the whole DB. Everything here is already public on the site.
 async function buildDossier() {
   const one = async (q, p) => (await pool.query(q, p)).rows;
   const [classes, passives, mods, rates, top] = await Promise.all([
@@ -298,64 +302,23 @@ async function buildDossier() {
   const current = await latestInvestigation();
   const dossier = {
     generated: new Date().toISOString(),
+    // The individual scrapes log and swallow their own failures, so say plainly
+    // what actually landed — a null wiki or an empty patch list means analysing
+    // against a partial picture, and mid-scrape means the roster is in flux.
+    sources: { rosterLastScrape: lastScrapeAt, wikiLoaded: !!wikiTrees,
+      patchNoteDates: arr(patchNotes).length, scrapeInProgress: scraping },
     wiki: wikiTrees,                              // class trees: skills, specs, modifiers
     patchNotes: arr(patchNotes).slice(0, 12),     // most recent dates — older ones are settled history
     observed: { classes, passives, mods, affixRates: rates, topBuilds: top },
     currentWatchlist: current ? current.data.interactions
       : JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'watchlist.json'), 'utf8')).interactions,
   };
-  // Hard ceiling on what one run can cost. Well above the ~400KB a healthy
-  // dossier weighs; if it is ever hit, something upstream has grown unbounded.
+  // Sanity ceiling — a healthy dossier is a few hundred KB. Hitting this means
+  // something upstream has grown unbounded, not that the analysis needs more.
   const body = JSON.stringify(dossier);
   if (body.length > 2e6) throw new Error(`dossier too large (${body.length} bytes) — refusing to send`);
   return { dossier, body };
 }
-
-const SYSTEM = `You analyse a live Twitch idle-RPG ("Path of Dust") for the operator, who runs the community's stats site.
-
-Your job: read everything you are given and find (a) broken or overpowered interactions and gear/tree/class combinations, and (b) patterns in how the game actually behaves that players would not get from the wiki. Findings feed two places: a watchlist page the operator reads, and a build advisor that scores classes against a player's actual gear.
-
-Ground every finding in the dossier. Cite what it rests on in the evidence field — a wiki modifier, a patch note date, an affix rate, a pick rate, a specific top build. Prefer a mechanism you can trace over a hunch; if something is a suspicion, say so in the text rather than dropping it.
-
-The dossier's currentWatchlist is the operator's existing list. Return the FULL updated list, not a diff: keep entries that still hold (edit their text when patch notes or data have moved them), drop entries a patch note has invalidated, and add what you have newly found. Say in the entry's text when a patch changed it.
-
-Name classes exactly as the dossier's archetypes are spelled — the advisor matches on that string, so a paraphrase silently drops the finding.
-
-For each interaction set rolls to the gear affix / stat names it leans on, using the dossier's own affix wording where possible, so the advisor can match them against a player's mods. Leave rolls empty when an interaction does not depend on gear.
-
-Write for someone who plays this game daily: specific, concrete numbers, no hedging filler.`;
-
-const FINDINGS_SCHEMA = {
-  type: 'object', additionalProperties: false,
-  required: ['summary', 'interactions', 'patterns'],
-  properties: {
-    summary: { type: 'string', description: 'What changed since the previous investigation, in a few sentences.' },
-    interactions: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false,
-        required: ['title', 'type', 'classes', 'text', 'impact', 'rolls', 'evidence'],
-        properties: {
-          title: { type: 'string' },
-          type: { type: 'string', enum: ['combat', 'crafting', 'tree', 'economy', 'bug', 'synergy'] },
-          classes: { type: 'array', items: { type: 'string' } },
-          text: { type: 'string' },
-          impact: { type: 'string', enum: ['high', 'medium', 'low'] },
-          rolls: { type: 'array', items: { type: 'string' } },
-          evidence: { type: 'string' },
-        },
-      },
-    },
-    patterns: {
-      type: 'array',
-      items: {
-        type: 'object', additionalProperties: false,
-        required: ['title', 'text', 'evidence'],
-        properties: { title: { type: 'string' }, text: { type: 'string' }, evidence: { type: 'string' } },
-      },
-    },
-  },
-};
 
 async function initInvestigations() {
   await pool.query(`CREATE TABLE IF NOT EXISTS investigations (
@@ -369,81 +332,97 @@ async function latestInvestigation() {
   } catch { return null; } // table may not exist yet on a cold DB
 }
 
-// In-memory run state — the trigger returns immediately and the page polls.
-// ponytail: single global run, no queue; a second trigger is refused while one runs.
-let run = { status: 'idle', startedAt: null, finishedAt: null, step: null, error: null };
-
-async function runInvestigation() {
-  const Anthropic = require('@anthropic-ai/sdk');
-  const client = new Anthropic(); // ANTHROPIC_API_KEY from env
-  run.step = 'scraping game data';
-  await Promise.all([scrapeRoster(), scrapeWiki(), scrapePatchNotes()]);
-  run.step = 'building dossier';
-  const { body } = await buildDossier();
-  run.step = 'analysing';
-  // Streamed: the answer is long and a non-streaming call this size risks an
-  // HTTP timeout. Fallbacks on by default — a safety decline should not lose the run.
-  const req = {
-    model: ANTHROPIC_MODEL,
-    max_tokens: 32000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    system: SYSTEM,
-    output_config: { effort: 'high', format: { type: 'json_schema', schema: FINDINGS_SCHEMA } },
-    messages: [{ role: 'user', content: body }],
-  };
-  let message;
-  try {
-    message = await client.beta.messages.stream(req).finalMessage();
-  } catch (e) {
-    // Server-side fallback is a beta: if this account or model can't take it,
-    // the analysis itself is still fine — drop the parameter and run plain.
-    if (!/fallback/i.test(e.message || '')) throw e;
-    console.error('retrying without server-side fallback:', e.message);
-    const { betas, fallbacks, ...plain } = req;
-    message = await client.messages.stream(plain).finalMessage();
-  }
-  if (message.stop_reason === 'refusal') throw new Error('model declined the request');
-  const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  const data = JSON.parse(text);
-  await pool.query(`INSERT INTO investigations (model, data, usage) VALUES ($1,$2,$3)`,
-    [message.model || ANTHROPIC_MODEL, JSON.stringify(data), JSON.stringify(message.usage || {})]);
-  return data;
-}
-
-// Trigger + status share one keyed route: POST starts a run, GET reports on it
-// and returns the newest findings.
-app.post('/api/investigate', h(async (req, res) => {
+// The dossier goes out, findings come back. Nothing here calls an LLM — the
+// analysis runs in whatever Claude the operator already pays for (see the
+// pod-investigate skill), which keeps this server free of API keys and spend.
+app.get('/api/dossier', h(async (req, res) => {
   if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not set' });
-  if (run.status === 'running') return res.status(409).json(run);
-  // Cooldown, checked against the stored row so a redeploy (which clears the
-  // in-memory state) can't be used to re-run a costly analysis back to back.
-  // ?force=1 overrides when a rerun is genuinely wanted.
-  const last = await latestInvestigation();
-  const sinceMin = last ? (Date.now() - new Date(last.ts)) / 60000 : Infinity;
-  if (sinceMin < 15 && req.query.force !== '1') {
-    return res.status(429).json({ error: `last investigation ran ${Math.round(sinceMin)} min ago — add &force=1 to run anyway` });
-  }
-  run = { status: 'running', startedAt: new Date().toISOString(), finishedAt: null, step: 'starting', error: null };
-  runInvestigation()
-    .then(() => { run = { ...run, status: 'done', step: null, finishedAt: new Date().toISOString() }; })
-    .catch((e) => {
-      console.error('investigation failed:', e.message);
-      run = { ...run, status: 'failed', step: null, error: e.message, finishedAt: new Date().toISOString() };
-    });
-  res.status(202).json(run);
+  const { body } = await buildDossier();
+  res.set('Cache-Control', 'no-store').type('application/json').send(body);
 }));
 
-app.get('/api/investigate', h(async (req, res) => {
+// Kick a fresh pull of every source and return immediately — the roster walk
+// takes a couple of minutes, far longer than a request should hold open.
+let scraping = false;
+app.post('/api/rescrape', (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (scraping) return res.status(409).json({ scraping, lastScrape: lastScrapeAt });
+  scraping = true;
+  Promise.all([scrapeRoster(), scrapeWiki(), scrapePatchNotes()])
+    .catch((e) => console.error('rescrape:', e.message))
+    .finally(() => { scraping = false; });
+  res.status(202).json({ scraping: true });
+});
+
+// Findings arrive as JSON from the analysis. Shape-checked rather than trusted:
+// the advisor and the watchlist page render whatever lands here.
+const IMPACTS = ['high', 'medium', 'low'];
+const LIMITS = { interactions: 200, patterns: 100, list: 20 };
+// Trim first, then judge: a title of 200 spaces would otherwise pass the check
+// and be stored as a blank heading.
+const clip = (v, n) => typeof v === 'string' ? v.trim().slice(0, n).trim() : '';
+const strList = (v, n) => arr(v).map((x) => clip(x, n)).filter(Boolean);
+
+function badFindings(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return 'body must be a JSON object';
+  if (!Array.isArray(d.interactions) || !d.interactions.length) return 'interactions must be a non-empty array';
+  if (d.patterns !== undefined && !Array.isArray(d.patterns)) return 'patterns must be an array';
+  // Refuse oversized lists rather than truncating them — silently dropping the
+  // tail of a full replacement list would delete watchlist coverage.
+  for (const [k, max] of [['interactions', LIMITS.interactions], ['patterns', LIMITS.patterns]]) {
+    if (arr(d[k]).length > max) return `${k}: ${d[k].length} is over the ${max} limit — split the post`;
+  }
+  for (const i of d.interactions) {
+    if (!i || typeof i !== 'object') return 'each interaction must be an object';
+    if (!clip(i.title, 200)) return 'each interaction needs a non-empty title';
+    if (!clip(i.text, 4000)) return `interaction "${clip(i.title, 60)}" needs non-empty text`;
+    if (i.impact !== undefined && !IMPACTS.includes(i.impact)) return `interaction "${clip(i.title, 60)}": impact must be ${IMPACTS.join('/')}`;
+    for (const k of ['classes', 'rolls']) {
+      if (i[k] === undefined) continue;
+      if (!Array.isArray(i[k])) return `interaction "${clip(i.title, 60)}": ${k} must be an array`;
+      if (i[k].length > LIMITS.list) return `interaction "${clip(i.title, 60)}": at most ${LIMITS.list} ${k}`;
+      // The advisor matches classes by exact string — a blank or non-string entry
+      // is a finding that will never match anything.
+      if (i[k].some((x) => !clip(x, 64))) return `interaction "${clip(i.title, 60)}": ${k} entries must be non-empty strings`;
+    }
+  }
+  return null;
+}
+
+app.post('/api/findings', h(async (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!pool) return res.sendStatus(503);
+  const bad = badFindings(req.body);
+  if (bad) return res.status(400).json({ error: bad });
+  // Stored normalised so the pages never have to defend against odd shapes.
+  const data = {
+    summary: clip(req.body.summary, 4000),
+    interactions: req.body.interactions.map((i) => ({
+      title: clip(i.title, 200), type: clip(i.type, 40), impact: IMPACTS.includes(i.impact) ? i.impact : 'medium',
+      classes: strList(i.classes, 64), rolls: strList(i.rolls, 64),
+      text: clip(i.text, 4000), evidence: clip(i.evidence, 2000),
+    })),
+    patterns: arr(req.body.patterns).map((p) => ({
+      title: clip(p && p.title, 200), text: clip(p && p.text, 4000), evidence: clip(p && p.evidence, 2000),
+    })).filter((p) => p.title && p.text),
+  };
+  const { rows } = await pool.query(
+    `INSERT INTO investigations (model, data, usage) VALUES ($1,$2,$3) RETURNING id, ts`,
+    [clip(req.body.model, 64) || 'claude-code', JSON.stringify(data), JSON.stringify(req.body.usage || {})]);
+  res.json({ ok: true, id: rows[0].id, ts: rows[0].ts,
+    interactions: data.interactions.length, patterns: data.patterns.length });
+}));
+
+// What the #/intel page reads: newest findings, patch notes, scrape freshness.
+app.get('/api/intel', h(async (req, res) => {
   if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
   const found = await latestInvestigation();
   res.set('Cache-Control', 'no-store');
   res.json({
-    run, configured: !!process.env.ANTHROPIC_API_KEY,
-    latest: found && { ts: found.ts, model: found.model, usage: found.usage, ...found.data },
-    patchNotes,
+    scraping, lastScrape: lastScrapeAt, patchNotes,
+    sources: { wikiLoaded: !!wikiTrees, patchNoteDates: arr(patchNotes).length },
+    latest: found && { ts: found.ts, model: found.model, ...found.data },
   });
 }));
 
@@ -729,8 +708,11 @@ app.get('/api/patch-notes', (_req, res) => {
   res.json({ dates: patchNotes });
 });
 
-// Required as a module (test-parsers.js) — export the parsers and start nothing.
-if (require.main !== module) { module.exports = { parsePatchNotes, parseCharacter, parsePassives, parseWiki }; return; }
+// Required as a module (test-server.js) — export the pure bits, start nothing.
+if (require.main !== module) {
+  module.exports = { parsePatchNotes, parseCharacter, parsePassives, parseWiki, badFindings };
+  return;
+}
 
 if (process.env.SCRAPE !== 'off') {
   setTimeout(scrapeRoster, 60e3); // first pass shortly after boot, once DB init settled

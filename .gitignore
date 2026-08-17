@@ -17,3 +17,8 @@ run.txt
 
 # internal doc describing the reverse-engineered endpoints — keep private
 README-actions.md
+
+# Claude Code scratch: throwaway worktrees and per-machine settings.
+# .claude/skills/ IS tracked — the investigation workflow lives there.
+.claude/*
+!.claude/skills/
