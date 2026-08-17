@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 83;
+const BRIDGE_REV = 84;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -326,6 +326,24 @@ export function pendingOf(text) {
   return pend;
 }
 
+// "Name Your Krangled Item" prompt. Krangle is the only way to earn a nickname,
+// and the site asks once per item — while `nickname` is unset it keeps
+// prompting, and submitting an EMPTY value is how you decline (it records
+// "asked and skipped" so it stops). Only one pending item is offered at a time
+// even when several are waiting. Exported for the scrape smoke-test.
+export function nameItemOf(text) {
+  const form = (text.split('action="/name-item"')[1] || '').split('</form>')[0];
+  if (!form) return null;
+  const id = (form.match(/name="item_id"\s+value="([^"]+)"/) || [])[1];
+  if (!id) return null;
+  return {
+    id,
+    maxLen: +(form.match(/maxlength="(\d+)"/) || [])[1] || 30,
+    // "You Krangled a {name} — …" is the only place the base name appears
+    name: strip(((text.split('Name Your Krangled Item')[1] || '').match(/You Krangled a ([^—<]+)/) || [])[1] || ''),
+  };
+}
+
 // Full inventory: currencies, tokens, equipped gear, bag, and the craft form's
 // item options + action buttons. Enough to drive a custom Bag page.
 export async function inventory() { // exported for scrape smoke-tests
@@ -401,7 +419,12 @@ export async function inventory() { // exported for scrape smoke-tests
 
   const veil = pendingOf(text);
 
-  return { dust, sand, tokens, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle }, veil, autoDisenchant };
+  // "Name Your Krangled Item" prompt. Krangle is the only way to earn a
+  // nickname, and the site asks once per item — while `nickname` is unset it
+  // keeps prompting, and submitting an EMPTY value is how you decline (it
+  // records "asked and skipped" so it stops). Only one pending item is offered
+  // at a time even if several are waiting.
+  return { dust, sand, tokens, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle }, veil, autoDisenchant, nameItem: nameItemOf(text) };
 }
 
 // One passive canvas out of a page fragment. The site renders the same

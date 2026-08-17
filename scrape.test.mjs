@@ -4,7 +4,7 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf } from './server.mjs';
+import { implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf } from './server.mjs';
 import { netKey } from './actions.mjs';
 
 // The site's order inside a .gear-slot: name, quality, primary, sacred, unique.
@@ -174,6 +174,22 @@ assert.equal(netKey('/characters/lokati_gaming'), '/characters/*');
 assert.equal(netKey('/characters/someone_else'), '/characters/*', 'two players, one bucket');
 assert.equal(netKey('/characters/lokati_gaming/passives'), '/characters/*/passives');
 assert.equal(netKey('/fights?limit=50'), '/fights', 'query strings are stripped');
+
+// --- Krangle nickname prompt. Only Krangle earns one, the site asks once per
+// item, and an EMPTY submission is how you decline -- so the card has to offer
+// a Skip that posts, not one that just hides it.
+const krangled = `<div class="card"><h2>Name Your Krangled Item</h2>
+  <p class="muted">You Krangled a Celestial Axe — give it a custom name if you'd like! It'll show as
+  Celestial Axe "Your Name" everywhere. Leave it blank to skip.</p>
+  <form method="post" action="/name-item">
+    <input type="hidden" name="item_id" value="itm_42">
+    <input type="text" name="nickname" maxlength="30" placeholder="e.g. Excalibur">
+    <button class="btn" type="submit">Save</button>
+  </form></div>`;
+assert.deepEqual(nameItemOf(krangled), { id: 'itm_42', maxLen: 30, name: 'Celestial Axe' });
+assert.equal(nameItemOf('<div class="card"><h2>Bag (3/50)</h2></div>'), null, 'no prompt when nothing is pending');
+assert.equal(nameItemOf(krangled.replace(/name="item_id"\s+value="[^"]+"/, '')), null,
+  'a form with no item id is not actionable');
 
 console.log('ok');
 process.exit(0); // importing server.mjs opens the bridge listener
