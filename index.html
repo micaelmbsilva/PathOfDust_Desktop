@@ -1845,8 +1845,17 @@
       restoreUntil = Date.now() + 600;
     }
   }
-  if (document.readyState === 'complete') restorePanels();
-  else addEventListener('load', restorePanels, { once: true });
+  function scheduleRestore() {
+    // Two frames after the DOM is parsed — deliberately NOT window.load, which
+    // blocks on the cross-origin overlay iframe (#overlay → adventure.lokati.net)
+    // and can fire minutes late or not at all, leaving panels unrestored. That
+    // was the "panels don't reopen" bug. Layout is settled by the second frame,
+    // innerWidth is final from window creation, and the restoreUntil deadline
+    // already keeps the ResizeObserver from overwriting geometry mid-restore.
+    requestAnimationFrame(() => requestAnimationFrame(restorePanels));
+  }
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', scheduleRestore, { once: true });
+  else scheduleRestore();
 
   // Persist on the way out as well as on interaction. autoreload.js reloads the
   // page whenever the interface revision moves, and pagehide is the last point
