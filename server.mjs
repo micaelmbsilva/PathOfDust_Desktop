@@ -55,7 +55,7 @@ async function ping() {
 const PORT = 8787;
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 71;
+const BRIDGE_REV = 72;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -295,6 +295,21 @@ const srv = createServer(async (req, res) => {
       const { message, contact } = JSON.parse(await body(req) || '{}');
       await telemetry('/feedback', { message, contact });
       return json(res, { ok: !!TELEMETRY_URL });
+    }
+    if (url.pathname === '/api/broadcast' && req.method === 'POST') {
+      // Operator banner → backend /broadcast (empty message clears it). The page
+      // gates the button by character name; the backend's PING_KEY is the real auth.
+      let message;
+      try { ({ message } = JSON.parse(await body(req) || '{}')); } catch { return json(res, { ok: false }); }
+      if (!TELEMETRY_URL || (message != null && typeof message !== 'string')) return json(res, { ok: false });
+      try {
+        const r = await fetch(`${TELEMETRY_URL}/broadcast`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-pod-key': PING_KEY },
+          body: JSON.stringify({ message: (message || '').slice(0, 500) }),
+          signal: AbortSignal.timeout(10000),
+        });
+        return json(res, { ok: r.ok });
+      } catch { return json(res, { ok: false }); }
     }
     if (url.pathname === '/api/log' && req.method === 'POST') {
       const { level, message } = JSON.parse(await body(req) || '{}');
