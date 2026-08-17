@@ -379,22 +379,22 @@ const ownerKey = () => localStorage.getItem('pod.owner') || '';
 // The owner key rides in a header, not the query string — it is the privileged
 // one, and query strings end up in proxy and access logs.
 const ownerFetch = (path, opts) => fetch(path, { ...opts, headers: { 'x-pod-owner': ownerKey() } });
-const keyDenied = () => view(el('p', { class: 'status' }, 'This page needs a key — open it once with ?key=… appended.'));
+const keyDenied = () => view(el('p', { class: 'status' }, 'This page needs a key — open it once with ?key=… appended (owner pages: ?owner=…).'));
 const ownerDenied = () => view(el('p', { class: 'status' }, 'Owner-only. Open once with ?owner=… appended.'));
 
 // The keyed pages are one admin panel: route() prepends this bar to each of
 // them, so they read as tabs rather than as unrelated hidden URLs.
 const ADMIN_TABS = [['#/admin', 'Overview'], ['#/feedback', 'Feedback'],
-  ['#/watchlist', 'Watchlist'], ['#/intel', 'Investigation', true]];
+  ['#/watchlist', 'Watchlist', true], ['#/intel', 'Investigation', true]];
 const adminNav = () => el('div', { class: 'chips adminnav' },
   ADMIN_TABS.filter(([, , owner]) => !owner || ownerKey()).map(([href, label]) => el('a',
     { class: 'chip' + (location.hash === href ? ' on' : ''), href }, label)),
   el('a', { class: 'chip', href: '#/' }, '← Ladder'));
 
 // Hidden route: #/watchlist — the OP interactions list, no nav links to it.
-// Filterable by entry type and by class.
+// Owner-only (x-pod-owner header, like #/intel). Filterable by type and class.
 async function watchlist() {
-  const r = await fetch('api/watchlist?key=' + encodeURIComponent(siteKey()));
+  const r = await ownerFetch('api/watchlist');
   if (r.status === 403) return keyDenied();
   if (!r.ok) throw new Error('watchlist ' + r.status);
   const { interactions } = await r.json();
@@ -575,10 +575,10 @@ async function admin() {
   const [allR, unreadR, intelR, watchR] = await Promise.all([
     fetch('api/feedback?key=' + key + '&since=0'),
     fetch('api/feedback?key=' + key + '&since=' + seen),
-    // Investigation is owner-only: without that key the panel simply doesn't
-    // mention it, rather than showing a tile that always says "unavailable".
+    // Investigation and watchlist are owner-only: without that key the panel
+    // simply doesn't mention them, rather than showing "unavailable" tiles.
     owner ? ownerFetch('api/intel') : Promise.resolve({ ok: false, status: 403 }),
-    fetch('api/watchlist?key=' + key)]);
+    owner ? ownerFetch('api/watchlist') : Promise.resolve({ ok: false, status: 403 })]);
   if (allR.status === 403) return keyDenied();
   // null means the endpoint failed — say so rather than showing a confident zero.
   const body = async (r) => r.ok ? r.json().catch(() => null) : null;
@@ -605,12 +605,12 @@ async function admin() {
 
   view(
     el('h1', null, 'Admin'),
-    el('p', { class: 'sub' }, 'Everything behind the site key, in one place.'),
+    el('p', { class: 'sub' }, 'Admin tools in one place — watchlist, advisor and investigation need the owner key (?owner=…).'),
     el('div', { class: 'grid2' },
       tile('#/feedback', 'Feedback',
         total == null ? '—' : unread ? `${unread} new` : String(total),
         total == null ? 'unavailable' : unread ? `${total} total` : total ? 'all read' : 'nothing yet'),
-      tile('#/watchlist', 'Watchlist', items ? String(items.length) : '—',
+      !owner ? null : tile('#/watchlist', 'Watchlist', items ? String(items.length) : '—',
         !items ? 'unavailable'
           : byImpact.length ? byImpact.map(([k, n]) => `${n} ${k}`).join(' · ') : 'hand-curated file'),
       !owner ? null : tile('#/intel', 'Investigation', latest ? agoShort(latest.ts) : '—',
@@ -623,11 +623,11 @@ async function admin() {
           : !intel.sources ? 'source status unknown'
           : (!intel.sources.wikiLoaded || !intel.sources.patchNoteDates) ? '⚠ wiki or patch notes missing'
           : `wiki loaded · ${plural(intel.sources.patchNoteDates, 'patch-note date')}`)),
-    el('h2', null, 'Advisor'),
-    el('div', { class: 'card' },
-      el('div', { class: 'lvrow' }, who, go),
-      el('p', { class: 'sub', style: 'margin:0' },
-        'Scores every class against that player\'s actual gear, including the watchlist findings that name it.')),
+    !owner ? null : [el('h2', null, 'Advisor'),
+      el('div', { class: 'card' },
+        el('div', { class: 'lvrow' }, who, go),
+        el('p', { class: 'sub', style: 'margin:0' },
+          'Scores every class against that player\'s actual gear, including the watchlist findings that name it.'))],
     owner && latest && str(latest.summary) ? [el('h2', null, 'Latest investigation'),
       el('div', { class: 'card' }, el('p', { style: 'margin:0' }, str(latest.summary)),
         el('p', { class: 'sub', style: 'margin:8px 0 0' }, `${agoText(latest.ts)} · ${str(latest.model)}`))] : null);
@@ -723,15 +723,16 @@ const rankNum = (r) => +(String(r == null ? '' : r).match(/^\d+/) || [0])[0];
 const OP_W = { high: 3, medium: 1.5, low: 0.5 }; // watchlist impact → advisor score weight
 
 async function advisor(name) {
-  const key = encodeURIComponent(siteKey());
-  const watchR = await fetch('api/watchlist?key=' + key);
+  // Owner-only (x-pod-owner header, like #/intel) — the advisor reads the
+  // watchlist and bag data, both privileged.
+  const watchR = await ownerFetch('api/watchlist');
   if (watchR.status === 403) return keyDenied();
   // Investigation findings steer the pick: an OP interaction this player's gear
   // already supports counts for more than one they would have to build toward.
   const watch = watchR.ok ? arr((await watchR.json()).interactions) : [];
   const [r, { builds, passives }, ratesR, gearR, core, model] = await Promise.all([
-    fetch('api/build/' + encodeURIComponent(name)), staticData(), fetch('api/affix-rates?key=' + key),
-    fetch('api/advisor-gear/' + encodeURIComponent(name) + '?key=' + key),
+    fetch('api/build/' + encodeURIComponent(name)), staticData(), ownerFetch('api/affix-rates'),
+    ownerFetch('api/advisor-gear/' + encodeURIComponent(name)),
     import('./advisor-core.mjs'), fetch('game-model.json').then(q => q.json())]);
   if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
   const b = await r.json();

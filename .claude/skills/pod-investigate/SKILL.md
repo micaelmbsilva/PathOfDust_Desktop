@@ -8,8 +8,8 @@ description: Investigate Path of Dust game data for broken or overpowered intera
 The ladder site compiles every source it has into one dossier. You read it and look for
 broken/overpowered interactions and mechanics patterns. Publishing sends those findings
 to the live site, where they become the watchlist and weight the advisor's class scoring.
-Those two pages sit behind the shared site key, so anyone the operator has given it to
-will read what you publish — the investigation itself is owner-only, its output is not.
+Those two pages are owner-only (the `?owner=…` key, like the investigation itself), so
+what you publish is read by the owner, not by shared-site-key holders.
 
 The site never calls an LLM — you are the analysis step. Nothing here spends API credit.
 
