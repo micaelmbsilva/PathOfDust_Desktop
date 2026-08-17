@@ -35,7 +35,9 @@
 <body>
   <div class="bar">
     <h1>📜 Fight History</h1>
-    <button class="chip" id="reload" title="Refresh">🔄</button>
+    <button class="chip" id="reload" title="Refresh now">🔄</button>
+    <button class="chip" id="follow"></button>
+    <button class="chip" id="help" title="Following means this list refreshes on its own the moment a fight ends, and jumps to the newest one — which is opened for you. Pause it if you're reading an older fight and don't want the page moving under you; anything that happens while paused is counted on the button, and resuming loads it straight away. The 🔄 button always refreshes regardless.">?</button>
     <span class="chip muted" id="source"></span>
   </div>
   <div id="err"></div>
@@ -142,8 +144,43 @@
   }
 
 
-  $('reload').onclick = load;
+  // ---- follow the latest fight ----
+  // The main window broadcasts when an encounter resolves; the game writes its
+  // summary before broadcasting, so the fight is already fetchable when we hear
+  // about it. Nothing here opens a socket of its own — the encounter payload is
+  // megabytes, and one listener for it is enough.
+  const FOLLOW = 'fightsFollow';
+  const following = () => localStorage.getItem(FOLLOW) !== '0';
+  let missed = 0;
+
+  function renderFollow() {
+    const b = $('follow');
+    b.textContent = following() ? '⏸ Following' : `▶ Paused${missed ? ` (${missed})` : ''}`;
+    b.title = following()
+      ? 'Refreshing automatically when a fight ends — click to pause'
+      : `Not refreshing on its own${missed ? ` · ${missed} fight${missed > 1 ? 's' : ''} since you paused` : ''} — click to resume`;
+    b.style.borderColor = following() ? '#4a8a5a' : (missed ? '#d9a441' : '');
+  }
+  $('follow').onclick = () => {
+    const now = !following();
+    localStorage.setItem(FOLLOW, now ? '1' : '0');
+    renderFollow();
+    if (now && missed) { missed = 0; load(); }   // resuming catches you up at once
+  };
+
+  if (typeof BroadcastChannel === 'function') {
+    new BroadcastChannel('pod').onmessage = (e) => {
+      if (!e.data || e.data.type !== 'encounter') return;
+      // Jump back to the top so the newest fight — which renders expanded — is
+      // what you're looking at, rather than wherever you had scrolled to.
+      if (following()) load().then(() => scrollTo({ top: 0, behavior: 'smooth' }));
+      else { missed++; renderFollow(); }
+    };
+  }
+
+  $('reload').onclick = () => { missed = 0; renderFollow(); load(); };
   document.title = `${GAME_NAME} — Fight History`;
+  renderFollow();
   load();
 </script>
 <script src="/autoreload.js"></script>
