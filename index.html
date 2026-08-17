@@ -1243,17 +1243,16 @@
   // member's max so idle/between-fight bars still get notches.
   let lastPartySig = null;
   const lastMaxHp = {};
-  // Round a value to a "nice" 1/2/5×10ⁿ step. Used to pick ONE HP-per-notch for
-  // the whole party from its biggest member (~8 notches on that member), so the
-  // notch spacing is a fixed HP amount and a tankier member simply shows more of
-  // them — fixed HP-per-tick, LoL-style. null when there's no HP scale yet.
-  const niceStep = (v) => {
-    if (!(v > 0)) return null;
-    const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p;
-    return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
+  // Notch period as a % of a member's own bar. One fixed HP-per-notch across the
+  // party (refMax/12, so the tankiest shows ~12), but each bar's notch COUNT is
+  // rounded to a whole number and the period is 100/count — so notches always
+  // spread evenly edge to edge (no ragged last segment) while a higher-max member
+  // still shows more of them. null when there's no HP scale yet.
+  const tickPctOf = (refMax, max) => {
+    if (!(refMax > 0) || !(max > 0)) return null;
+    const count = Math.max(3, Math.min(18, Math.round(max / (refMax / 12))));
+    return 100 / count;
   };
-  // A member's notch period as a % of its own bar, given the shared HP-per-notch.
-  const tickPctOf = (tickHp, max) => (tickHp && max > 0) ? Math.max(5, Math.min(100, tickHp / max * 100)) : null;
   function renderParty(opts = {}) {
     if (!lastRoster) return; // placeholder stays
     // Class kit first; the WS role field is the fallback when the roster
@@ -1286,24 +1285,23 @@
     // aren't the roster login). Downed IS dead — a downed member always renders
     // empty/red regardless of the last HP sample. No fight data → full/neutral.
     // A shield_hp absorb rides on top as a bluish glow that shrinks as it's spent.
-    // One HP-per-notch for the whole party, sized so the tankiest member shows
-    // ~8 notches; everyone else gets the same spacing, so more max = more notches.
+    // Party-wide HP scale (its biggest member), so the fixed HP-per-notch — and
+    // thus how many notches each bar shows — is shared across the pane.
     const refMax = Math.max(0, ...cs.map(c => { const u = unitOf(c); return (u && u.max) || lastMaxHp[c.displayName.toLowerCase()] || 0; }));
-    const partyTickHp = niceStep(refMax / 8);
     // One state object drives both the rebuild string (hpBar) and the in-place
     // tick update (paintBar), so they can't drift. Downed = a dead bar; no live
     // unit = a full, green, glowing bar (with notches from last-seen max).
     const barState = (c) => {
       const pid = c.displayName.toLowerCase();
-      if (c.downedUntilMs) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(partyTickHp, lastMaxHp[pid]), title: '⬇️ Downed' };
+      if (c.downedUntilMs) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(refMax, lastMaxHp[pid]), title: '⬇️ Downed' };
       const u = unitOf(c);
       if (u && u.max) lastMaxHp[pid] = u.max;
-      if (!u || !u.max) return { pct: 100, lvl: 'ok', shPct: 0, tick: tickPctOf(partyTickHp, lastMaxHp[pid]), title: 'Full HP' };
+      if (!u || !u.max) return { pct: 100, lvl: 'ok', shPct: 0, tick: tickPctOf(refMax, lastMaxHp[pid]), title: 'Full HP' };
       const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
       const lvl = pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'low';
       const shPct = u.shield > 0 ? Math.max(0, Math.min(100, u.shield / u.max * 100)) : 0;
       const title = `${fmtN(u.hp)} / ${fmtN(u.max)} HP${u.shield > 0 ? ` · \u{1F6E1} ${fmtN(u.shield)} shield` : ''}`;
-      return { pct, lvl, shPct, tick: tickPctOf(partyTickHp, u.max), title };
+      return { pct, lvl, shPct, tick: tickPctOf(refMax, u.max), title };
     };
     const hpBar = (c) => {
       const s = barState(c);
