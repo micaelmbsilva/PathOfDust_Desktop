@@ -538,7 +538,13 @@ function parseCharacter(text) {
       mods: [...chunk.matchAll(/class="mod-roll"([^>]*)>([^<]*)</g)]
         .map(m => ({ t: strip(m[2]), tip: strip((m[1].match(/data-tip="([^"]*)"/) || [])[1] || '') })),
       sacred: /gear-name-sacred/.test(chunk), krangled: /gear-name-locked/.test(chunk),
-      implicit: strip((chunk.match(/class="gear-(?:sacred|unique)"[^>]*>([^<]*)</) || [])[1] || ''),
+      unique: /gear-name-unique/.test(chunk),
+      // Sacred and unique (Celestial Shard) implicits can BOTH be on one item —
+      // the old single-match regex dropped the unique line. Same parse as
+      // implicitsOf in ../server.mjs (separate deploy, so a duplicated one-liner
+      // rather than an ESM import of a module that opens the bridge listener).
+      implicits: [...chunk.matchAll(/class="gear-(sacred|unique)"[^>]*>([^<]*)</g)]
+        .map(m => ({ t: strip(m[2]), gold: m[1] === 'unique' })).filter(x => x.t),
     });
   }
   return { name, archetype, level, stats, equipped };

@@ -27,7 +27,7 @@
   .item { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 10px; }
   .item .n { font-weight: 700; }
   .item .s { font-size: 0.72rem; color: #b0a2d9; }
-  .perfect { color: #ffcf5a; font-weight: 700; } /* Perfect Quality → gold */
+  .perfect { color: #ffd76b; font-weight: 700; } /* Perfect Quality gold — site's .gear-quality--perfect */
   .sacredq { color: #d6f0ff; font-weight: 700; } /* Sacred → icy blue-white, like the site */
   .item .n.sacred { color: #d6f0ff; text-shadow: 0 0 8px rgba(120,200,255,0.6); }
   .item .n.unique { color: #ffd76b; text-shadow: 0 0 6px rgba(255,215,107,0.4); }
@@ -154,7 +154,7 @@
     <div class="item">
       <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : it.unique ? ' unique' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
       <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}</div>
-      ${it.implicit ? `<div class="imp${it.implicitGold ? ' gold' : ''}">${it.implicit}</div>` : ''}
+      ${(it.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${i.t}</div>`).join('')}
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
       <div class="acts">${acts}</div>
     </div>`;
@@ -379,7 +379,7 @@
     const t = (it.tier || '').replace('Tier ', 'T');
     const q = it.sacred ? '✦Sacred' : it.quality?.includes('Perfect') ? '🌟Perfect' : `⭐${(it.quality || '').replace('Quality ', '')}`;
     const mods = [
-      ...(it.implicit ? [it.implicit] : []),
+      ...(it.implicits || []).map(i => i.t),
       ...(it.mods || []).map(m => {
         const r = rollOf(m.tip);
         return r != null ? `${m.t} (T${tierOf(r)}·${r}%)` : m.t;

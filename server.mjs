@@ -39,7 +39,7 @@ async function ping() {
       const inv = await inventory();
       snap.dust = inv.dust; snap.sand = inv.sand; snap.tokens = inv.tokens;
       const gear = (it) => ({ slot: it.slot, name: it.name, tier: it.tier, quality: it.quality,
-        primary: it.primary, mods: it.mods, sacred: it.sacred, implicit: it.implicit,
+        primary: it.primary, mods: it.mods, sacred: it.sacred, implicits: it.implicits,
         krangled: it.krangled, protected: it.protected });
       snap.equipped = (inv.equipped || []).map(gear);
       snap.bag = (inv.bag || []).map(gear);
@@ -128,9 +128,16 @@ const modsOf = (chunk) => [...chunk.matchAll(/<li([^>]*)>([^<]*)</g)]
   .map(x => ({ t: strip(x.raw), tip: tipOf(x.attrs), ...(x.cls.includes('mod-roll-crit') ? { crit: true } : {}) }));
 // the gear-quality element's tooltip (Perfect Quality etc.)
 const qtipOf = (chunk) => tipOf((chunk.match(/class="gear-quality[^"]*"([^>]*)>/) || [])[1] || '');
-// Sacred/unique implicit callout ("✦ Sacred: +224% splash" / the gold unique line).
-// One per item; implicitGold marks the unique (gold) variant for styling.
-const implicitOf = (chunk) => strip((chunk.match(/class="gear-(?:sacred|unique)"[^>]*>([^<]*)</) || [])[1] || '');
+// Sacred/unique implicit callouts ("✦ Sacred: +224% splash" / the gold unique
+// line, e.g. Celestial Shard's "✦ Celestial Conversion: …"). An item can carry
+// BOTH — Krangle conflicts with unique, Sacred doesn't — so this returns every
+// line in the site's own order, each with its own gold flag. The old
+// single-string + separate implicitGold boolean lost the unique line entirely on
+// a Sacred item and then painted the surviving Sacred line gold.
+// Exported for the scrape smoke-test.
+export const implicitsOf = (chunk) => [...chunk.matchAll(/class="gear-(sacred|unique)"[^>]*>([^<]*)</g)]
+  .map(m => ({ t: strip(m[2]), gold: m[1] === 'unique' }))
+  .filter(x => x.t);
 
 // Scrape the bag (unequipped items) out of the inventory page's text. Each item's
 // id is the item_id its equip/disenchant forms carry; `protected` = Keep checkbox.
@@ -146,7 +153,7 @@ function bag(text) {
       quality: grab('gear-quality'), qtip: qtipOf(chunk), tier: grab('gear-tier'),
       primary: grab('gear-primary'), mods: modsOf(chunk),
       sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
-      implicit: implicitOf(chunk), implicitGold: /class="gear-unique"/.test(chunk),
+      implicits: implicitsOf(chunk),
       krangled: /gear-name-locked/.test(chunk),
       protected: /name="protect"[^>]*checked/.test(chunk),
     });
@@ -243,7 +250,7 @@ export async function inventory() { // exported for scrape smoke-tests
       slot, name: grab('gear-name'), quality: grab('gear-quality'), qtip: qtipOf(chunk),
       tier: grab('gear-tier'), primary: grab('gear-primary'), mods: modsOf(chunk),
       sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
-      implicit: implicitOf(chunk), implicitGold: /class="gear-unique"/.test(chunk),
+      implicits: implicitsOf(chunk),
       krangled: /gear-name-locked/.test(chunk),
     });
   }

@@ -90,7 +90,7 @@
   @keyframes pop { from { transform: translateY(-6px); opacity: 0; } }
   .toast .th { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
   .toast .tn { font-weight: 700; } .toast .ts { font-size: 0.72rem; color: #b0a2d9; margin-left: auto; }
-  .toast .perfect { color: #ffcf5a; font-weight: 700; }
+  .toast .perfect { color: #ffd76b; font-weight: 700; } /* site's .gear-quality--perfect */
   .toast .tn.sacred { color: #d6f0ff; text-shadow: 0 0 8px rgba(120,200,255,0.6); }
   .toast .tn.unique { color: #ffd76b; text-shadow: 0 0 6px rgba(255,215,107,0.4); }
   .toast .sacredq { color: #d6f0ff; font-weight: 700; }
@@ -1509,7 +1509,7 @@
     el.innerHTML = `
       <div class="th"><span class="tn${item.sacred ? ' sacred' : item.unique ? ' unique' : ''}">${item.name}</span>
         <span class="ts">${item.slot} · ${item.tier} · ${qual}</span></div>
-      ${item.implicit ? `<div class="imp${item.implicitGold ? ' gold' : ''}">${item.implicit}</div>` : ''}
+      ${(item.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${i.t}</div>`).join('')}
       ${mods}
       <div class="tacts">
         <button class="danger" data-act="dis">Disenchant</button>
