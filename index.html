@@ -191,6 +191,15 @@
   .pcell.down .ps { color: #ff9d9d; }
   .pcell.ret { opacity: 0.45; filter: grayscale(0.6); }
   .pcell.mme { border-color: #ffcf5a; box-shadow: 0 0 0 1px rgba(255,207,90,0.25); }
+  /* HP bar — fed by the live/last fight replay; width transitions so the
+     server-thinned samples glide rather than jump. Only meaningful during a
+     fight; full/neutral otherwise. */
+  .pcell .php { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08);
+    overflow: hidden; margin-top: 4px; }
+  .pcell .phpf { height: 100%; border-radius: 2px; transition: width 0.35s linear; background: #5aa469; }
+  .pcell .phpf.ok { background: #5aa469; } .pcell .phpf.warn { background: #d9a441; }
+  .pcell .phpf.low { background: #d05a5a; }
+  .pcell .phpf.dead { background: #7a2f2f; }
   .pcell.mme .pn { color: #ffcf5a; }
   /* battle entries */
   .bent { border: 1px solid rgba(160,140,255,0.2); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
@@ -807,7 +816,8 @@
     p.classList.toggle('open', open);
     persistPanels();
     setActive(which, open);
-    if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
+    // Both the Live Fight feed and the Party HP bars ride the same replay timer.
+    if (which === 'fight' || which === 'party') { if (open) startFightTimer(); else maybeStopFightTimer(); }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
       ({ party: renderParty, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox,
@@ -1206,6 +1216,22 @@
       for (const r of kitRolesOf(c) || [of(c)]) counts[r]++;
     }
     const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
+    // HP bar from the live/last fight replay, joined by display name (unit ids
+    // aren't the roster login). Downed IS dead — a downed member always renders
+    // empty/red regardless of the last HP sample. No fight data → full/neutral.
+    advanceHp(fightCursor());
+    // Only trust per-unit HP while the replay is actually playing. Once a fight
+    // is over, fight.unitHp holds stale end-of-fight values (a revived member
+    // would read 30% forever), so between fights everyone not Downed shows full.
+    const fightLive = fight && Date.now() - fight.t0 < fight.dur;
+    const hpBar = (c) => {
+      if (c.downedUntilMs) return `<div class="php"><div class="phpf dead" style="width:100%"></div></div>`;
+      const u = fightLive && fight.unitHp[fight.nameToId[c.displayName.toLowerCase()]];
+      if (!u || !u.max) return `<div class="php"><div class="phpf" style="width:100%"></div></div>`;
+      const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
+      const lvl = pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'low';
+      return `<div class="php" title="${fmtN(u.hp)} / ${fmtN(u.max)} HP"><div class="phpf ${lvl}" style="width:${pct.toFixed(1)}%"></div></div>`;
+    };
     const pf = (k) => `class="chip pf${partyFilter === k ? ' on' : ''}" data-pf="${k}"`;
     // retreated are hidden by default; the Retreated pip is the only way to see them
     const shown = cs.filter(c => partyFilter === 'ret' ? c.retreated
@@ -1219,6 +1245,7 @@
         <div class="pn">${esc(c.displayName)}</div>
         ${classOf(c) ? `<div class="pc" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></div>` : ''}
         <div class="ps">Lv ${c.level}${c.downedUntilMs ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
+        ${hpBar(c)}
       </div>`).join('') +
       (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
     document.querySelectorAll('#partyBody [data-pf]').forEach(el => el.onclick = () => {
@@ -1449,7 +1476,19 @@
   const fmtT = (ms) => ms < 1000 ? Math.round(ms) + 'ms' : ms < 60000 ? (ms / 1000).toFixed(1) + 's' : mmss(ms);
   function startFight(d) {
     const players = {}, names = {};
-    for (const u of d.units || []) { names[u.id] = u.displayName || u.id; if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName; }
+    // Per-unit HP for the Party pane's bars. The state message the party renders
+    // has no HP; it only exists here in the encounter payload (units[].maxHp +
+    // target_hp_after on events). nameToId lets the party join by display name,
+    // the same key myId is matched on — unit ids aren't the roster login.
+    const unitHp = {}, nameToId = {};
+    for (const u of d.units || []) {
+      names[u.id] = u.displayName || u.id;
+      if (!u.isBoss && !/^__enemy/.test(u.id)) {
+        players[u.id] = u.displayName;
+        unitHp[u.id] = { max: u.maxHp || 0, hp: u.maxHp || 0 };
+        if (u.displayName) nameToId[u.displayName.toLowerCase()] = u.id;
+      }
+    }
     const myId = Object.keys(players).find(id => players[id].toLowerCase() === myName.toLowerCase());
     const evs = [...(d.events || [])].sort((a, b) => (a.atMs || 0) - (b.atMs || 0));
     const maxAt = evs.length ? evs[evs.length - 1].atMs || 1 : 1;
@@ -1494,13 +1533,46 @@
     const dur = d.displayDurationMs || maxAt;
     fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
-      thinned: thinningOf(d) };
-    if (document.getElementById('fightpanel').classList.contains('open')) startFightTimer();
+      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0 };
+    // A fresh fight replays from full HP for the party bars too. The timer runs
+    // while EITHER the fight panel or the party panel wants it.
+    startFightTimer();
+    if (document.getElementById('partypanel').classList.contains('open')) renderParty();
+  }
+  // Advance per-unit HP to the replay cursor: last target_hp_after wins, a defeat
+  // pins to 0. Walked incrementally (fight.hpIdx) so it's O(total events) across
+  // the fight, not O(events) per render. Shared by every party bar.
+  function advanceHp(cursor) {
+    if (!fight || !fight.unitHp) return;
+    while (fight.hpIdx < fight.evs.length && (fight.evs[fight.hpIdx].atMs || 0) <= cursor) {
+      const ev = fight.evs[fight.hpIdx++];
+      const u = fight.unitHp[ev.target] || fight.unitHp[ev.unit];
+      if (!u) continue;
+      if (ev.kind === 'defeat') u.hp = 0;
+      else if (ev.targetHpAfter != null) u.hp = ev.targetHpAfter;
+    }
+  }
+  const fightCursor = () => fight ? Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale) : 0;
+  const fightPanelOpen = () => document.getElementById('fightpanel')?.classList.contains('open');
+  const partyPanelOpen = () => document.getElementById('partypanel')?.classList.contains('open');
+  // One replay timer feeds both the Live Fight feed and the Party HP bars; each
+  // render is guarded by its own panel, and the timer only exists while a fight
+  // is still playing and at least one consumer is open.
+  function fightTick() {
+    if (fightPanelOpen()) renderFight();
+    if (partyPanelOpen()) renderParty();
   }
   function startFightTimer() {
     clearInterval(fightTimer); fightTimer = null;
-    renderFight();
-    if (fight && Date.now() - fight.t0 < fight.dur) fightTimer = setInterval(renderFight, 900);
+    if (fightPanelOpen()) renderFight();
+    if (partyPanelOpen()) renderParty();
+    if (fight && Date.now() - fight.t0 < fight.dur && (fightPanelOpen() || partyPanelOpen())) {
+      fightTimer = setInterval(fightTick, 900);
+    }
+  }
+  // Stop only when nothing wants it any more.
+  function maybeStopFightTimer() {
+    if (!fightPanelOpen() && !partyPanelOpen() && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
   }
   // mitigation suffix: only shown when meaningful (>2% of the hit) — armor,
   // shields, and damage-reduction buffs all land in unmitigated-vs-actual
