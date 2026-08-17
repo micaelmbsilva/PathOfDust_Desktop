@@ -1243,6 +1243,31 @@
   // member's max so idle/between-fight bars still get notches.
   let lastPartySig = null;
   const lastMaxHp = {};
+  // When we've never seen a member's max HP in a fight (fresh session, resting
+  // bars), the backend's build API exposes it: stats.Health, keyed by display
+  // name, from that player's pings. CORS is open so the renderer fetches it
+  // directly — once per member, cached (number | null=missing | 'pending').
+  const BUILD_API = 'https://pathofdustdesktop-production.up.railway.app';
+  const buildMaxHp = {};
+  const parseHp = (s) => { const m = String(s).match(/([\d.]+)\s*([kmb]?)/i);
+    return m ? Math.round(+m[1] * ({ k: 1e3, m: 1e6, b: 1e9 }[(m[2] || '').toLowerCase()] || 1)) : 0; };
+  let buildRepaintT = null;
+  const fetchBuildHp = (name) => {
+    const pid = name.toLowerCase();
+    if (pid in buildMaxHp) return; // pending/number/null all set the key — never refetch
+    buildMaxHp[pid] = 'pending';
+    fetch(`${BUILD_API}/api/build/${encodeURIComponent(name)}`, { cache: 'default' })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        const hp = j && j.stats && parseHp(j.stats.Health);
+        buildMaxHp[pid] = hp > 0 ? hp : null;
+        // One coalesced repaint once builds land, so notches/scale refine without
+        // a render per resolved fetch.
+        if (hp > 0) { clearTimeout(buildRepaintT); buildRepaintT = setTimeout(() => {
+          if (document.getElementById('partypanel').classList.contains('open')) renderParty(); }, 250); }
+      })
+      .catch(() => { buildMaxHp[pid] = null; });
+  };
   // Notch period as a % of a member's own bar. One fixed HP-per-notch across the
   // party (refMax/16, so the tankiest shows ~16), but each bar's notch COUNT is
   // rounded to a whole number and the period is 100/count — so notches always
@@ -1286,18 +1311,29 @@
     // aren't the roster login). Downed IS dead — a downed member always renders
     // empty/red regardless of the last HP sample. No fight data → full/neutral.
     // A shield_hp absorb rides on top as a bluish glow that shrinks as it's spent.
-    // Party-wide HP scale (its biggest member), so the fixed HP-per-notch — and
-    // thus how many notches each bar shows — is shared across the pane.
-    const refMax = Math.max(0, ...cs.map(c => { const u = unitOf(c); return (u && u.max) || lastMaxHp[c.displayName.toLowerCase()] || 0; }));
+    // Best-known max HP for a member: the live fight, else last seen in a fight
+    // this session, else the backend build (fetched lazily). 0 while unknown.
+    const maxOf = (c) => {
+      const pid = c.displayName.toLowerCase();
+      const u = unitOf(c);
+      if (u && u.max) { lastMaxHp[pid] = u.max; return u.max; }
+      if (lastMaxHp[pid]) return lastMaxHp[pid];
+      const b = buildMaxHp[pid];
+      if (typeof b === 'number') return b;
+      fetchBuildHp(c.displayName); // deduped; repaints when it lands
+      return 0;
+    };
+    // Party-wide HP scale (its biggest active member), so the fixed HP-per-notch —
+    // and thus how many notches each bar shows — is shared across the pane.
+    const refMax = Math.max(0, ...cs.filter(c => !c.retreated).map(maxOf));
     // One state object drives both the rebuild string (hpBar) and the in-place
     // tick update (paintBar), so they can't drift. Downed = a dead bar; no live
-    // unit = a full, green, glowing bar (with notches from last-seen max).
+    // unit = a full, green, glowing bar (with notches from best-known max).
     const barState = (c) => {
-      const pid = c.displayName.toLowerCase();
-      if (c.downedUntilMs) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(refMax, lastMaxHp[pid]), title: '⬇️ Downed' };
+      const max = maxOf(c);
+      if (c.downedUntilMs) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(refMax, max), title: '⬇️ Downed' };
       const u = unitOf(c);
-      if (u && u.max) lastMaxHp[pid] = u.max;
-      if (!u || !u.max) return { pct: 100, lvl: 'ok', shPct: 0, tick: tickPctOf(refMax, lastMaxHp[pid]), title: 'Full HP' };
+      if (!u || !u.max) return { pct: 100, lvl: 'ok', shPct: 0, tick: tickPctOf(refMax, max), title: 'Full HP' };
       const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
       const lvl = pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'low';
       const shPct = u.shield > 0 ? Math.max(0, Math.min(100, u.shield / u.max * 100)) : 0;
