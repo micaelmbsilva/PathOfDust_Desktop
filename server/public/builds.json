@@ -83,12 +83,12 @@
        "r": 3
       },
       {
-       "n": "Chain Frenzy",
-       "r": 3
-      },
-      {
        "n": "Berserking",
        "r": 4
+      },
+      {
+       "n": "Chain Frenzy",
+       "r": 3
       },
       {
        "n": "Culling Strike",
@@ -617,7 +617,7 @@
        "r": 3
       },
       {
-       "n": "Blood Debt",
+       "n": "Overflow Vessel",
        "r": 3
       }
      ],
