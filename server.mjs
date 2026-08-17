@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 88;
+const BRIDGE_REV = 89;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -632,12 +632,18 @@ export function fightsOf(text) { // exported for scrape smoke-tests
 // reach that five times faster.
 let pulling = null;          // in-flight guard — concurrent callers share one pull
 let pullBackoffUntil = 0;    // set on failure so a 429 isn't hammered
-async function pullInterface() {
+async function pullInterface(opts = {}) {
   if (pulling) return pulling;
-  if (Date.now() < pullBackoffUntil) return { updated: false, throttled: true };
+  // The backoff exists so the automatic 30-min loop doesn't hammer a rate limit.
+  // A user clicking "Check for Updates" (opts.manual — every hit on the HTTP
+  // route) should try anyway; otherwise the button silently reports "up to date"
+  // during a backoff window and never sees a newly-pushed interface.
+  if (!opts.manual && Date.now() < pullBackoffUntil) return { updated: false, throttled: true };
   pulling = (async () => {
     try {
-      const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' } }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
+      // 15s timeout so a stalled request can't leave `pulling` set forever,
+      // which would wedge every later pull (manual and auto) for the session.
+      const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' }, signal: AbortSignal.timeout(15000) }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
       const cur = await appVersion();
       const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
       const base = `https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}`;
@@ -829,7 +835,9 @@ const srv = createServer(async (req, res) => {
       return json(res, await passives());
     }
     if (url.pathname === '/api/pull-interface' && req.method === 'POST') {
-      return json(res, await pullInterface());
+      // Every hit here is user-initiated (Refresh / Check for Updates), so it
+      // bypasses the automatic loop's backoff and always attempts a fetch.
+      return json(res, await pullInterface({ manual: true }));
     }
     if (url.pathname === '/api/open-wiki' && req.method === 'POST') {
       // Open the game wiki in the user's default browser. Fixed URL on purpose —
