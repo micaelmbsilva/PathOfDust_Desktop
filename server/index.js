@@ -285,19 +285,53 @@ function parseCharacter(text) {
 }
 
 // Public read-only tree page: nodes have no node_key, so key stays null; rank
-// reads "2/4". Mirrors the app ping's passives shape.
+// reads "2/4". Mirrors the app ping's passives shape. Also captures the page's
+// absolute layout (node x/y/w + connector lines + stage size) so the site can
+// draw the tree exactly like the game does — the layout is per-class static.
 function parsePassives(text) {
   const points = strip((text.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || '');
   const nodes = [];
+  const layoutNodes = [];
   for (const chunk of text.split('class="node ').slice(1)) {
-    const head = chunk.slice(0, 1200);
+    const head = chunk.slice(0, 1600);
     const grab = (cls) => strip((head.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
-    const name = grab('node-name');
-    if (!name || head.startsWith('node-root')) continue;
-    nodes.push({ key: null, name, tier: grab('node-kind'), rank: grab('node-rank') });
+    const rawName = strip((head.match(/class="node-name[^"]*"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || '');
+    // "(inactive)" arrives as a nested span inside node-name — strip it into a flag
+    const dead = /\(inactive\)/i.test(rawName) || /node--inactive/.test(head);
+    const name = rawName.replace(/\s*\(inactive\)\s*/i, ' ').replace(/\s+/g, ' ').trim();
+    const root = head.startsWith('node-root');
+    if (!name && !root) continue;
+    if (!root) nodes.push({ key: null, name, tier: grab('node-kind'), rank: grab('node-rank') });
+    layoutNodes.push({
+      name, dead, kind: root ? 'root' : (head.match(/^node-(skill|spec|mod)/) || [, 'skill'])[1],
+      desc: strip((head.match(/data-tip="([^"]*)"/) || [])[1] || ''),
+      max: +((grab('node-rank').match(/\/(\d+)/) || [])[1] || 0),
+      x: +(head.match(/left:\s*([\d.]+)px/) || [])[1] || 0,
+      y: +(head.match(/top:\s*([\d.]+)px/) || [])[1] || 0,
+      w: +(head.match(/width:\s*([\d.]+)px/) || [])[1] || 140,
+    });
   }
-  return { points, nodes };
+  const svg = (text.match(/<svg class="connectors"[\s\S]*?<\/svg>/) || [])[0] || '';
+  const layout = {
+    w: +(svg.match(/width="([\d.]+)"/) || [])[1] || 1180,
+    h: +(svg.match(/height="([\d.]+)"/) || [])[1] || 463,
+    nodes: layoutNodes,
+    // lines parsed to plain numbers server-side — never inject scraped markup
+    edges: [...svg.matchAll(/x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)"/g)]
+      .map(m => ({ x1: +m[1], y1: +m[2], x2: +m[3], y2: +m[4] })),
+  };
+  return { points, nodes, layout };
 }
+
+// Per-class tree layouts, refreshed by the roster scrape (same tree for every
+// member of a class). In-memory — repopulated a couple of minutes after boot.
+const treeLayouts = {};
+app.get('/api/tree/:archetype', (req, res) => {
+  const t = treeLayouts[String(req.params.archetype).slice(0, 64)];
+  if (!t) return res.sendStatus(404);
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json(t);
+});
 
 async function scrapeRoster() {
   if (!pool) return;
@@ -314,7 +348,22 @@ async function scrapeRoster() {
         const data = { scraped: new Date().toISOString(), name: c.name, stats: c.stats, equipped: c.equipped };
         try {
           const p = parsePassives(await getPage('/characters/' + encodeURIComponent(slug) + '/passives'));
-          if (p.nodes.length) data.passives = p;
+          if (p.nodes.length) {
+            data.passives = { points: p.points, nodes: p.nodes };
+            // Merge layouts across the class's players — each page only renders
+            // the modifiers its owner has revealed, so the union shows the most.
+            if (c.archetype && p.layout.nodes.length > 3) {
+              const prev = treeLayouts[c.archetype];
+              if (!prev) treeLayouts[c.archetype] = p.layout;
+              else {
+                const names = new Set(prev.nodes.map(n => n.name));
+                for (const n of p.layout.nodes) if (!names.has(n.name)) prev.nodes.push(n);
+                const ekey = (e) => `${e.x1},${e.y1},${e.x2},${e.y2}`;
+                const eks = new Set(prev.edges.map(ekey));
+                for (const e of p.layout.edges) if (!eks.has(ekey(e))) prev.edges.push(e);
+              }
+            }
+          }
         } catch (e) { console.error('scrape passives', slug + ':', e.message); }
         await pool.query(`DELETE FROM installs WHERE id = $1 AND name <> $2`, [id, c.name]); // renamed char
         await pool.query(
