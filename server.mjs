@@ -53,9 +53,10 @@ async function ping() {
 }
 
 const PORT = 8787;
+const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 74;
+const BRIDGE_REV = 75;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -66,10 +67,14 @@ async function me() {
   const { text } = await getAuthed('/');
   const name = (text.match(/<h1>([^<]*)<\/h1>/) || [])[1] || 'Character';
   const nav = (text.match(/top-nav-stats">([^<]*)</) || [])[1] || '';
-  const stats = [];
-  const re = /class="stat-label"([^>]*)>(.*?)<\/div><div class="stat-value"[^>]*>(.*?)<\/div>/g;
-  for (let m; (m = re.exec(text)); ) stats.push({ label: strip(m[2]), value: strip(m[3]), tip: tipOf(m[1]) });
+  const stats = statsOf(text);
   const autoRepair = /name="auto_repair"[^>]*checked/.test(text);
+  // "Repair All (Nd)" in the Gear card header. The site omits the whole form
+  // when nothing is damaged, so null = nothing to repair.
+  const raf = text.match(/<form[^>]*action="\/repair-all"[^>]*>\s*<button([^>]*)>([^<]*)</);
+  const repairAll = raf
+    ? { cost: +(strip(raf[2]).match(/\((\d+)\s*d\)/) || [])[1] || 0, disabled: /\bdisabled\b/.test(raf[1]) }
+    : null;
   const autoRepairTip = strip((text.match(/name="auto_repair"[^>]*>([^<]*)</) || [])[1] || '')
     || 'Auto-repair gear with dust after every boss fight';
 
@@ -108,7 +113,7 @@ async function me() {
   const bt = (text.match(/<table class="buff-activity-table"[\s\S]*?<\/table>/) || [])[0] || '';
   const buffTable = [...bt.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
     .map(m => [...m[1].matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/g)].map(c => strip(c[1])));
-  return { name, nav, stats, autoRepair, autoRepairTip, reforge, xp, wings, countdowns, archetype, buffTable };
+  return { name, nav, stats, autoRepair, autoRepairTip, repairAll, reforge, xp, wings, countdowns, archetype, buffTable };
 }
 const strip = (s) => s.replace(/<[^>]*>/g, '')
   .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
@@ -139,6 +144,56 @@ export const implicitsOf = (chunk) => [...chunk.matchAll(/class="gear-(sacred|un
   .map(m => ({ t: strip(m[2]), gold: m[1] === 'unique' }))
   .filter(x => x.t);
 
+// Durability line. Indestructible items render a word instead of a bar; items
+// the site doesn't show a bar for at all come back null so the UI can tell
+// "no durability concept here" from "at 100%".
+export const durabilityOf = (chunk) => /class="indestructible"/.test(chunk)
+  ? { pct: null, indestructible: true }
+  : /class="durability-pct"/.test(chunk)
+    ? { pct: +(chunk.match(/class="durability-pct"[^>]*>(\d+)%/) || [])[1] || 0, indestructible: false }
+    : null;
+
+// Repair form (/repair-item on a bag item, /repair-equipped on a worn slot).
+// The site renders NOTHING when the item doesn't need repair, so absence is the
+// "nothing to fix" signal — there is no flag to read. Cost lives only in the
+// button's own label, "Repair (240d)".
+export const repairOf = (chunk) => {
+  const f = chunk.match(/<form[^>]*action="\/repair-(item|equipped)"[^>]*>([\s\S]*?)<\/form>/);
+  if (!f) return null;
+  const b = f[2].match(/<button([^>]*)>([^<]*)</) || [];
+  const field = f[1] === 'item' ? 'item_id' : 'slot';
+  const value = (f[2].match(new RegExp(`name="${field}"\\s+value="([^"]+)"`)) || [])[1];
+  if (!value) return null;
+  return { endpoint: `/repair-${f[1]}`, field, value,
+    cost: +(strip(b[2] || '').match(/\((\d+)\s*d\)/) || [])[1] || 0,
+    disabled: /\bdisabled\b/.test(b[1] || '') };
+};
+
+// Every stat card on a page: [{label, value, tip, vtip}]. The five breakdown
+// stats (DR, Block, Evasion, Dmg Dealt, Intervene) hang their tooltip off the
+// VALUE div, the rest off the label — so both are captured.
+const statsOf = (text) => [...text.matchAll(
+  /class="stat-label"([^>]*)>(.*?)<\/div>\s*<div class="stat-value"([^>]*)>(.*?)<\/div>/g)]
+  .map(m => ({ label: strip(m[2]), value: strip(m[4]), tip: tipOf(m[1]), vtip: tipOf(m[3]) }));
+
+// One gear/bag card. Shared by our own pages and other players' — the site
+// builds all four of its item-card variants from the same block, so one parser
+// covers them; the owner-only bits (id, protect, repair) just come back null.
+const itemOf = (chunk) => {
+  const grab = (cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+  return {
+    name: grab('gear-name'), slot: grab('gear-slot-label'), tier: grab('gear-tier'),
+    quality: grab('gear-quality'), qtip: qtipOf(chunk), primary: grab('gear-primary'),
+    mods: modsOf(chunk), implicits: implicitsOf(chunk),
+    sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
+    krangled: /gear-name-locked/.test(chunk),
+    durability: durabilityOf(chunk),
+  };
+};
+// Split a region into item-card chunks. Empty slots carry class="gear-slot empty"
+// and no card body, so they're matched too and filtered by the caller.
+const gearChunks = (region) => region.split(/class="gear-slot(?: empty)?"/).slice(1);
+
 // Scrape the bag (unequipped items) out of the inventory page's text. Each item's
 // id is the item_id its equip/disenchant forms carry; `protected` = Keep checkbox.
 function bag(text) {
@@ -156,6 +211,7 @@ function bag(text) {
       implicits: implicitsOf(chunk),
       krangled: /gear-name-locked/.test(chunk),
       protected: /name="protect"[^>]*checked/.test(chunk),
+      durability: durabilityOf(chunk), repair: repairOf(chunk),
     });
   }
   return { items };
@@ -164,22 +220,62 @@ function bag(text) {
 // Party classes: the /characters roster shows "Level N Class" per player — the
 // game WS roster doesn't carry class at all. Cached ~30 min; lowercased names.
 // A failed/empty scrape keeps serving the last good cache.
-let rosterCache = { at: 0, classes: {} };
-export async function rosterClasses() { // exported for scrape smoke-tests
-  if (Date.now() - rosterCache.at < 30 * 60000) return rosterCache.classes;
+let rosterCache = { at: 0, list: [] };
+export async function roster() { // exported for scrape smoke-tests
+  if (Date.now() - rosterCache.at < 30 * 60000) return rosterCache.list;
   let text;
   // site down / scrape hiccup → serve the stale cache instead of a 500; a dead
   // session still surfaces as 401 so the page can say "restart to re-login"
   try { ({ text } = await getAuthed('/characters')); }
-  catch (e) { if (e.expired) throw e; return rosterCache.classes; }
-  const classes = {};
+  catch (e) { if (e.expired) throw e; return rosterCache.list; }
+  const list = rosterOf(text);
+  if (list.length) rosterCache = { at: Date.now(), list };
+  return rosterCache.list;
+}
+export function rosterOf(text) { // exported for scrape smoke-tests
+  const list = [];
   for (const chunk of text.split('class="roster-card"').slice(1)) {
     const name = strip((chunk.match(/class="roster-name"[^>]*>([^<]*)</) || [])[1] || '');
-    const m = chunk.match(/class="roster-meta"[^>]*>\s*Level\s+(\d+)\s+([A-Za-z]+)/) || [];
-    if (name && m[2]) classes[name.toLowerCase()] = { cls: m[2], level: +m[1] };
+    // The login only exists in the card's href — it's never printed as text.
+    const login = decodeURIComponent((chunk.match(/href="\/characters\/([^"]+)"/) || [])[1] || '');
+    const lv = chunk.match(/class="roster-meta"[^>]*>\s*Level\s+(\d+)\s+([A-Za-z]+)/) || [];
+    const wl = chunk.match(/class="roster-meta"[^>]*>\s*(\d+)W\s*\/\s*(\d+)L\s*\(([^)]*)\)/) || [];
+    if (!name || !lv[2]) continue;
+    list.push({ login, name, cls: lv[2], level: +lv[1],
+      wins: +wl[1] || 0, losses: +wl[2] || 0, winrate: wl[3] || '—',
+      sprite: SITE + ((chunk.match(/class="roster-sprite" src="([^"]+)"/) || [])[1] || '') });
   }
-  if (Object.keys(classes).length) rosterCache = { at: Date.now(), classes };
-  return rosterCache.classes;
+  return list;
+}
+// Party panel's view of the same scrape: lowercased name -> {cls, level, login}.
+// The login is what /characters/:login needs — it isn't the display name.
+export async function rosterClasses() {
+  return Object.fromEntries((await roster())
+    .map(r => [r.name.toLowerCase(), { cls: r.cls, level: r.level, login: r.login }]));
+}
+
+// Another player's character sheet. Same item-card markup as our own pages, so
+// the shared parsers cover it; no forms exist here, so nothing is actionable.
+async function character(login) {
+  const { text } = await getAuthed('/characters/' + encodeURIComponent(login));
+  return characterOf(text, login);
+}
+export function characterOf(text, login) { // exported for scrape smoke-tests
+  if (/<h1>Not Found<\/h1>/.test(text)) return { notFound: true };
+  const gearRegion = text.split(/class="bag-row/)[0];
+  return {
+    login,
+    name: strip((text.match(/<h1>([^<]*)<\/h1>/) || [])[1] || ''),
+    archetype: strip((text.match(/class="role-badge[^"]*"[^>]*>([^<]*)</) || [])[1] || ''),
+    sprite: SITE + ((text.match(/class="sprite-avatar" src="([^"]+)"/) || [])[1] || ''),
+    hasTree: /class="passives-link-btn"/.test(text), // absent for Commoner
+    stats: statsOf(text),
+    xp: { label: strip((text.match(/xp-label">([^<]*)</) || [])[1] || ''),
+          pct: +(text.match(/xp-fill" style="width:(\d+)%/) || [])[1] || 0 },
+    // empty slots stay in the list (name '') so the grid keeps all five cells
+    equipped: gearChunks(gearRegion).map(itemOf).filter(i => i.slot),
+    bag: gearChunks(text.slice(gearRegion.length)).map(itemOf).filter(i => i.name),
+  };
 }
 
 // Pending choice card: a veiled/token craft (id="veil-choice") or the veiled
@@ -252,6 +348,7 @@ export async function inventory() { // exported for scrape smoke-tests
       sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
       implicits: implicitsOf(chunk),
       krangled: /gear-name-locked/.test(chunk),
+      durability: durabilityOf(chunk), repair: repairOf(chunk),
     });
   }
 
@@ -303,40 +400,128 @@ export async function inventory() { // exported for scrape smoke-tests
   return { dust, sand, tokens, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle }, veil, autoDisenchant };
 }
 
-// Passive tree: points chip, respec/save availability, and every node.
-async function passives() {
-  const { text } = await getAuthed('/passives');
-  const points = strip((text.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || '');
-  const respecLabel = strip((text.match(/action="\/passives\/respec">\s*<button[^>]*>([^<]*)</) || [])[1] || 'Respec');
-  const canSave = /action="\/passives\/save">\s*<button(?![^>]*disabled)/.test(text);
-  const canReset = /action="\/passives\/reset"/.test(text); // "Reset Preview" — discard unsaved changes
-  const dirty = /preview-note dirty/.test(text);            // site's "Unsaved changes." flag
+// One passive canvas out of a page fragment. The site renders the same
+// `render_ptree_body` markup four ways (own tree, own 2nd-class tree, and the
+// read-only versions of both), so one parser covers all of them: the read-only
+// pages simply carry no form, hence no node_key and canInc/canDec false.
+// `secondary` is stamped on each node because /passives/allocate needs it as a
+// field to know which of the two trees the point goes into.
+export function treeOf(html, secondary = false) { // exported for scrape smoke-tests
   // The live tree is an absolute canvas; grab its size + the SVG connectors
   // verbatim so we can reproduce the exact layout and dependency lines.
-  const svg = (text.match(/<svg class="connectors"[\s\S]*?<\/svg>/) || [])[0] || '';
-  const stage = { w: +(svg.match(/width="(\d+)"/) || [])[1] || 1180,
-                  h: +(svg.match(/height="(\d+)"/) || [])[1] || 463 };
+  const svg = (html.match(/<svg class="connectors"[\s\S]*?<\/svg>/) || [])[0] || '';
+  const stage = { w: +(svg.match(/width="([\d.]+)"/) || [])[1] || 1180,
+                  h: +(svg.match(/height="([\d.]+)"/) || [])[1] || 463 };
   const nodes = [];
-  for (const chunk of text.split('class="node ').slice(1)) {
+  for (const chunk of html.split('class="node ').slice(1)) {
+    // split() already ends the chunk at the next node; the 1600 cap only bounds
+    // the last one, which would otherwise run to the end of the page.
     const fe = chunk.indexOf('</form>');
-    const head = fe >= 0 ? chunk.slice(0, fe + 7) : chunk.slice(0, 900); // node-root has no form
-    const key = (head.match(/name="node_key"\s+value="([^"]+)"/) || [])[1] || null;
-    if (!key && !head.startsWith('node-root')) continue; // keyless + not the class passive -> not a node
+    const head = fe >= 0 && fe < 1600 ? chunk.slice(0, fe + 7) : chunk.slice(0, 1600);
+    const root = head.startsWith('node-root');
     const grab = (cls) => strip((head.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+    // name: full inner markup stripped, so a nested "(inactive)" span survives
+    const name = strip((head.match(/class="node-name[^"]*"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || '');
+    if (!name && !root) continue;
     nodes.push({
-      // name: full inner markup stripped, so a nested "(inactive)" span survives
-      key, name: strip((head.match(/class="node-name[^"]*"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || ''),
+      key: (head.match(/name="node_key"\s+value="([^"]+)"/) || [])[1] || null,
+      secondary, name,
       tier: grab('node-kind'), rank: grab('node-rank'),
       desc: strip((head.match(/data-tip="([^"]*)"/) || [])[1] || ''),
       cls: head.slice(0, head.indexOf('"')),
-      x: +(head.match(/left:\s*(\d+)px/) || [])[1] || 0, // tree column position
-      y: +(head.match(/top:\s*(\d+)px/) || [])[1] || 0,  // tree row position
-      w: +(head.match(/width:\s*(\d+)px/) || [])[1] || 140,
+      x: +(head.match(/left:\s*([\d.]+)px/) || [])[1] || 0, // tree column position
+      y: +(head.match(/top:\s*([\d.]+)px/) || [])[1] || 0,  // tree row position
+      w: +(head.match(/width:\s*([\d.]+)px/) || [])[1] || 140,
       canInc: /value="1"(?![^>]*disabled)/.test(head),
       canDec: /value="-1"(?![^>]*disabled)/.test(head),
     });
   }
-  return { points, respecLabel, canSave, canReset, dirty, stage, connectors: svg, nodes };
+  // edges as plain numbers as well as the raw svg — new pages draw from these
+  // rather than injecting scraped markup.
+  const edges = [...svg.matchAll(/x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)"/g)]
+    .map(m => ({ x1: +m[1], y1: +m[2], x2: +m[3], y2: +m[4] }));
+  return { stage, connectors: svg, edges, nodes };
+}
+
+// Passive tree: points chip, respec/save availability, and every node. When
+// Split Personality is equipped the page carries a SECOND tree below the first;
+// both are parsed separately so their nodes and canvases never get mixed.
+async function passives() {
+  const { text } = await getAuthed('/passives');
+  const si = text.indexOf('class="ptree-secondary"');
+  const primaryHtml = si >= 0 ? text.slice(0, si) : text;
+  const points = strip((primaryHtml.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || '');
+  const respecLabel = strip((text.match(/action="\/passives\/respec">\s*<button[^>]*>([^<]*)</) || [])[1] || 'Respec');
+  const canSave = /action="\/passives\/save">\s*<button(?![^>]*disabled)/.test(text);
+  const canReset = /action="\/passives\/reset"/.test(text); // "Reset Preview" — discard unsaved changes
+  const dirty = /preview-note dirty/.test(text);            // site's "Unsaved changes." flag
+
+  // 2nd class picker — only rendered while the Split Personality unique is
+  // equipped. Its tree section stays empty until a class is actually chosen.
+  let secondary = null;
+  if (si >= 0) {
+    const secHtml = text.slice(si);
+    const form = (secHtml.split('action="/passives/set-secondary"')[1] || '').split('</form>')[0];
+    secondary = {
+      options: [...form.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)</g)]
+        .map(m => ({ value: m[1], selected: /selected/.test(m[2]), label: strip(m[3]) })),
+      buttonLabel: strip((form.match(/<button[^>]*>([^<]*)</) || [])[1] || 'Choose'),
+      ...treeOf(secHtml, true),
+    };
+  }
+  return { points, respecLabel, canSave, canReset, dirty, ...treeOf(primaryHtml), secondary };
+}
+
+// Another player's tree — same canvas, no controls. Commoners have none.
+async function characterPassives(login) {
+  const { text } = await getAuthed(`/characters/${encodeURIComponent(login)}/passives`);
+  if (/<h1>Not Found<\/h1>/.test(text)) return { notFound: true };
+  const si = text.indexOf('class="ptree-secondary"');
+  const primaryHtml = si >= 0 ? text.slice(0, si) : text;
+  const tree = treeOf(primaryHtml);
+  return {
+    name: strip((text.match(/<h1>([^<]*)<\/h1>/) || [])[1] || '').replace(/'s Passives$/, ''),
+    points: strip((primaryHtml.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || ''),
+    archetype: strip((primaryHtml.match(/class="eyebrow"[^>]*>([^<]*)</) || [])[1] || ''),
+    noTree: !tree.nodes.length, // Commoner short-circuit page
+    ...tree,
+    secondary: si >= 0 ? treeOf(text.slice(si), true) : null,
+  };
+}
+
+// Streamer-only fight breakdown. The site hardcodes the allowed login and
+// serves a bare "Not Found" card to everyone else — no nav, no header — so
+// absence of the page header is how we report "you can't see this".
+async function fights() {
+  const { text } = await getAuthed('/fights');
+  return fightsOf(text);
+}
+export function fightsOf(text) { // exported for scrape smoke-tests
+  if (!/<h1>Fight History<\/h1>/.test(text)) return { gated: true, fights: [] };
+  const list = [];
+  // Drop the header card, then one entry per remaining card.
+  for (const card of text.split('<div class="card">').slice(2)) {
+    const title = strip((card.match(/<h2>([^<]*)<\/h2>/) || [])[1] || '');
+    if (!title) continue;
+    const section = (h) => (card.split(`<h3>${h}</h3>`)[1] || '').split('<h3>')[0];
+    const items = (h) => [...section(h).matchAll(/<li([^>]*)>([\s\S]*?)<\/li>/g)]
+      .map(m => ({ text: strip(m[2]), muted: /class="muted"/.test(m[1]) }))
+      .filter(x => x.text);
+    list.push({
+      title, won: /—\s*Won/.test(title),
+      meta: strip((card.match(/<p class="muted">([^<]*)<\/p>/) || [])[1] || ''),
+      boss: items('Boss Stats').map(x => x.text),
+      report: items('Battle Report').map(x => x.text),
+      skills: items('Skills Cast').map(x => x.text),
+      loot: items('Loot').filter(x => !x.muted).map(x => x.text),
+      broken: items('Broken Gear').filter(x => !x.muted).map(x => x.text),
+      buffs: [...(card.match(/<tbody>([\s\S]*?)<\/tbody>/) || [, ''])[1]
+        .matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+        .map(m => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(c => strip(c[1])))
+        .filter(r => r.length === 5),
+    });
+  }
+  return { gated: false, fights: list };
 }
 
 let logChain = Promise.resolve(); // serializes fight-log write+prune
@@ -452,6 +637,20 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/roster-classes') {
       return json(res, await rosterClasses());
+    }
+    if (url.pathname === '/api/roster') {
+      return json(res, await roster());
+    }
+    if (url.pathname === '/api/character' || url.pathname === '/api/character-passives') {
+      // Path segment goes straight into a URL we fetch with the session cookie —
+      // keep it to the shape Twitch logins actually take.
+      const login = url.searchParams.get('login') || '';
+      if (!/^[a-z0-9_]{1,40}$/i.test(login)) { res.writeHead(400); return res.end('bad login'); }
+      return json(res, url.pathname === '/api/character'
+        ? await character(login) : await characterPassives(login));
+    }
+    if (url.pathname === '/api/fights') {
+      return json(res, await fights());
     }
     if (url.pathname === '/api/me') {
       return json(res, await me());
