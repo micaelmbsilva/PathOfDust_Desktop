@@ -205,7 +205,7 @@
   .pcell .phpt { position: absolute; top: 0; left: 0; height: 100%; border-radius: 2px;
     background: rgba(255,225,225,0.5); transition: width 0.55s ease 0.18s; pointer-events: none; }
   .pcell .phpf { position: absolute; top: 0; left: 0; height: 100%; border-radius: 2px;
-    transition: width 0.16s linear; background: #5aa469; }
+    transition: width 0.09s linear; background: #5aa469; }
   .pcell .phpf.ok { background: #5aa469; } .pcell .phpf.warn { background: #d9a441; }
   .pcell .phpf.low { background: #d05a5a; }
   .pcell .phpf.dead { background: #7a2f2f; }
@@ -237,7 +237,7 @@
   .pcell .php.sh { box-shadow: 0 0 5px 1px rgba(140,185,255,0.75); }
   .pcell .pshd { position: absolute; top: 0; left: 0; height: 100%; border-radius: 2px; z-index: 3;
     background: linear-gradient(90deg, rgba(190,220,255,0.9), rgba(150,195,255,0.5));
-    mix-blend-mode: screen; transition: width 0.35s linear; pointer-events: none; }
+    mix-blend-mode: screen; transition: width 0.18s linear; pointer-events: none; }
   .pcell.mme .pn { color: #ffcf5a; }
   /* battle entries */
   .bent { border: 1px solid rgba(160,140,255,0.2); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
@@ -1403,6 +1403,7 @@
       renderParty();
     });
     document.querySelectorAll('#partyBody [data-char]').forEach(el => el.onclick = () => showCharacter(el.dataset.char));
+    startPartyFrames(); // begin the smooth loop if a fight is live (e.g. panel just opened)
   }
 
   // Fold an encounter's events into a small report (raw events are never kept).
@@ -1720,21 +1721,38 @@
   // One replay timer feeds both the Live Fight feed and the Party HP bars; each
   // render is guarded by its own panel, and the timer only exists while a fight
   // is still playing and at least one consumer is open.
+  // The party HP/shield/trail wants display-rate smoothness. A full pane rebuild
+  // per frame would be wasteful, but renderParty({tick:true}) only mutates the
+  // existing bars (paintBar) when nothing structural changed — cheap enough to
+  // run every animation frame. So the party bars glide at the display refresh,
+  // while the heavier Live Fight feed stays on the 900ms interval. The loop
+  // self-stops when the fight ends or the panel closes.
+  let partyRaf = null;
+  function partyFrame() {
+    partyRaf = null;
+    if (!(fight && Date.now() - fight.t0 < fight.dur && partyPanelOpen())) return;
+    renderParty({ tick: true });
+    if (!partyRaf) partyRaf = requestAnimationFrame(partyFrame); // a structural rebuild may re-arm already
+  }
+  const startPartyFrames = () => {
+    if (!partyRaf && fight && Date.now() - fight.t0 < fight.dur && partyPanelOpen()) partyRaf = requestAnimationFrame(partyFrame);
+  };
   function fightTick() {
     if (fightPanelOpen()) renderFight();
-    if (partyPanelOpen()) renderParty({ tick: true });
   }
   function startFightTimer() {
     clearInterval(fightTimer); fightTimer = null;
     if (fightPanelOpen()) renderFight();
     if (partyPanelOpen()) renderParty();
-    if (fight && Date.now() - fight.t0 < fight.dur && (fightPanelOpen() || partyPanelOpen())) {
-      fightTimer = setInterval(fightTick, 900);
+    if (fight && Date.now() - fight.t0 < fight.dur) {
+      if (fightPanelOpen()) fightTimer = setInterval(fightTick, 900);
+      startPartyFrames();
     }
   }
   // Stop only when nothing wants it any more.
   function maybeStopFightTimer() {
     if (!fightPanelOpen() && !partyPanelOpen() && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
+    if (!partyPanelOpen() && partyRaf) { cancelAnimationFrame(partyRaf); partyRaf = null; }
   }
   // mitigation suffix: only shown when meaningful (>2% of the hit) — armor,
   // shields, and damage-reduction buffs all land in unmitigated-vs-actual
