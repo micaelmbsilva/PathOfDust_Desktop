@@ -1197,6 +1197,27 @@
         parts.push(block('unknown', '⚪ Unrecognised', 'New to the game since this app last learned the list.'));
       }
     }
+    // Debuffs landing on your target — the offensive side of the same effects the
+    // "You" section shows landing on you. Buff entries carry no caster, so this is
+    // the WHOLE party's stack on the enemy, not only what you applied.
+    if (fight && fight.enemySnaps?.length) {
+      const cursor = Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale);
+      const latest = {};
+      for (const s of fight.enemySnaps) { if (s.at <= cursor) latest[s.unit] = s; else break; }
+      const merged = {};
+      for (const s of Object.values(latest)) for (const [k, v] of s.buffs) {
+        const b = PodFeed.buff(k);
+        if (b.kind === 'debuff' && (!(k in merged) || +v > +merged[k][1])) merged[k] = [b, v];
+      }
+      const chips = Object.values(merged);
+      if (chips.length) {
+        const live = Date.now() - fight.t0 < fight.dur;
+        parts.push(`<div class="fhead" style="margin-bottom:2px">🎯 On the enemy${live ? '' : ' — last fight'}</div>`);
+        parts.push(`<div class="rolechips">${chips.map(([b, v]) =>
+          `<span class="chip bchip debuff" data-tip="${esc([`${b.label} on the enemy.`, `${b.key} = ${v}`].join('\n\n'))}">🔴 ${esc(b.label)}: <b>${esc(buffVal(b.key, v, 'debuff'))}</b></span>`).join('')}</div>`);
+        parts.push('<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">The whole party\'s debuff stack on your target — the data doesn\'t tag who applied each, so it isn\'t only yours.</div>');
+      }
+    }
     // Channel-point events, which are party-wide rather than about you.
     const t = lastMe?.buffTable;
     if (t && t.length > 1) {
@@ -1630,14 +1651,14 @@
     // has no HP; it only exists here in the encounter payload (units[].maxHp +
     // target_hp_after on events). nameToId lets the party join by display name,
     // the same key myId is matched on — unit ids aren't the roster login.
-    const unitHp = {}, nameToId = {};
+    const unitHp = {}, nameToId = {}, enemyIds = new Set();
     for (const u of d.units || []) {
       names[u.id] = u.displayName || u.id;
       if (!u.isBoss && !/^__enemy/.test(u.id)) {
         players[u.id] = u.displayName;
         unitHp[u.id] = { max: u.maxHp || 0, hp: u.maxHp || 0, shield: 0 };
         if (u.displayName) nameToId[u.displayName.toLowerCase()] = u.id;
-      }
+      } else enemyIds.add(u.id); // boss + adds — for the debuffs landing on them
     }
     const myId = Object.keys(players).find(id => players[id].toLowerCase() === myName.toLowerCase());
     const evs = [...(d.events || [])].sort((a, b) => (a.atMs || 0) - (b.atMs || 0));
@@ -1649,11 +1670,16 @@
     // the full set, carried on the encounter broadcast. players[] is non-boss,
     // non-enemy only, so bosses/adds never count as a death.
     const downed = new Set();
+    // Buff snapshots on the enemy — the offensive side of the same effects the
+    // Buffs pane shows landing on you (Open Wound, Curse, Mark…). Lets the pane
+    // show what's debuffing your target. In at-order (evs is sorted).
+    const enemySnaps = [];
     const groups = new Map();
     const G = (key, mk) => { let g = groups.get(key); if (!g) { g = mk(); groups.set(key, g); } return g; };
     for (const ev of evs) {
       const b = Math.floor((ev.atMs || 0) / 1000);
       if (ev.kind === 'defeat' && players[ev.unit]) downed.add(players[ev.unit]);
+      if (ev.kind === 'buffSnapshot' && enemyIds.has(ev.unit)) enemySnaps.push({ at: ev.atMs || 0, unit: ev.unit, buffs: ev.buffs || [] });
       // absorbed/mitigated portion of a hit (armor, shields, damage-reduction buffs)
       const mit = (ev) => Math.max(0, (ev.unmitigatedDamage || 0) - (ev.damage || 0));
       if (ev.kind === 'attack' && ev.attacker === myId) {
@@ -1689,7 +1715,7 @@
     const dur = d.displayDurationMs || maxAt;
     fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
-      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, downed: [...downed] };
+      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, downed: [...downed], enemySnaps, names };
     // A fresh fight replays from full HP for the party bars too. The timer runs
     // while EITHER the fight panel or the party panel wants it.
     startFightTimer();
