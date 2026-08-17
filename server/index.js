@@ -652,6 +652,27 @@ async function scrapeRoster() {
 let wikiTrees = null;
 const wstrip = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&#?\w+;/g, '')
   .replace(/\s+/g, ' ').trim();
+// The wiki renders each class as the game's own node graph (it stopped being a
+// bullet list on 2026-08-17). Rows sit at fixed depths — root, skill, spec, mod —
+// and a child is horizontally centred under its parent, so nearest-x re-creates
+// the hierarchy without needing the SVG connectors. Output shape is unchanged:
+// the site's class pages read skills[].specializations[].modifiers[].
+function parseWikiNodes(block) {
+  const nodes = [];
+  for (const chunk of block.split('class="node ').slice(1)) {
+    const head = chunk.slice(0, 1600);
+    const rank = wstrip((head.match(/class="node-rank[^"]*"[^>]*>([^<]*)</) || [])[1] || '');
+    nodes.push({
+      kind: (head.match(/^node-(\w+)/) || [, ''])[1],
+      name: wstrip((head.match(/class="node-name[^"]*"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || '')
+        .replace(/\s*\(inactive\)\s*/i, ' ').trim(),
+      max: rank,
+      text: wstrip((head.match(/data-tip="([^"]*)"/) || [])[1] || ''),
+      x: +(head.match(/left:\s*([\d.]+)px/) || [])[1] || 0,
+    });
+  }
+  return nodes;
+}
 function parseWiki(t) {
   const out = {};
   for (let block of t.split(/<details class="[^"]*wiki-archetype[^"]*">/).slice(1)) {
@@ -659,27 +680,34 @@ function parseWiki(t) {
     const summary = wstrip((block.match(/<summary[^>]*>([\s\S]*?)<\/summary>/) || [])[1] || '');
     const name = summary.replace(/Melee|Ranged|Support/g, '').replace(/^[^A-Za-z]+/, '').trim();
     if (!name) continue;
+    const nodes = parseWikiNodes(block).filter((n) => n.name);
+    const of = (kind) => nodes.filter((n) => n.kind === kind);
+    // Nearest parent by horizontal position; ties go to the first, which keeps
+    // the order stable when a class has an even number of children.
+    const nearest = (child, parents) => parents.reduce((best, p) =>
+      !best || Math.abs(p.x - child.x) < Math.abs(best.x - child.x) ? p : best, null);
+    const skills = of('skill').map((s) => ({ ...s, specializations: [] }));
+    const specs = of('spec').map((s) => ({ ...s, modifiers: [] }));
+    for (const spec of specs) {
+      const parent = nearest(spec, skills);
+      if (parent) parent.specializations.push(spec);
+    }
+    for (const mod of of('mod')) {
+      const parent = nearest(mod, specs);
+      if (parent) parent.modifiers.push({ name: mod.name, max: mod.max, text: mod.text });
+    }
+    const clean = ({ x, kind, ...rest }) => rest; // drop layout-only fields
     out[name] = {
       role: (block.match(/role-badge[^>]*>([^<]*)</) || [])[1] || '',
-      root: wstrip((block.match(/wiki-root-desc[^>]*>([\s\S]*?)<\/p>/) || [])[1] || ''),
-      skills: block.split('<div class="wiki-skill">').slice(1).map((sk) => {
-        const h3 = (sk.match(/<h3>([\s\S]*?)<\/h3>/) || [])[1] || '';
-        return {
-          name: wstrip(h3.split('<span')[0]),
-          max: (wstrip(h3).match(/max\s+([\d/]+)/) || [])[1] || '',
-          text: wstrip((sk.split('<div class="wiki-spec">')[0].match(/<p[^>]*>([\s\S]*?)<\/p>/) || [])[1] || ''),
-          specializations: sk.split('<div class="wiki-spec">').slice(1).map((sp) => {
-            const h4 = (sp.match(/<h4>([\s\S]*?)<\/h4>/) || [])[1] || '';
-            return {
-              name: wstrip(h4.split('<span')[0]),
-              max: (wstrip(h4).match(/max\s+([\d/]+)/) || [])[1] || '',
-              text: wstrip((sp.match(/<p[^>]*>([\s\S]*?)<\/p>/) || [])[1] || ''),
-              modifiers: [...sp.matchAll(/<li><strong>([^<]*)<\/strong>\s*<span[^>]*>\(([^)]*)\)<\/span>\s*-?\s*([\s\S]*?)<\/li>/g)]
-                .map((m) => ({ name: wstrip(m[1]), max: (m[2].match(/max\s+([\d/]+)/) || [])[1] || '', text: wstrip(m[3]) })),
-            };
-          }),
-        };
-      }),
+      // The root node's tooltip is the same text the old wiki-root-desc carried.
+      root: wstrip((block.match(/wiki-root-desc[^>]*>([\s\S]*?)<\/p>/) || [])[1] || '')
+        || (of('root')[0] || {}).text || '',
+      skills: skills.map((s) => ({
+        ...clean(s),
+        specializations: s.specializations.map((sp) => ({
+          ...clean(sp), modifiers: sp.modifiers,
+        })),
+      })),
     };
   }
   return out;
@@ -688,8 +716,22 @@ async function scrapeWiki() {
   try {
     const out = parseWiki(await getPage('/wiki'));
     const n = Object.keys(out).length;
-    if (n >= 5) { wikiTrees = out; console.log('wiki scrape:', n, 'classes'); }
-    else console.error('wiki scrape: only', n, 'classes parsed — markup changed? keeping previous');
+    // Counting classes alone is not enough: the 2026-08-17 redesign swapped the
+    // bullet-list markup for node graphs, so every class still parsed — with
+    // zero skills — and that empty result overwrote the static
+    // public/passives.json fallback, emptying the site's tree browser. Accept a
+    // parse only when EVERY class carries skills and the modifier count is in
+    // the right order of magnitude, so a partial parse can't replace good data.
+    const per = Object.values(out).map((c) => arr(c.skills).length);
+    const mods = Object.values(out).reduce((s, c) => s + arr(c.skills)
+      .reduce((k, sk) => k + arr(sk.specializations).reduce((m, sp) => m + arr(sp.modifiers).length, 0), 0), 0);
+    if (n >= 5 && per.every((k) => k > 0) && mods >= 100) {
+      wikiTrees = out;
+      console.log('wiki scrape:', n, 'classes,', per.reduce((a, b) => a + b, 0), 'skills,', mods, 'modifiers');
+    } else {
+      console.error(`wiki scrape: ${n} classes, skills per class [${per}], ${mods} modifiers —`,
+        'markup changed? keeping the previous trees (or the static passives.json fallback)');
+    }
   } catch (e) { console.error('wiki scrape failed:', e.message); }
 }
 
