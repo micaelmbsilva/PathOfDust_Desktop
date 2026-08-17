@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 85;
+const BRIDGE_REV = 86;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -233,6 +233,13 @@ function bag(text) {
       krangled: /gear-name-locked/.test(chunk),
       protected: /name="protect"[^>]*checked/.test(chunk),
       durability: durabilityOf(chunk), repair: repairOf(chunk),
+      // The dust range only exists inside the disenchant form's own confirm()
+      // text, and the whole form is omitted for Keep-marked items — so this is
+      // null exactly when disenchanting isn't offered.
+      dust: (() => {
+        const m = chunk.match(/for (\d+)-(\d+) Thaumatergic Dust/);
+        return m ? { min: +m[1], max: +m[2] } : null;
+      })(),
     });
   }
   return { items };

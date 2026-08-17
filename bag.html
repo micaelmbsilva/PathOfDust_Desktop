@@ -438,7 +438,7 @@
   const bagCard = (it) => itemCard(it,
     `<button data-eq="${it.id}">Equip</button>
      <button data-lock="${it.id}">${it.protected ? 'Unlock' : '🔒 Lock'}</button>
-     <button class="danger" data-dis="${it.id}" data-name="${it.name}">Disenchant</button>
+     <button class="danger" data-dis="${it.id}" data-name="${esc(it.name)}"${it.dust ? ` data-dmin="${it.dust.min}" data-dmax="${it.dust.max}"` : ''}>Disenchant</button>
      ${repairBtn(it)} ${shareBtn(it)}`);
   function renderBag() {
     const items = [...lastBag];
@@ -483,7 +483,10 @@
     if (d.eq !== undefined) { await api('equip', { item_id: d.eq }); return refresh(); }
     if (d.lock !== undefined) { await api('toggle-disenchant-protect', { item_id: d.lock, protect: 'on' }); return refresh(); }
     if (d.dis !== undefined) {
-      if (!confirm(`Disenchant ${d.name}? Can't be undone.`)) return;
+      // The site quotes the dust range in its own confirm; match it rather than
+      // asking people to commit blind.
+      const range = d.dmin ? ` for ${(+d.dmin).toLocaleString()}-${(+d.dmax).toLocaleString()} Thaumatergic Dust` : '';
+      if (!confirm(`Disenchant ${d.name}${range}? Can't be undone.`)) return;
       await craftAct('disenchant', { item_id: d.dis }, 'Disenchant', { currency: true }); return refresh();
     }
     if (d.veilpick !== undefined) {
