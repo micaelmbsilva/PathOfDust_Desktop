@@ -479,7 +479,7 @@
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
-      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); } // enable highlight once we know the name
+      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); renderToolbar(); } // enable highlight + operator items once we know the name
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
@@ -709,7 +709,12 @@
     refresh: { label: '🔄 Refresh', title: 'Refresh now', act: () => { loadStats(); pollBag(); pullInterface(false); } },
     update: { label: '⬆️ Check for Updates', title: 'Check for updates', act: () => updateAction() },
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
+    broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
   };
+  // Operator-only toolbar items, keyed by character name. UI gating only — the
+  // backend's PING_KEY (sent by the bridge) is the actual auth.
+  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'] };
+  const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'chat' },
     { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'battles'] } },
@@ -749,14 +754,17 @@
       return b;
     };
     for (const e of toolbarLayout) {
+      if (e.i && itemHidden(e.i)) continue;
       if (e.i) { wrap.appendChild(mkBtn(e.i, false)); continue; }
+      const vis = e.g.items.filter(id => !itemHidden(id));
+      if (!vis.length) continue; // group holds only hidden items — skip button, keep saved layout
       const b = document.createElement('button');
       b.className = 'tbtn'; b.dataset.menu = e.g.id; b.dataset.group = e.g.id; b.draggable = true;
       b.textContent = e.g.name + ' ▾'; // user-supplied name — textContent only
       wrap.appendChild(b);
       const m = document.createElement('div');
       m.className = 'tmenu gen'; m.id = e.g.id;
-      for (const id of e.g.items) m.appendChild(mkBtn(id, true));
+      for (const id of vis) m.appendChild(mkBtn(id, true));
       document.body.appendChild(m);
     }
     syncToolbarActive();
@@ -1648,6 +1656,28 @@
     };
     document.getElementById('dismissAll').after(el); updateDismissAll();
     document.getElementById('fbText').focus();
+  }
+  // Operator broadcast composer (button gated by OPERATOR_ITEMS). Same inline-toast
+  // pattern as feedback; empty message + Send clears the current broadcast.
+  function sendBroadcast() {
+    if (document.getElementById('bcToast')) return; // one at a time
+    const el = document.createElement('div');
+    el.className = 'toast'; el.id = 'bcToast';
+    el.innerHTML = `<div class="th"><span class="tn">📣 Broadcast to all running apps</span></div>
+      <textarea id="bcText" rows="3" placeholder="Message… (send empty to clear the current broadcast)" style="width:100%;background:#1c1830;color:#eae6f5;border:1px solid rgba(160,140,255,0.35);border-radius:7px;padding:6px;font:inherit;resize:vertical"></textarea>
+      <div class="tacts" style="margin-top:8px"><button data-act="send">Send</button><button data-act="x">Cancel</button></div>`;
+    const close = () => { el.remove(); updateDismissAll(); };
+    el.querySelector('[data-act="x"]').onclick = close;
+    el.querySelector('[data-act="send"]').onclick = (e) => {
+      const msg = document.getElementById('bcText').value.trim(); // empty = clear
+      e.target.disabled = true; // no concurrent sends — out-of-order posts could resurrect an older message
+      fetch('/api/broadcast', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+        .then(r => r.json()).then(r => infoToast(r.ok ? (msg ? '📣 Broadcast live.' : '📣 Broadcast cleared.') : 'Broadcast failed.'))
+        .catch(() => infoToast('Broadcast failed — restart the app if it just updated.'))
+        .finally(close);
+    };
+    document.getElementById('dismissAll').after(el); updateDismissAll();
+    document.getElementById('bcText').focus();
   }
   let _lastLog = 0;
   function logRemote(level, message) {
