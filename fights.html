@@ -16,6 +16,10 @@
   .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 4px 10px; font-size: 0.85rem; }
   button.chip { cursor: pointer; color: #eae6f5; font: inherit; font-size: 0.85rem; }
+  /* feed category chips (feed.js emits .rolechips > .chip.pf) */
+  .rolechips { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .rolechips .chip.pf { cursor: pointer; font-size: 0.75rem; padding: 2px 8px; }
+  .rolechips .chip.pf.on { border-color: #7c5cff; color: #b98bff; }
   .fight { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25);
     border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
   .fight > summary { cursor: pointer; font-weight: 700; list-style: none; }
@@ -41,6 +45,7 @@
   <div id="err"></div>
   <div id="list"><p class="muted">Loading… the game rebuilds this page from every logged fight, so it takes a few seconds.</p></div>
 
+<script src="/feed.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -95,6 +100,25 @@
   let myName = '';
   fetch('/api/me').then(r => r.json()).then(m => { if (m.name && m.name !== myName) { myName = m.name; load(); } }).catch(() => {});
 
+  // The summary tier carries exact totals but no events, so the personal blow-
+  // by-blow has to come from what this app captured live off the socket. Both
+  // sides timestamp the same instant — the game saves the fight immediately
+  // before broadcasting it — so matching on stage plus a tight time window is
+  // unambiguous even during rampage, where fights land 60s apart.
+  function localFeedFor(f) {
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem('battleLog')) || []; } catch {}
+    if (!Array.isArray(log) || !f.startedAtUnixMs) return null;
+    let best = null, bestGap = Infinity;
+    for (const rep of log) {
+      if (!rep || !rep.feed || rep.stage !== f.stage) continue;
+      const gap = Math.abs((rep.at || 0) - f.startedAtUnixMs);
+      if (gap < bestGap) { bestGap = gap; best = rep; }
+    }
+    return bestGap <= 60000 && best ? best : null;
+  }
+  const feedCat = () => localStorage.getItem('podFeedCat') || 'all';
+
   function renderSummary(fights) {
     $('source').textContent = `The game's own per-fight summary — exact totals, last ${fights.length}.`;
     const when = (ms) => ms ? new Date(ms).toLocaleString() : 'time unknown';
@@ -103,6 +127,7 @@
       const rows = [...(f.players || [])].sort((a, b) => (b.damageDealt || 0) - (a.damageDealt || 0));
       const total = rows.reduce((n, p) => n + (p.damageDealt || 0), 0);
       const mine = rows.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
+      const rep = localFeedFor(f);
       return `<details class="fight"${i ? '' : ' open'}>
         <summary><span class="${f.won ? 'won' : 'lost'}">${f.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(f.stage)}${f.kind === 'boss' ? ' 💀 Boss' : ''}</span>
           <div class="when">${esc(when(f.startedAtUnixMs))} · ${esc(f.participants)} in the party${
@@ -116,12 +141,25 @@
             <td>${fmtN(p.damageTaken || 0)}</td><td>${fmtN(p.healingDone || 0)}</td>
             <td>${p.hits || 0}</td><td>${p.hits ? Math.round((p.crits || 0) / p.hits * 100) : 0}%</td></tr>`).join('')}
         </table></div>
+        ${!mine ? '' : rep && rep.feed.length
+          ? `<h3>Your Fight Log (${rep.feed.length})</h3>${PodFeed.chips(feedCat())}
+             <div class="pod-feed" style="max-height:260px">${PodFeed.lines(rep.feed, feedCat()) || '<p class="muted">Nothing in this category.</p>'}</div>
+             <p class="muted" style="font-size:0.7rem">Captured live by this app. The game trims its live feed, so a busy fight may be missing some of your hits — the totals above are unaffected.</p>`
+          : `<p class="muted" style="font-size:0.75rem">📜 No personal log — the app wasn't running for this fight.</p>`}
         ${f.firstToDie ? `<h3>First Down</h3><p>💀 ${esc(f.firstToDie)}</p>` : ''}
         <h3>Loot</h3>${list((f.loot || []).map(l =>
           `${l.displayName} — ${l.itemName} T${l.tier} (${l.slot}${l.outcome ? ', ' + outcomeText(l.outcome) : ''})`), 'None.')}
         <h3>Broken Gear</h3>${list((f.broken || []).map(b => `${b.displayName} — ${b.itemName}`), 'None.')}
       </details>`;
     }).join('');
+    // Category chips re-render in place; <details> keep their own open state
+    // because we rebuild the same markup, so only the scroll position is lost.
+    PodFeed.bindChips($('list'), (cat) => {
+      const open = [...$('list').children].map(d => d.open);
+      localStorage.setItem('podFeedCat', cat);
+      renderSummary(fights);
+      [...$('list').children].forEach((d, n) => { d.open = open[n] ?? false; });
+    });
   }
 
   // ---- fallback: the fights this app recorded itself ----
