@@ -357,6 +357,9 @@ app.get('/api/tree/:archetype', (req, res) => {
 async function scrapeRoster() {
   if (!pool) return;
   try {
+    // Re-run the garbage cleanup each cycle: a rolling deploy's old container can
+    // re-insert a banner row after the new container's init already deleted it.
+    await pool.query(`DELETE FROM installs WHERE id LIKE 'web:%' AND archetype IS NULL AND level IS NULL`);
     const listing = await getPage('/characters');
     const slugs = [...new Set([...listing.matchAll(/href="\/characters\/([^"/]+)"/g)].map(m => m[1]))];
     if (!slugs.length) { console.error('roster scrape: no roster links — GAME_COOKIE missing or expired?'); return; }
