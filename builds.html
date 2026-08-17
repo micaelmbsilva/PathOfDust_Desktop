@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Path of Dust — Owner Build Dossier</title>
+<script src="/config.js"></script>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #0c0a16;
+    --panel: #171326;
+    --panel-2: #1c1830;
+    --text: #eae6f5;
+    --muted: #9a90b6;
+    --rule: rgba(160, 140, 255, 0.2);
+    --gold: #ffd76b;
+    --paladin: #ffd76b;
+    --monk: #a9ed82;
+    --warrior: #ff8a8a;
+    --cleric: #8ab4ff;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    padding: 18px;
+    background:
+      radial-gradient(circle at 78% -10%, rgba(111, 90, 217, 0.16), transparent 36rem),
+      var(--ink);
+    color: var(--text);
+    font-family: "Segoe UI", Arial, sans-serif;
+  }
+  a { color: inherit; }
+  .dossier {
+    width: min(1280px, 100%);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .rail {
+    position: sticky;
+    top: 18px;
+    border: 1px solid rgba(255, 215, 107, 0.34);
+    background: linear-gradient(165deg, rgba(255, 215, 107, 0.07), transparent 44%), var(--panel);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .rail__seal {
+    padding: 22px 18px 18px;
+    border-bottom: 1px solid rgba(255, 215, 107, 0.2);
+  }
+  .eyebrow,
+  .role-label,
+  .utility-label {
+    margin: 0;
+    color: var(--gold);
+    font: 700 0.68rem/1.3 Consolas, "Courier New", monospace;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+  .rail__seal strong {
+    display: block;
+    margin-top: 5px;
+    font: 700 2.35rem/1 Georgia, "Times New Roman", serif;
+    color: #fff1bd;
+  }
+  .rail__seal small { display: block; margin-top: 5px; color: #aa9d78; line-height: 1.4; }
+  .constraints { margin: 0; padding: 5px 18px 14px; }
+  .constraints div {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 215, 107, 0.12);
+  }
+  .constraints div:last-child { border-bottom: 0; }
+  .constraints dt { color: #a69bba; font-size: 0.72rem; }
+  .constraints dd {
+    margin: 0;
+    color: #f3e6b7;
+    text-align: right;
+    font: 700 0.72rem/1.3 Consolas, "Courier New", monospace;
+  }
+  .rail nav { padding: 8px; border-top: 1px solid rgba(255, 215, 107, 0.15); }
+  .rail nav a {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr);
+    gap: 9px;
+    align-items: center;
+    padding: 9px 10px;
+    border-radius: 6px;
+    color: #c8c0d8;
+    text-decoration: none;
+    font-size: 0.76rem;
+  }
+  .rail nav a::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--role); }
+  .rail nav a:hover { background: rgba(160, 140, 255, 0.1); color: #fff; }
+  .rail nav a:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .rail nav a[href="#overall"] { --role: var(--paladin); }
+  .rail nav a[href="#damage"] { --role: var(--monk); }
+  .rail nav a[href="#tank"] { --role: var(--warrior); }
+  .rail nav a[href="#healer"] { --role: var(--cleric); }
+  .content { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 30px 32px;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    background:
+      repeating-linear-gradient(135deg, transparent 0 32px, rgba(255, 255, 255, 0.014) 32px 33px),
+      rgba(23, 19, 38, 0.92);
+  }
+  .hero::after {
+    content: "119";
+    position: absolute;
+    right: 18px;
+    top: -26px;
+    color: rgba(255, 215, 107, 0.04);
+    font: 800 8.5rem/1 Georgia, "Times New Roman", serif;
+    pointer-events: none;
+  }
+  .hero h1 {
+    position: relative;
+    z-index: 1;
+    margin: 5px 0 10px;
+    max-width: 720px;
+    font: 700 clamp(2rem, 5vw, 3.8rem)/1 Georgia, "Times New Roman", serif;
+    letter-spacing: -0.035em;
+  }
+  .hero p:last-child {
+    position: relative;
+    z-index: 1;
+    max-width: 760px;
+    margin: 0;
+    color: #c5bdd5;
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+  .runtime {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 18px;
+    align-items: center;
+    padding: 14px 17px;
+    border-left: 3px solid var(--warrior);
+    background: rgba(255, 138, 138, 0.065);
+  }
+  .runtime p { margin: 0; color: #cfc7dd; font-size: 0.82rem; line-height: 1.5; }
+  .runtime strong { color: #fff; }
+  .build {
+    --role: var(--paladin);
+    --rgb: 255, 215, 107;
+    scroll-margin-top: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(var(--rgb), 0.25);
+    border-left: 4px solid var(--role);
+    border-radius: 10px;
+    background: linear-gradient(110deg, rgba(var(--rgb), 0.05), transparent 34%), rgba(23, 19, 38, 0.86);
+  }
+  .build--monk { --role: var(--monk); --rgb: 169, 237, 130; }
+  .build--warrior { --role: var(--warrior); --rgb: 255, 138, 138; }
+  .build--cleric { --role: var(--cleric); --rgb: 138, 180, 255; }
+  .build__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    align-items: end;
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid rgba(var(--rgb), 0.16);
+  }
+  .role-label { color: var(--role); }
+  .build h2 { margin: 3px 0 0; font: 700 1.65rem/1.15 Georgia, "Times New Roman", serif; }
+  .build__subtitle { margin: 5px 0 0; color: #a99fbb; font-size: 0.82rem; line-height: 1.45; }
+  .headline-metric { min-width: 190px; text-align: right; }
+  .headline-metric span,
+  .headline-metric small { display: block; }
+  .headline-metric span { color: #8f85a2; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .headline-metric strong { display: block; color: var(--role); font: 700 1.45rem/1.3 Consolas, "Courier New", monospace; }
+  .headline-metric small { color: #756c87; font-size: 0.68rem; }
+  .build__grid {
+    display: grid;
+    grid-template-columns: minmax(230px, 0.85fr) minmax(300px, 1.15fr) minmax(230px, 0.85fr);
+  }
+  .block { min-width: 0; padding: 20px 21px; border-right: 1px solid var(--rule); }
+  .block:last-child { border-right: 0; }
+  .block h3 {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 0 12px;
+    color: #ece6f7;
+    font: 700 0.7rem/1.3 Consolas, "Courier New", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .block h3 span { color: #706681; font-weight: 400; white-space: nowrap; }
+  .passives { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin: 0; padding: 0; list-style: none; }
+  .passives li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0;
+    padding: 0 0 5px;
+    border-bottom: 1px dotted rgba(var(--rgb), 0.18);
+    color: #c8c0d5;
+    font-size: 0.73rem;
+    line-height: 1.35;
+  }
+  .passives b { color: var(--role); font-family: Consolas, "Courier New", monospace; }
+  .gear { width: 100%; border-collapse: collapse; }
+  .gear th,
+  .gear td { padding: 6px 0; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; font-size: 0.71rem; line-height: 1.45; }
+  .gear tr:last-child th,
+  .gear tr:last-child td { border-bottom: 0; }
+  .gear th { width: 62px; padding-right: 9px; color: var(--role); font: 700 0.64rem/1.5 Consolas, "Courier New", monospace; text-transform: uppercase; }
+  .gear td { color: #bdb5ca; }
+  .reasons { margin: 0; padding-left: 16px; }
+  .reasons li { margin: 0 0 9px; color: #bdb5ca; font-size: 0.73rem; line-height: 1.5; }
+  .reasons li::marker { color: var(--role); }
+  .method {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 18px;
+    padding: 18px 20px;
+    border-top: 1px solid rgba(255, 215, 107, 0.25);
+    color: #857b96;
+  }
+  .method p { margin: 0; font-size: 0.72rem; line-height: 1.55; }
+  @media (max-width: 1040px) {
+    .build__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .block:last-child { grid-column: 1 / -1; border-top: 1px solid var(--rule); }
+  }
+  @media (max-width: 760px) {
+    body { padding: 12px; }
+    .dossier { grid-template-columns: 1fr; }
+    .rail { position: static; }
+    .constraints { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+    .rail nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hero { padding: 25px 22px; }
+    .runtime,
+    .method { grid-template-columns: 1fr; gap: 7px; }
+  }
+  @media (max-width: 560px) {
+    html { scroll-behavior: auto; }
+    .build__head { grid-template-columns: 1fr; gap: 13px; }
+    .headline-metric { text-align: left; }
+    .build__grid { grid-template-columns: 1fr; }
+    .block { border-right: 0; border-bottom: 1px solid var(--rule); }
+    .block:last-child { grid-column: auto; border-bottom: 0; }
+    .passives { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<main class="dossier">
+  <aside class="rail" aria-label="Build guide navigation">
+    <div class="rail__seal">
+      <p class="eyebrow">Build boundary</p>
+      <strong>119</strong>
+      <small>Reachable power, not rare-drop fantasy.</small>
+    </div>
+    <dl class="constraints">
+      <div><dt>Passives</dt><dd>30 points</dd></div>
+      <div><dt>Items</dt><dd>5 slots</dd></div>
+      <div><dt>Modifiers</dt><dd>4 per item</dd></div>
+      <div><dt>Rare states</dt><dd>None</dd></div>
+    </dl>
+    <nav>
+      <a href="#overall">Most broken · Paladin</a>
+      <a href="#damage">Damage · Monk</a>
+      <a href="#tank">Tank · Warrior</a>
+      <a href="#healer">Healer · Cleric</a>
+    </nav>
+  </aside>
+
+  <div class="content">
+    <header class="hero">
+      <p class="eyebrow">Owner dossier · current source audit</p>
+      <h1>Level-119 ladder builds</h1>
+      <p>The strongest legal setups under ordinary four-mod gearing. Every allocation totals 30 points; every gear row uses exactly four standard modifiers.</p>
+    </header>
+
+    <aside class="runtime">
+      <span class="utility-label">Live scheduler</span>
+      <p>Player actions are clamped to a <strong>200ms minimum</strong> during combat. Sheet intervals around 50–95ms are pre-combat values and can overstate real throughput by roughly 2–4×.</p>
+    </aside>
+
+    <article class="build" id="overall">
+      <header class="build__head">
+        <div>
+          <p class="role-label">Most broken overall</p>
+          <h2>Paladin · Radiant Wildfire</h2>
+          <p class="build__subtitle">The best total package: capped live speed, healing-fed damage, shields, cleanse, mitigation, and reflect.</p>
+        </div>
+        <div class="headline-metric"><span>Direct healing</span><strong>53.2M / sec</strong><small>before Smite, Holy Fire, and shields</small></div>
+      </header>
+      <div class="build__grid">
+        <section class="block">
+          <h3>Passives <span>30 / 30</span></h3>
+          <ul class="passives">
+            <li><span>Radiant Smite</span><b>3</b></li><li><span>Holy Fire</span><b>4</b></li>
+            <li><span>Wildfire</span><b>3</b></li><li><span>Purging Flame</span><b>1</b></li>
+            <li><span>Zealotry</span><b>4</b></li><li><span>Desperate Grace</span><b>3</b></li>
+            <li><span>United Front</span><b>3</b></li><li><span>Judgment</span><b>3</b></li>
+            <li><span>Divine Shield</span><b>3</b></li><li><span>Retribution Aura</span><b>3</b></li>
+          </ul>
+        </section>
+        <section class="block">
+          <h3>Gear <span>4 mods each</span></h3>
+          <table class="gear"><tbody>
+            <tr><th>Weapon</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
+            <tr><th>Helm</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
+            <tr><th>Body</th><td>Damage · Crit chance · Crit multiplier · Splash</td></tr>
+            <tr><th>Gloves</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
+            <tr><th>Boots</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
+          </tbody></table>
+        </section>
+        <section class="block">
+          <h3>Why it wins</h3>
+          <ul class="reasons">
+            <li>Holy Fire converts 45% of actual restored healing into a fresh damage roll.</li>
+            <li>Radiant Smite layers another offensive event over the primary action.</li>
+            <li>Divine Shield, United Front, cleanse, and Retribution Aura keep the engine alive without sacrificing output.</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <article class="build build--monk" id="damage">
+      <header class="build__head">
+        <div>
+          <p class="role-label">Damage ceiling</p>
+          <h2>Monk · Hundred-Point Pressure</h2>
+          <p class="build__subtitle">Best sustained single-target damage after evasion, defenses, Vital Points, and Chakra stacks are fully ramped.</p>
+        </div>
+        <div class="headline-metric"><span>Hypothetical DPS</span><strong>124M boss</strong><small>491M zero-defense dummy · 395ms interval</small></div>
+      </header>
+      <div class="build__grid">
+        <section class="block">
+          <h3>Passives <span>30 / 30</span></h3>
+          <ul class="passives">
+            <li><span>Flowing Strikes</span><b>3</b></li><li><span>Hundred Fists</span><b>4</b></li>
+            <li><span>Chakra of Many</span><b>3</b></li><li><span>Chakra of Light</span><b>3</b></li>
+            <li><span>Pressure Point</span><b>4</b></li><li><span>Vital Points</span><b>3</b></li>
+            <li><span>Iron Body</span><b>1</b></li><li><span>Unbroken</span><b>4</b></li>
+            <li><span>Crippling Grip</span><b>3</b></li><li><span>Stone Fist</span><b>2</b></li>
+          </ul>
+        </section>
+        <section class="block">
+          <h3>Gear <span>4 mods each</span></h3>
+          <table class="gear"><tbody>
+            <tr><th>Weapon</th><td>Damage · Crit chance · Crit multiplier · Lightning</td></tr>
+            <tr><th>Helm</th><td>Damage · Crit chance · Crit multiplier · Lightning</td></tr>
+            <tr><th>Body</th><td>Damage · Crit chance · Crit multiplier · Evasion</td></tr>
+            <tr><th>Gloves</th><td>Damage · Crit chance · Crit multiplier · Evasion</td></tr>
+            <tr><th>Boots</th><td>Damage · Crit chance · Crit multiplier · Evasion</td></tr>
+          </tbody></table>
+        </section>
+        <section class="block">
+          <h3>Ramp assumptions</h3>
+          <ul class="reasons">
+            <li>Unbroken removes 75% evasion; Crippling Grip reaches −75 defense and Vital Points reaches −66.</li>
+            <li>Chakra of Light reaches its 200-stack ceiling; primary and clone events both contribute.</li>
+            <li>Chakra of Many supplies a real 30% follow-up hit. The estimate uses neutral stage-119 boss jitter.</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <article class="build build--warrior" id="tank">
+      <header class="build__head">
+        <div>
+          <p class="role-label">Tank ceiling</p>
+          <h2>Warrior · Three-Wall Fortress</h2>
+          <p class="build__subtitle">The strongest ordinary-gear durability stack: life, avoidance, block reduction, opening auto-blocks, and counter-healing.</p>
+        </div>
+        <div class="headline-metric"><span>Hypothetical durability</span><strong>7.80M EHP</strong><small>183,194 HP · 14.17M EHP vs crits</small></div>
+      </header>
+      <div class="build__grid">
+        <section class="block">
+          <h3>Passives <span>30 / 30</span></h3>
+          <ul class="passives">
+            <li><span>Bulwark</span><b>3</b></li><li><span>Unbreakable</span><b>4</b></li>
+            <li><span>Fortress</span><b>3</b></li><li><span>Second Skin</span><b>3</b></li>
+            <li><span>Stonewall</span><b>3</b></li><li><span>Juggernaut</span><b>3</b></li>
+            <li><span>Colossus</span><b>4</b></li><li><span>Immovable</span><b>3</b></li>
+            <li><span>Retaliation</span><b>1</b></li><li><span>Bloodied Resolve</span><b>3</b></li>
+          </ul>
+        </section>
+        <section class="block">
+          <h3>Gear <span>4 mods each</span></h3>
+          <table class="gear"><tbody>
+            <tr><th>Weapon</th><td>Increased life · Flat life · Damage reduction · Block</td></tr>
+            <tr><th>Helm</th><td>Increased life · Flat life · Evasion · Block</td></tr>
+            <tr><th>Body</th><td>Increased life · Flat life · Damage reduction · Evasion</td></tr>
+            <tr><th>Gloves</th><td>Increased life · Flat life · Damage reduction · Block</td></tr>
+            <tr><th>Boots</th><td>Increased life · Flat life · Evasion · Block</td></tr>
+          </tbody></table>
+        </section>
+        <section class="block">
+          <h3>Defensive stack</h3>
+          <ul class="reasons">
+            <li>76.5% effective damage reduction · 75% evasion · 80% block.</li>
+            <li>Blocked hits lose another 75%; the first three incoming attacks auto-block.</li>
+            <li>Crit damage is reduced by another 45%; Retaliation heals 20% of counter damage.</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <article class="build build--cleric" id="healer">
+      <header class="build__head">
+        <div>
+          <p class="role-label">Healing ceiling</p>
+          <h2>Cleric · Unbroken Chain</h2>
+          <p class="build__subtitle">The live speed floor moves the optimum away from extra cadence and into larger crit heals, chains, shields, and splash coverage.</p>
+        </div>
+        <div class="headline-metric"><span>Hypothetical healing</span><strong>84.5M / sec</strong><small>direct healing before chains and shielding</small></div>
+      </header>
+      <div class="build__grid">
+        <section class="block">
+          <h3>Passives <span>30 / 30</span></h3>
+          <ul class="passives">
+            <li><span>Divine Grace</span><b>1</b></li><li><span>Sanctified Touch</span><b>4</b></li>
+            <li><span>Holy Crit</span><b>3</b></li><li><span>Prayer of Mending</span><b>3</b></li>
+            <li><span>Chain of Light</span><b>4</b></li><li><span>Swift Mending</span><b>3</b></li>
+            <li><span>Unbroken Prayer</span><b>3</b></li><li><span>Merciful Touch</span><b>4</b></li>
+            <li><span>Gentle Touch</span><b>3</b></li><li><span>Divine Favor</span><b>2</b></li>
+          </ul>
+        </section>
+        <section class="block">
+          <h3>Gear <span>4 mods each</span></h3>
+          <table class="gear"><tbody>
+            <tr><th>Weapon</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
+            <tr><th>Helm</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
+            <tr><th>Body</th><td>Damage · Crit chance · Crit multiplier · Splash</td></tr>
+            <tr><th>Gloves</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
+            <tr><th>Boots</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
+          </tbody></table>
+        </section>
+        <section class="block">
+          <h3>Coverage engine</h3>
+          <ul class="reasons">
+            <li>Prayer triggers at 65%; bounces retain 95%, continue at 45%, and can reach four bounces.</li>
+            <li>Divine Favor turns 40% into shielding; Holy Crit adds an 80% extra-heal event.</li>
+            <li>Splash reaches four additional hurt targets, so 84.5M/sec is the baseline rather than the whole result.</li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <footer class="method">
+      <p class="utility-label">Calculation boundary</p>
+      <p>Tier-119 gear, maximum ordinary affix rolls and polish, full durability, and neutral boss power/jitter. No fifth modifiers, Split Personality, Sacred, Perfect, Celestial or unique affixes, Krangled items, or other rare-drop states. These are achievable ceilings, not average-drop expectations.</p>
+    </footer>
+  </div>
+</main>
+<script>
+  document.title = `${window.GAME_NAME || 'Path of Dust'} — Owner Build Dossier`;
+</script>
+<script src="/autoreload.js"></script>
+</body>
+</html>
