@@ -93,13 +93,19 @@
     fire_dr_buff_stacks: ['Fire — Damage Reduction', 'buff', 'party', 'Bonus damage reduction, granted when an ally heals you with Fire damage invested.', "An ally's Fire elemental procs"],
     cold_evasion_buff_stacks: ['Cold — Evasion', 'buff', 'party', 'Bonus evasion, granted when an ally heals you with Cold damage invested.', "An ally's Cold elemental procs"],
     chaos_block_buff_stacks: ['Chaos — Block', 'buff', 'party', 'Bonus block chance, granted when an ally heals you with Chaos damage invested.', "An ally's Chaos elemental procs"],
+    // ambiguous by nature
+    // Deliberately NOT filed under debuffs. Lingering Effect is symmetric:
+    // a landed hit leaves a DoT on the enemy struck, a landed heal leaves an
+    // equivalent HoT on the ally healed (LingeringDot.is_heal). The snapshot
+    // reports one count for both, so an entry here may be an ally's heal
+    // ticking on you just as easily as an enemy's damage.
+    lingering_dot_count: ['Lingering Effects', 'mixed', 'mixed', 'Independent Lingering Effect instances ticking on you. Each is either damage-over-time from something that hit you, or heal-over-time from an ally who healed you — the game reports a single count and does not say which. Your OWN Lingering Effect stat is the opposite direction: it puts these on whatever you hit or heal.', 'Lingering Effect (Healing Power gear affix), from either side'],
     // put on you by the enemy
     wound_stacks: ['Open Wound', 'debuff', 'enemy', "A stacking bleed on you — this is the defender's side of the effect.", 'Open Wound'],
     marked: ['Marked', 'debuff', 'enemy', 'You were singled out on the first hit. Persists for the rest of the fight, with no expiry.', 'Mark'],
     curse_dmg_taken_bonus: ['Curse of Weakness', 'debuff', 'enemy', 'You take extra damage. Persists for the rest of the fight.', 'Curse of Weakness'],
     temp_damage_dealt_debuff: ['Damage Dealt Reduced', 'debuff', 'enemy', 'Your outgoing damage is cut.', 'Purify / Scorched Earth'],
     temp_evasion_debuff: ['Evasion Reduced', 'debuff', 'enemy', 'You dodge less often.', 'Frost Nova'],
-    lingering_dot_count: ['Damage Over Time', 'debuff', 'enemy', 'How many independent damage-over-time effects are ticking on you right now.', 'Lingering Effect'],
     fire_dr_debuff_stacks: ['Fire — DR Lowered', 'debuff', 'enemy', 'Your damage reduction is cut.', 'Fire elemental procs'],
     cold_evasion_debuff_stacks: ['Cold — Evasion Lowered', 'debuff', 'enemy', 'Your evasion is cut.', 'Cold elemental procs'],
     chaos_block_debuff_stacks: ['Chaos — Block Lowered', 'debuff', 'enemy', 'Your block chance is cut.', 'Chaos elemental procs'],
@@ -117,7 +123,7 @@
   const buff = (k) => { const b = BUFFS[k];
     return b ? { key: k, label: b[0], kind: b[1], origin: b[2], desc: b[3], from: b[4] }
       : { key: k, label: prettyKey(k), kind: 'unknown', origin: 'unknown', desc: '', from: '' }; };
-  const KIND_ICON = { buff: '🟢', debuff: '🔴', charge: '🔵', unknown: '⚪' };
+  const KIND_ICON = { buff: '🟢', debuff: '🔴', charge: '🔵', mixed: '🟡', unknown: '⚪' };
 
   // Role comes from the class's kit, never inferred from a fight's numbers —
   // a healer who out-damages the party is still a healer. Dual-role classes

@@ -175,6 +175,7 @@
   .chip.bchip.buff { border-color: rgba(127,219,163,0.45); color: #b6f0cd; }
   .chip.bchip.debuff { border-color: rgba(255,128,128,0.5); color: #ffb3b3; }
   .chip.bchip.charge { border-color: rgba(130,170,255,0.45); color: #b9cdff; }
+  .chip.bchip.mixed { border-color: rgba(255,212,121,0.45); color: #ffe3a8; }
   .chip.bchip.unknown { border-color: rgba(160,140,255,0.3); }
   .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 3px 9px; font-size: 0.78rem; }
@@ -1113,7 +1114,7 @@
         // Grouped by WHERE it came from, not just whether it's good. A shield
         // on you may be a Cleric's doing, and "your build working" would be a
         // lie in that case — which is the whole distinction people want here.
-        const groups = { enemy: [], party: [], self: [], own: [], unknown: [] };
+        const groups = { enemy: [], mixed: [], party: [], self: [], own: [], unknown: [] };
         for (const [k, v] of snap.buffs) { const b = PodFeed.buff(k); (groups[b.origin] || groups.unknown).push([b, v]); }
         const block = (origin, head, note) => groups[origin].length ? `<div class="fhead">${head}</div>` +
           `<div class="rolechips">${groups[origin].map(([b, v]) => {
@@ -1125,6 +1126,7 @@
           (note ? `<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">${note}</div>` : '') : '';
         parts.push(`<div class="fhead" style="margin-bottom:2px">🗡️ You${live ? '' : ' — last fight'}</div>`);
         parts.push(block('enemy', '🔴 Done to you', 'Put on you by what you are fighting.'));
+        parts.push(block('mixed', '🟡 On you — good or bad', "The game reports one count for effects that can be either. Hover for what that means for each."));
         parts.push(block('party', '🤝 From your party', 'An ally can be the source — several of these you can also cast on yourself. Hover for which.'));
         parts.push(block('self', '🟢 Your own kit', 'Only your class, passives and gear produce these.'));
         parts.push(block('own', '🔵 Your charges', 'Pools and counters — neither good nor bad.'));
