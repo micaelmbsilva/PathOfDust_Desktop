@@ -44,6 +44,11 @@ async function init() {
   // ponytail: no retention/pruning — volumes are tiny; add if tables ever matter.
   await pool.query(`CREATE INDEX IF NOT EXISTS logs_err_ts ON logs (ts DESC) WHERE level = 'error'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS feedback_ts ON feedback (ts DESC)`);
+  // Class tree layouts survive redeploys — the scrape only improves them.
+  await pool.query(`CREATE TABLE IF NOT EXISTS tree_layouts (
+    archetype TEXT PRIMARY KEY, data JSONB, updated TIMESTAMPTZ DEFAULT now())`);
+  for (const r of (await pool.query(`SELECT archetype, data FROM tree_layouts`)).rows)
+    treeLayouts[r.archetype] = r.data;
   console.log('DB ready');
 }
 
@@ -213,6 +218,18 @@ app.get('/api/meta', h(async (_req, res) => {
   });
 }));
 
+// Advisor-only gear view: includes the bag (privacy-excluded from the public
+// build endpoint), so recommendations can weigh owned-but-unworn items. Keyed.
+app.get('/api/advisor-gear/:name', h(async (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!pool) return res.sendStatus(503);
+  const { rows } = await pool.query(
+    `SELECT data->'equipped' AS equipped, data->'bag' AS bag FROM installs
+     WHERE name = $1 ORDER BY last_seen DESC LIMIT 1`, [String(req.params.name).slice(0, 128)]);
+  if (!rows.length) return res.sendStatus(404);
+  res.json(rows[0]);
+}));
+
 // Empirical affix rates for the advisor's t100 projection: average mod value per
 // item tier, per affix type, across all scraped gear. Same key as the watchlist.
 app.get('/api/affix-rates', h(async (req, res) => {
@@ -352,18 +369,17 @@ async function scrapeRoster() {
           const p = parsePassives(await getPage('/characters/' + encodeURIComponent(slug) + '/passives'));
           if (p.nodes.length) {
             data.passives = { points: p.points, nodes: p.nodes };
-            // Merge layouts across the class's players — each page only renders
-            // the modifiers its owner has revealed, so the union shows the most.
-            if (c.archetype && p.layout.nodes.length > 3) {
-              const prev = treeLayouts[c.archetype];
-              if (!prev) treeLayouts[c.archetype] = p.layout;
-              else {
-                const names = new Set(prev.nodes.map(n => n.name));
-                for (const n of p.layout.nodes) if (!names.has(n.name)) prev.nodes.push(n);
-                const ekey = (e) => `${e.x1},${e.y1},${e.x2},${e.y2}`;
-                const eks = new Set(prev.edges.map(ekey));
-                for (const e of p.layout.edges) if (!eks.has(ekey(e))) prev.edges.push(e);
-              }
+            // Keep the richest SINGLE page per class. Never merge coordinates
+            // across pages — the game re-lays the canvas out per reveal state,
+            // so different players' pages use different coordinate spaces.
+            if (c.archetype && p.layout.nodes.length > 3
+              && (!treeLayouts[c.archetype] || p.layout.nodes.length > treeLayouts[c.archetype].nodes.length)) {
+              try { // save first — a failed save keeps memory unset so the next cycle retries
+                await pool.query(`INSERT INTO tree_layouts (archetype, data, updated) VALUES ($1, $2, now())
+                                  ON CONFLICT (archetype) DO UPDATE SET data = $2, updated = now()`,
+                  [c.archetype, JSON.stringify(p.layout)]);
+                treeLayouts[c.archetype] = p.layout;
+              } catch (e) { console.error('layout save:', e.message); }
             }
           }
         } catch (e) { console.error('scrape passives', slug + ':', e.message); }
