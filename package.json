@@ -38,7 +38,7 @@
       "!*.md",
       "!.claude/**",
       "!wiki/**",
-      "!scrape.test.mjs",
+      "!*.test.mjs",
       "!findings-*.json",
       "!intel-*.json",
       "!run.txt"

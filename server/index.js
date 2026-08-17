@@ -239,13 +239,14 @@ app.get('/api/build/:name', h(async (req, res) => {
   res.json(rows[0]);
 }));
 
-// Private watchlist (OP interactions) — keyed, fail closed. SITE_KEY env gates
-// it; the data lives outside public/ so the static server never exposes it.
+// Private watchlist (OP interactions) — owner-only, fail closed (moved off the
+// shared SITE_KEY: findings steer the advisor and are the owner's edge). The
+// data lives outside public/ so the static server never exposes it.
 // The newest investigation (if any) supersedes the hand-curated file: the model
 // is given the current list and returns the full updated one, so there is always
 // exactly one source of truth.
 app.get('/api/watchlist', h(async (req, res) => {
-  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   const found = await latestInvestigation();
   if (found && arr(found.data.interactions).length) return res.json({ interactions: found.data.interactions });
   res.sendFile(require('path').join(__dirname, 'watchlist.json'));
@@ -462,9 +463,10 @@ app.get('/api/meta', h(async (_req, res) => {
 }));
 
 // Advisor-only gear view: includes the bag (privacy-excluded from the public
-// build endpoint), so recommendations can weigh owned-but-unworn items. Keyed.
+// build endpoint), so recommendations can weigh owned-but-unworn items.
+// Owner-only, same gate as the watchlist the advisor is built on.
 app.get('/api/advisor-gear/:name', h(async (req, res) => {
-  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   const { rows } = await pool.query(
     `SELECT data->'equipped' AS equipped, data->'bag' AS bag FROM installs
@@ -473,10 +475,11 @@ app.get('/api/advisor-gear/:name', h(async (req, res) => {
   res.json(rows[0]);
 }));
 
-// Empirical affix rates for the advisor's t100 projection: average mod value per
-// item tier, per affix type, across all scraped gear. Same key as the watchlist.
+// Empirical affix rates for the advisor's craft plan: average mod value per
+// item tier, per affix type, across all scraped gear. Same owner gate as the
+// watchlist.
 app.get('/api/affix-rates', h(async (req, res) => {
-  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   const { rows } = await pool.query(`
     SELECT trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')) AS affix,
