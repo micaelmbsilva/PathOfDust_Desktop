@@ -208,6 +208,9 @@
 
   /* saved fight log inside a Combat History entry */
   .flog summary { cursor: pointer; font-size: 0.8rem; color: #c9bdf0; margin: 6px 0 2px; }
+  .flog summary button { background: none; border: 1px solid rgba(160,140,255,0.35); border-radius: 5px;
+    color: #c9bdf0; cursor: pointer; font-size: 0.72rem; padding: 0 5px; margin-left: 4px; }
+  .flog summary button:hover { background: rgba(120,90,255,0.25); }
   .flog .ffeed { max-height: 180px; }
 </style>
 </head>
@@ -478,7 +481,9 @@
       const mmssLeft = (ms) => { const s = Math.max(0, Math.round((ms - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
       const retreatRow = (r.countdowns || []).filter(c => !/Reforge/i.test(c.title))
         .map(c => `<div class="srow retreat"><span class="l">🏳️ ${c.title}</span><span class="v">${mmssLeft(c.resetMs)}</span></div>`).join('');
-      document.getElementById('rows').innerHTML = retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
+      // Next-battle ETA (estimated from recent battle cadence; ticked by its 1s interval)
+      const nextRow = `<div class="srow" id="nextBattle" style="display:none" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time"><span class="l">⚔️ Next Battle</span><span class="v"></span></div>`;
+      document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
@@ -516,21 +521,44 @@
   let seeded = known.size > 0;
   const saveKnown = () => localStorage.setItem(KEY, JSON.stringify([...known]));
 
-  // Battle-end dust readout: the WS pushes an `encounter` event when a boss
-  // fight we took part in resolves; the next inventory poll's exact dust delta
-  // is then attributed to that battle and toasted. Auto-repair lands in the
-  // same beat, so it's the net change (loot minus repairs).
-  let lastDust = null, battleAt = 0, battleWon = false;
-  function checkBattleDust(dustRaw) {
-    if (!/^\d+$/.test(String(dustRaw))) return; // abbreviated fallback — can't diff
-    const dust = +dustRaw;
-    if (lastDust != null && dust !== lastDust && Date.now() - battleAt < 15000) {
-      const d = dust - lastDust;
-      infoToast(`💰 ${d > 0 ? '+' : ''}${d.toLocaleString()} dust — battle ${battleWon ? 'won' : 'lost'}`);
-      battleAt = 0; // one toast per battle
-    }
-    lastDust = dust;
+  // Battle-end toast — fires for EVERY battle we're in, win or lose. The
+  // encounter arrives at fight start with the result baked in; the dust/sand
+  // deltas land on the next inventory polls (auto-repair nets into the same
+  // beat), and the toast shows once the on-screen replay resolves.
+  let lastDust = null, lastSand = null, battleToastT = null;
+  function trackCurrency(inv) {
+    if (/^\d+$/.test(String(inv.dust))) lastDust = +inv.dust; // exact ints only — abbreviated can't diff
+    if (/^\d+$/.test(String(inv.sand))) lastSand = +inv.sand;
   }
+  function armBattleToast(d) {
+    const base = { dust: lastDust, sand: lastSand }; // snapshot BEFORE the post-battle polls land
+    clearTimeout(battleToastT); // back-to-back fights: newest wins
+    battleToastT = setTimeout(() => {
+      const delta = (now, was, label) => now != null && was != null && now !== was
+        ? [`${now > was ? '+' : ''}${(now - was).toLocaleString()} ${label}`] : [];
+      const parts = [...delta(lastDust, base.dust, 'dust'), ...delta(lastSand, base.sand, 'sand')];
+      infoToast(`${d.won ? '🏆 Battle Won' : '💀 Battle Lost'}${parts.length ? ` — 💰 ${parts.join(' · ')}` : ''}`);
+    }, Math.min((d.displayDurationMs || 0) + 2500, 120000)); // charge + replay + resolve
+  }
+
+  // Next-battle countdown: the game exposes no schedule, but fights land on a
+  // steady cadence — estimate from the gaps between recent encounters.
+  let encTimes = LS.get('encTimes', []).filter(t => Date.now() - t < 30 * 60000);
+  function nextBattleEta() {
+    if (encTimes.length < 2) return null;
+    const gaps = encTimes.slice(1).map((t, i) => t - encTimes[i]).sort((a, b) => a - b);
+    const gap = gaps[Math.floor(gaps.length / 2)]; // median — robust to a missed message
+    if (gap < 30000 || gap > 30 * 60000) return null; // nonsense cadence — hide
+    return encTimes[encTimes.length - 1] + gap;
+  }
+  setInterval(() => {
+    const el = document.getElementById('nextBattle');
+    if (!el) return;
+    const eta = nextBattleEta();
+    el.style.display = eta ? '' : 'none';
+    if (eta) el.querySelector('.v').textContent =
+      eta > Date.now() ? `~${mmss(eta - Date.now())}` : 'any moment…';
+  }, 1000);
 
   // ---- Party modal + battle reports (all data from the game WS) ----
   let lastRoster = null; // latest `state` message
@@ -758,7 +786,7 @@
         ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No log for this fight — recorded before the update.</div>'
         : !rep.feed.length
           ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No personal combat events this fight.</div>'
-          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length})</summary><div class="ffeed">${
+          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length}) <button data-poplog="${i}" title="Open in its own window">⧉</button></summary><div class="ffeed">${
               rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * (rep.feedScale || 1))}</span>${FLINE[g.kind](g)}</div>`).join('')}</div></details>`;
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
@@ -781,6 +809,21 @@
         </div></div>`;
     }).join('');
     document.querySelectorAll('.bent .bh').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
+    // fight log in its own window — a blank popup we write the log into
+    document.querySelectorAll('[data-poplog]').forEach(b => b.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation(); // don't toggle the <details>
+      const rep = log[+b.dataset.poplog]; if (!rep?.feed?.length) return;
+      const w = window.open('', 'flog', 'width=480,height=680,menubar=no,toolbar=no');
+      w.document.title = `Fight Log — Stage ${rep.stage}`;
+      w.document.body.innerHTML = `<style>
+        body{background:#0c0a16;color:#eae6f5;font:13px "Segoe UI",Arial,sans-serif;padding:12px}
+        h2{font-size:1rem;color:#c9bdf0;margin:0 0 10px}
+        .fl{font-size:0.85rem;padding:2px 0}.ft{color:#8a7fb0;font-variant-numeric:tabular-nums;margin-right:6px}
+        .fl.taken{color:#ff9d9d}.fl.healed{color:#7fdba3}.fl.death{color:#ff8080;font-weight:700}</style>
+        <h2>📜 Stage ${rep.stage} — ${rep.won ? '🏆 Won' : '💀 Lost'} · ${new Date(rep.at).toLocaleTimeString()}</h2>` +
+        rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * (rep.feedScale || 1))}</span>${FLINE[g.kind](g)}</div>`).join('');
+      w.focus();
+    });
     document.querySelectorAll('[data-lb]').forEach(b => b.onclick = (e) => {
       e.stopPropagation();
       localStorage.setItem('lbMetric', b.dataset.lb);
@@ -880,7 +923,7 @@
       let inv;
       try { inv = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); }
       catch { return; } // bridge offline — try again next tick
-      checkBattleDust(inv.dust);
+      trackCurrency(inv);
       const bag = { items: inv.bag || [] };
       const ids = new Set(bag.items.map(i => i.id));
       if (!seeded) { known = ids; seeded = true; saveKnown(); return; } // silent seed
@@ -925,10 +968,12 @@
           if (document.getElementById('partypanel').classList.contains('open')) renderParty();
         }
         if (d.type === 'encounter') {
+          encTimes.push(Date.now()); if (encTimes.length > 6) encTimes.shift(); // cadence sample for the next-battle ETA
+          LS.set('encTimes', encTimes);
           let replayOk = false;
           try { startFight(d); replayOk = true; } catch {} // live replay — even if we're not in it
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
-            battleAt = Date.now(); battleWon = !!d.won;
+            armBattleToast(d);
             try {
               const rep = buildReport(d);
               if (replayOk) { rep.feed = fight.feed.slice(-400); rep.feedScale = fight.scale; } // personal log, capped
