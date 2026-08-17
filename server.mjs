@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 76;
+const BRIDGE_REV = 77;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -492,6 +492,19 @@ async function characterPassives(login) {
 // Streamer-only fight breakdown. The site hardcodes the allowed login and
 // serves a bare "Not Found" card to everyone else — no nav, no header — so
 // absence of the page header is how we report "you can't see this".
+// The game grew a real JSON feed for this page (Aug 2026), so the scrape below
+// is on its way out. Shape unknown until we can read it with a live session —
+// returned verbatim for now, and the HTML scrape stays the source of truth
+// until the renderer is moved over.
+async function fightsJson() {
+  let status, text;
+  try { ({ status, text } = await getAuthed('/fights.json')); }
+  catch (e) { return { error: e.expired ? 'expired' : String(e.message || e) }; }
+  if (status === 401 || status === 403) return { gated: true, status };
+  try { return { status, data: JSON.parse(text) }; }
+  catch { return { status, error: 'not json', sample: text.slice(0, 400) }; }
+}
+
 async function fights() {
   const { text } = await getAuthed('/fights');
   return fightsOf(text);
@@ -651,6 +664,11 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/fights') {
       return json(res, await fights());
+    }
+    if (url.pathname === '/api/fights-json') {
+      // Passthrough while we learn the new feed's shape. Goes away once the
+      // Fight History page reads it directly instead of the scraped HTML.
+      return json(res, await fightsJson());
     }
     if (url.pathname === '/api/netstats') {
       // How much this bridge has pulled off the game site since it started.
