@@ -787,7 +787,7 @@
         : !rep.feed.length
           ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No personal combat events this fight.</div>'
           : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length}) <button data-poplog="${i}" title="Open in its own window">⧉</button></summary><div class="ffeed">${
-              rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * (rep.feedScale || 1))}</span>${FLINE[g.kind](g)}</div>`).join('')}</div></details>`;
+              rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${fmtT(g.at)}</span>${FLINE[g.kind](g)}</div>`).join('')}</div></details>`;
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
         <span>Stage ${rep.stage}</span>
@@ -821,7 +821,7 @@
         .fl{font-size:0.85rem;padding:2px 0}.ft{color:#8a7fb0;font-variant-numeric:tabular-nums;margin-right:6px}
         .fl.taken{color:#ff9d9d}.fl.healed{color:#7fdba3}.fl.death{color:#ff8080;font-weight:700}</style>
         <h2>📜 Stage ${rep.stage} — ${rep.won ? '🏆 Won' : '💀 Lost'} · ${new Date(rep.at).toLocaleTimeString()}</h2>` +
-        rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * (rep.feedScale || 1))}</span>${FLINE[g.kind](g)}</div>`).join('');
+        rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${fmtT(g.at)}</span>${FLINE[g.kind](g)}</div>`).join('');
       w.focus();
     });
     document.querySelectorAll('[data-lb]').forEach(b => b.onclick = (e) => {
@@ -840,6 +840,10 @@
   // Raw events live in memory only, for the latest fight.
   let fight = null, fightTimer = null;
   const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  // Fight-log tick label: events carry raw simulation time; the on-screen replay
+  // compresses it to a few seconds, so display time reads 0:00 for everything.
+  // Show the sim tick instead, adaptively: ms -> s -> m:ss.
+  const fmtT = (ms) => ms < 1000 ? Math.round(ms) + 'ms' : ms < 60000 ? (ms / 1000).toFixed(1) + 's' : mmss(ms);
   function startFight(d) {
     const players = {}, names = {};
     for (const u of d.units || []) { names[u.id] = u.displayName || u.id; if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName; }
@@ -909,7 +913,7 @@
     body.innerHTML =
       `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${over ? '' : ' · live'}</div>
       <div class="flb">${lbTable(board, Math.max(1, cursor / 1000), 'data-lbf')}</div>
-      <div class="ffeed">${feedShown.map(g => `<div class="fl ${g.kind}"><span class="ft">${mmss(g.at * fight.scale)}</span>${FLINE[g.kind](g)}</div>`).join('') || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
+      <div class="ffeed">${feedShown.map(g => `<div class="fl ${g.kind}"><span class="ft">${fmtT(g.at)}</span>${FLINE[g.kind](g)}</div>`).join('') || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
     body.querySelectorAll('[data-lbf]').forEach(b => b.onclick = () => { localStorage.setItem('lbMetric', b.dataset.lbf); renderFight(); });
     const fe = body.querySelector('.ffeed');
     if (keepScroll) fe.scrollTop = fe.scrollHeight;
@@ -976,7 +980,7 @@
             armBattleToast(d);
             try {
               const rep = buildReport(d);
-              if (replayOk) { rep.feed = fight.feed.slice(-400); rep.feedScale = fight.scale; } // personal log, capped
+              if (replayOk) { rep.feed = fight.feed.slice(-400); } // personal log, capped
               saveBattle(rep);
             } catch {}
           }
