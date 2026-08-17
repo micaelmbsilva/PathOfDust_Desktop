@@ -630,6 +630,12 @@ export function fightsOf(text) { // exported for scrape smoke-tests
 // bridge for the revision instead of checking upstream itself: raw.github
 // rate-limits per IP and hands back 429s, and five windows each checking would
 // reach that five times faster.
+// A manifest filename must be a plain relative name in the app dir — no
+// traversal, no absolute path, no drive letter, no NUL. Shared by the bridge
+// pull and (mirrored) main.cjs's launch pull.
+export const safeFile = (f) => typeof f === 'string' && f.length > 0 && f.length < 200
+  && !/[\\/]{2}|(^|[\\/])\.\.([\\/]|$)|^[\\/]|^[a-zA-Z]:|\0/.test(f) && !/[<>:"|?*]/.test(f);
+
 let pulling = null;          // in-flight guard — concurrent callers share one pull
 let pullBackoffUntil = 0;    // set on failure so a 429 isn't hammered
 async function pullInterface(opts = {}) {
@@ -649,6 +655,13 @@ async function pullInterface(opts = {}) {
       const base = `https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}`;
       const manifest = JSON.parse(await g(`${base}/version.json`));
       if (manifest.version <= cur) return { updated: false, version: cur };
+      // The manifest is attacker-controlled if `main` is ever compromised. A
+      // filename is interpolated straight into the write path, so a `../` or
+      // absolute entry could write outside the app dir (Startup persistence,
+      // overwriting the shell). Only allow plain relative names.
+      if (!Array.isArray(manifest.files) || !manifest.files.every(safeFile)) {
+        throw new Error('unsafe manifest file path');
+      }
       const files = await Promise.all(manifest.files.map(f => g(`${base}/${f}`).then(t => [f, t]))); // all fetched before writing
       for (const [f, t] of files) await writeFile(new URL('./' + f, import.meta.url), t);
       await writeFile(new URL('./version.json', import.meta.url), JSON.stringify(manifest));

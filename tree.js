@@ -131,7 +131,7 @@
   // specialize point (reveals its modifiers), mirroring the live site.
   function pips(n, i0) {
     const m = (n.rank || '').match(/(\d+)\s*\/\s*(\d+)/);
-    if (!m) return `<span class="tr">${n.rank || ''}</span>`;
+    if (!m) return `<span class="tr">${esc(n.rank || '')}</span>`;
     const cur = +m[1], max = +m[2];
     let out = '';
     for (let i = 1; i <= max; i++) {

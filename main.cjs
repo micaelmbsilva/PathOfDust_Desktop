@@ -39,7 +39,14 @@ async function resolveAppDir() {
     const sha = (await get(`https://api.github.com/repos/${REPO}/commits/main`, true)).sha;
     const base = `https://raw.githubusercontent.com/${REPO}/${sha}`; // immutable, never stale
     const manifest = JSON.parse(await get(`${base}/version.json`));
-    if (manifest.version > Math.max(bundledVer, localVer)) {
+    // Reject a manifest whose filenames could escape appDir (../, absolute,
+    // drive letter). The manifest is attacker-controlled if `main` is ever
+    // compromised, and `f` goes straight into the write path. Mirrors safeFile
+    // in server.mjs (main.cjs is CommonJS and can't import the ESM bridge).
+    const safeFile = (f) => typeof f === 'string' && f.length > 0 && f.length < 200
+      && !/[\\/]{2}|(^|[\\/])\.\.([\\/]|$)|^[\\/]|^[a-zA-Z]:|\0/.test(f) && !/[<>:"|?*]/.test(f);
+    if (manifest.version > Math.max(bundledVer, localVer)
+        && Array.isArray(manifest.files) && manifest.files.every(safeFile)) {
       const files = await Promise.all(manifest.files.map(f => get(`${base}/${f}`).then(t => [f, t])));
       fs.mkdirSync(appDir, { recursive: true });
       for (const [f, t] of files) fs.writeFileSync(path.join(appDir, f), t); // all fetched before writing

@@ -141,15 +141,19 @@
     else if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
     return r;
   }
-  const esc = (s) => (s || '').replace(/"/g, '&quot;');
+  // Full HTML escaper — was quote-only, which left item names, mods and the
+  // krangle nickname unescaped in text context (self-XSS: a nickname with a
+  // <img onerror> ran in the renderer, which shares the bridge origin).
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const tip = (s) => s ? ` data-tip="${esc(s)}"` : '';
   const SLOT_EMOJI = { weapon: '⚔️', helm: '🪖', body: '🛡️', gloves: '🧤', boots: '🥾' };
   const title = (s) => (s || '').charAt(0).toUpperCase() + (s || '').slice(1).toLowerCase();
   const slotOf = (s) => `${SLOT_EMOJI[(s || '').toLowerCase()] || ''} ${title(s)}`.trim();
   const qual = (it) => {
-    const q = it.quality || '';
-    const inner = it.sacred || q === 'Sacred' ? `<span class="sacredq">${q}</span>`
-      : q.includes('Perfect') ? `<span class="perfect">${q}</span>` : q;
+    const q = esc(it.quality || '');
+    const inner = it.sacred || it.quality === 'Sacred' ? `<span class="sacredq">${q}</span>`
+      : (it.quality || '').includes('Perfect') ? `<span class="perfect">${q}</span>` : q;
     return it.qtip ? `<span class="hint"${tip(it.qtip)}>${inner}</span>` : inner;
   };
   // Roll % → tier (T1 best). Percentile-from-top: T1 95-100, T2 90-94, T3 75-89,
@@ -158,7 +162,7 @@
   const tierOf = (r) => r >= 95 ? 1 : r >= 90 ? 2 : r >= 75 ? 3 : r >= 50 ? 4 : r >= 35 ? 5 : r >= 25 ? 6 : r >= 15 ? 7 : 8;
   const modLine = (m) => {
     const r = rollOf(m.tip);
-    const mt = `<span class="mt${m.crit ? ' crit' : ''}">${m.t}</span>`;
+    const mt = `<span class="mt${m.crit ? ' crit' : ''}">${esc(m.t)}</span>`;
     if (r == null) return `<div class="mline">${mt}</div>`;
     const t = tierOf(r);
     return `<div class="mline">${mt}` +
@@ -173,14 +177,14 @@
   // The site renders no repair form at all when there's nothing to fix, so the
   // button simply isn't there — same rule as the site's own pages.
   const repairBtn = (it) => it.repair
-    ? `<button data-rep="${it.repair.endpoint}" data-repf="${it.repair.field}" data-repv="${esc(it.repair.value)}"${it.repair.disabled ? ' disabled' : ''}` +
-      ` title="${it.repair.disabled ? 'Not enough dust' : 'Repair this item with dust'}">🔧 Repair (${it.repair.cost}d)</button>`
+    ? `<button data-rep="${esc(it.repair.endpoint)}" data-repf="${esc(it.repair.field)}" data-repv="${esc(it.repair.value)}"${it.repair.disabled ? ' disabled' : ''}` +
+      ` title="${it.repair.disabled ? 'Not enough dust' : 'Repair this item with dust'}">🔧 Repair (${esc(it.repair.cost)}d)</button>`
     : '';
   const itemCard = (it, acts) => `
     <div class="item">
-      <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : it.unique ? ' unique' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
-      <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}${dura(it)}</div>
-      ${(it.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${i.t}</div>`).join('')}
+      <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : it.unique ? ' unique' : ''}">${esc(it.name)} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
+      <div class="s">${slotOf(it.slot)} · ${esc(it.tier)} · ${qual(it)} · ${esc(it.primary || '')}${dura(it)}</div>
+      ${(it.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${esc(i.t)}</div>`).join('')}
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
       <div class="acts">${acts}</div>
     </div>`;
@@ -231,9 +235,9 @@
       for (const m of (ai.mods || [])) {
         if (had.has(m.t)) continue;
         const r = rollOf(m.tip);
-        parts.push(`${ai.name}: ${m.crit ? `<span class="mt crit">${m.t} ✦ crit!</span>` : m.t}${r != null ? ` <b>(T${tierOf(r)}·${r}%)</b>` : ''}`);
+        parts.push(`${esc(ai.name)}: ${m.crit ? `<span class="mt crit">${esc(m.t)} ✦ crit!</span>` : esc(m.t)}${r != null ? ` <b>(T${tierOf(r)}·${r}%)</b>` : ''}`);
       }
-      if (ai.tier && bi.tier && ai.tier !== bi.tier) parts.push(`${ai.name}: ${bi.tier} → <b>${ai.tier}</b>`);
+      if (ai.tier && bi.tier && ai.tier !== bi.tier) parts.push(`${esc(ai.name)}: ${esc(bi.tier)} → <b>${esc(ai.tier)}</b>`);
     }
     return parts;
   }
@@ -278,7 +282,7 @@
     const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
     const ad = inv.autoDisenchant;
     $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
-      inv.tokens.map(t => `<span class="chip">${t}</span>`).join('') +
+      inv.tokens.map(t => `<span class="chip">${esc(t)}</span>`).join('') +
       `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-Repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
       // Site omits the whole form when nothing is damaged, so no chip either.
       (meData.repairAll ? `<button class="chip repair" data-repall="1"${meData.repairAll.disabled ? ' disabled' : ''}
@@ -313,9 +317,9 @@
       const v = inv.veil;
       pendChoices = v.choices || (v.options || []).map(o => // old-bridge shape (pre rev-72)
         ({ action: 'craft/choose-veil', fields: [['index', String(o.index)]], label: o.text }));
-      $('veilChoice').innerHTML = `<div class="veilbox"><h2>${v.title}</h2>` +
-        `<p class="muted">${v.note || 'Pick one — the other options are discarded.'}</p><div class="acts">` +
-        pendChoices.map((c, i) => `<button data-veilpick="${i}">${c.label}</button>`).join('') +
+      $('veilChoice').innerHTML = `<div class="veilbox"><h2>${esc(v.title)}</h2>` +
+        `<p class="muted">${esc(v.note || 'Pick one — the other options are discarded.')}</p><div class="acts">` +
+        pendChoices.map((c, i) => `<button data-veilpick="${i}">${esc(c.label)}</button>`).join('') +
         `</div></div>`;
     } else { $('veilChoice').innerHTML = ''; pendChoices = null; }
 
@@ -447,7 +451,7 @@
           title="Rename this section"><button class="csec-del" data-del="${i}" title="Remove section (its buttons move to the one before)">✕</button></div>
         <div class="acts csec-body" data-sec="${i}">
           ${s.items.map(id => { const a = byAction[id];
-            return `<button data-craft="${a.action}" draggable="true"${tip(a.tip)}>${a.label}</button>`; }).join('')
+            return `<button data-craft="${esc(a.action)}" draggable="true"${tip(a.tip)}>${esc(a.label)}</button>`; }).join('')
           || '<span class="muted" style="font-size:0.78rem">Drag a craft here</span>'}
         </div>
       </div>`).join('') +
