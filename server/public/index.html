@@ -131,7 +131,10 @@
   .tcol .tnode.mod { margin-left: 14px; font-size: 12.5px; }
 
   /* Build progression + roll priority */
-  .lvrow { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+  .lvrow { display: flex; align-items: center; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  button { font: inherit; color: var(--ink); background: var(--surface); cursor: pointer;
+           border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; }
+  button:disabled { color: var(--muted); cursor: default; }
   .lvrow input { width: 70px; background: var(--surface); color: var(--ink); border: 1px solid var(--border);
                  border-radius: 6px; padding: 4px 8px; font: inherit; }
   .steps { list-style: none; margin: 8px 0 0; padding: 0; }
@@ -441,6 +444,97 @@ async function checkFeedback() {
   } catch {}
 }
 
+// Hidden route: #/intel — the investigation console. One button pulls every
+// public source (roster, wiki, patch notes), packs it with the observed-play
+// aggregates and has Claude look for broken/OP interactions; the findings become
+// the watchlist and feed the advisor. Keyed, no nav links to it.
+async function intelData() {
+  const r = await fetch('api/investigate?key=' + encodeURIComponent(siteKey()));
+  if (r.status === 403) return null;
+  if (!r.ok) throw new Error('investigate ' + r.status);
+  return r.json();
+}
+
+async function intel() {
+  const d = await intelData();
+  if (!d) return keyDenied();
+  const wrap = el('div', null);
+  let force = false, notice = null; // set when the server refuses a too-soon rerun
+  const paint = (data) => {
+    const run = data.run || {}, latest = data.latest;
+    const busy = run.status === 'running';
+    const btn = el('button', busy ? { disabled: 'disabled' } : null,
+      busy ? 'Pulling…' : force ? 'Run anyway' : 'Pull everything + investigate');
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const r = await fetch('api/investigate?key=' + encodeURIComponent(siteKey())
+        + (force ? '&force=1' : ''), { method: 'POST' });
+      if (r.status === 429) { // cooldown — offer the override rather than silently doing nothing
+        notice = str((await r.json()).error);
+        force = true;
+        paint(data);
+        return;
+      }
+      notice = null;
+      poll();
+    };
+    // Wrapped in one element: replaceChildren stringifies arrays and nulls,
+    // el() flattens them.
+    wrap.replaceChildren(el('div', null, [
+      el('div', { class: 'card' },
+        el('div', { class: 'lvrow' }, btn,
+          el('span', { class: 'sub', style: 'margin:0' },
+            notice ? notice
+              : !data.configured ? 'ANTHROPIC_API_KEY is not set on the server — the run will fail.'
+              : busy ? `running: ${str(run.step) || 'working'} — started ${agoText(run.startedAt)}`
+              : run.status === 'failed' ? `last run failed: ${str(run.error)}`
+              : run.finishedAt ? `last run finished ${agoText(run.finishedAt)}`
+              : 'takes a few minutes: rescrapes the roster, wiki and patch notes, then analyses.')),
+        latest ? el('p', { style: 'margin:12px 0 0' }, str(latest.summary)) : null,
+        latest ? el('p', { class: 'sub', style: 'margin:8px 0 0' },
+          `last investigation ${agoText(latest.ts)} · ${str(latest.model)}`) : null),
+      latest && arr(latest.interactions).length ? [
+        el('h2', null, `Interactions (${arr(latest.interactions).length})`),
+        el('div', { class: 'stack' }, arr(latest.interactions).map(i => el('div', { class: 'card' },
+          el('div', { class: 'bname' }, str(i.title)),
+          el('div', { class: 'chips', style: 'margin:6px 0 0' },
+            el('span', { class: 'chip' + (str(i.impact) === 'high' ? ' on' : '') }, str(i.impact)),
+            i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
+            arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c))),
+            arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
+          el('p', null, str(i.text)),
+          str(i.evidence) ? el('p', { class: 'sub', style: 'margin:8px 0 0' }, 'evidence: ' + str(i.evidence)) : null))),
+      ] : null,
+      latest && arr(latest.patterns).length ? [
+        el('h2', null, 'Patterns'),
+        el('div', { class: 'stack' }, arr(latest.patterns).map(p => el('div', { class: 'card' },
+          el('div', { class: 'bname' }, str(p.title)),
+          el('p', null, str(p.text)),
+          str(p.evidence) ? el('p', { class: 'sub', style: 'margin:8px 0 0' }, 'evidence: ' + str(p.evidence)) : null))),
+      ] : null,
+      arr(data.patchNotes).length ? [
+        el('h2', null, 'Patch notes'),
+        el('div', { class: 'stack' }, arr(data.patchNotes).slice(0, 8).map(dt => el('div', { class: 'card' },
+          el('div', { class: 'bname' }, str(dt.date)),
+          arr(dt.entries).map(e => el('p', null, el('b', null, str(e.title)), ' — ', str(e.text)))))),
+      ] : null,
+    ]));
+  };
+  // Poll only while a run is in flight, and only while this page is open.
+  async function poll() {
+    if (location.hash !== '#/intel') return;
+    try {
+      const data = await intelData();
+      if (!data) return;
+      paint(data);
+      if (data.run && data.run.status === 'running') setTimeout(poll, 10000);
+    } catch {}
+  }
+  paint(d);
+  if (d.run && d.run.status === 'running') setTimeout(poll, 10000);
+  view(el('p', null, el('a', { href: '#/' }, '← Ladder')), el('h1', null, 'Investigation'), wrap);
+}
+
 function itemCard(it) {
   const tier = str(it.tier).replace(/^Tier\s*/i, ''); // ping/scrape send "Tier 58"
   return el('div', { class: 'card item' },
@@ -527,10 +621,15 @@ const ROLL_KW = { 'Block': ['block'], 'Evasion': ['evasion'], 'Attack Speed': ['
   'Max HP': ['max hp'], 'Healing Power': ['healing power'], 'Splash': ['splash'], 'Intervene': ['intervene'],
   'Lingering Effect': ['lingering'], 'Leech': ['leech'], 'Reduced Dmg Taken': ['dmg taken reduction', 'reduced dmg'] };
 const rankNum = (r) => +(String(r == null ? '' : r).match(/^\d+/) || [0])[0];
+const OP_W = { high: 3, medium: 1.5, low: 0.5 }; // watchlist impact → advisor score weight
 
 async function advisor(name) {
   const key = encodeURIComponent(siteKey());
-  if ((await fetch('api/watchlist?key=' + key)).status === 403) return keyDenied();
+  const watchR = await fetch('api/watchlist?key=' + key);
+  if (watchR.status === 403) return keyDenied();
+  // Investigation findings steer the pick: an OP interaction this player's gear
+  // already supports counts for more than one they would have to build toward.
+  const watch = watchR.ok ? arr((await watchR.json()).interactions) : [];
   const [r, { builds, passives }, ratesR, gearR] = await Promise.all([
     fetch('api/build/' + encodeURIComponent(name)), staticData(), fetch('api/affix-rates?key=' + key),
     fetch('api/advisor-gear/' + encodeURIComponent(name) + '?key=' + key)]);
@@ -574,8 +673,15 @@ async function advisor(name) {
           const n = matchWeight(kws, +roll.sat || 0);
           if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${(Math.round(n * 10) / 10)}`); }
         });
+        // Watchlist bonus, capped per interaction: it marks that this class has a
+        // known-strong line the gear supports, not another stat to stack.
+        const ops = watch.filter(i => arr(i.classes).map(str).includes(cls));
+        ops.forEach(i => {
+          const w = arr(i.rolls).reduce((s, r) => s + matchWeight(ROLL_KW[r] || [str(r).toLowerCase()], 0), 0);
+          score += (OP_W[str(i.impact)] || 0.5) * (arr(i.rolls).length ? Math.min(1, w) : 0.5);
+        });
         score = Math.round(score * 10) / 10;
-        return { cls, build, score, hits };
+        return { cls, build, score, hits, ops };
       }).filter(x => x.build).sort((a, z) => z.score - a.score);
     const best = ranked[0];
 
@@ -643,6 +749,15 @@ async function advisor(name) {
         el('div', { class: 'btag' }, `score ${best.score}${best.hits.length ? ' · gear matches: ' + best.hits.join(' · ') : ' · no matching mods on current gear yet'}`),
         el('p', null, str(best.build.why)),
         el('p', null, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} build + tree order →`))),
+      best && arr(best.ops).length ? [
+        el('h2', null, 'Known-strong interactions for this pick'),
+        el('div', { class: 'stack' }, arr(best.ops).map(i => el('div', { class: 'card' },
+          el('div', { class: 'bname' }, str(i.title)),
+          el('div', { class: 'chips', style: 'margin:6px 0 0' },
+            el('span', { class: 'chip' + (str(i.impact) === 'high' ? ' on' : '') }, str(i.impact) + ' impact'),
+            i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
+            arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
+          el('p', null, str(i.text)))))] : null,
       best && ranked.length > 1 ? el('div', { class: 'chips', style: 'margin:10px 0 0' }, ranked.slice(1, 4).map(x =>
         el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(x.cls) }, `${x.cls} · ${x.score}`))) : null,
       best ? [
@@ -790,7 +905,7 @@ async function route() {
   // Capture ?key=… from the hash once, remember it, strip it from the URL.
   const km = location.hash.match(/^(.*?)\?key=([^&]+)$/);
   if (km) { localStorage.setItem('pod.key', decodeURIComponent(km[2])); location.replace(location.pathname + km[1]); return; }
-  const solo = { '#/watchlist': watchlist, '#/feedback': feedbackView }[location.hash];
+  const solo = { '#/watchlist': watchlist, '#/feedback': feedbackView, '#/intel': intel }[location.hash];
   if (solo) { try { await solo(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); renderFoot(); checkFeedback(); return; }
   const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
   try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }

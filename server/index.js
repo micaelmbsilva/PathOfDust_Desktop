@@ -53,6 +53,7 @@ async function init() {
   // Scrape-created garbage rows (welcome banners parsed as characters) — clean up.
   await pool.query(`DELETE FROM installs WHERE id LIKE 'web:%' AND archetype IS NULL AND level IS NULL`);
   // Class tree layouts survive redeploys — the scrape only improves them.
+  await initInvestigations();
   await pool.query(`CREATE TABLE IF NOT EXISTS tree_layouts (
     archetype TEXT PRIMARY KEY, data JSONB, updated TIMESTAMPTZ DEFAULT now())`);
   for (const r of (await pool.query(`SELECT archetype, data FROM tree_layouts`)).rows)
@@ -74,6 +75,16 @@ app.post('/ping', h(async (req, res) => {
   const { install, version, archetype, level, ...data } = req.body || {};
   if (!install) return res.sendStatus(400);
   const id = String(install).slice(0, 64);
+  // Shape-check at the boundary: every reader expands these with
+  // jsonb_array_elements, which errors out on the whole query if a single stored
+  // row holds a non-array here. Drop the field rather than store the wrong shape.
+  const items = (list) => Array.isArray(list)
+    ? list.filter((it) => it && typeof it === 'object')
+        .map((it) => Array.isArray(it.mods) ? it : { ...it, mods: [] })
+    : undefined;
+  if (data.equipped !== undefined && !(data.equipped = items(data.equipped))) delete data.equipped;
+  if (data.bag !== undefined && !(data.bag = items(data.bag))) delete data.bag;
+  if (data.passives && !Array.isArray(data.passives.nodes)) delete data.passives;
   // The app can misparse the game's welcome banner as a character name before a
   // character exists — keep the install row but drop the bogus name (ladder is
   // name-keyed, so a null name also keeps the row off the public site).
@@ -212,10 +223,15 @@ app.get('/api/build/:name', h(async (req, res) => {
 
 // Private watchlist (OP interactions) — keyed, fail closed. SITE_KEY env gates
 // it; the data lives outside public/ so the static server never exposes it.
-app.get('/api/watchlist', (req, res) => {
+// The newest investigation (if any) supersedes the hand-curated file: the model
+// is given the current list and returns the full updated one, so there is always
+// exactly one source of truth.
+app.get('/api/watchlist', h(async (req, res) => {
   if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  const found = await latestInvestigation();
+  if (found && arr(found.data.interactions).length) return res.json({ interactions: found.data.interactions });
   res.sendFile(require('path').join(__dirname, 'watchlist.json'));
-});
+}));
 
 // Private inbox: user feedback + recent app errors, newest first. Same SITE_KEY
 // gate as the watchlist — these carry install ids and contact handles.
@@ -234,6 +250,201 @@ app.get('/api/feedback', h(async (req, res) => {
     pool.query(`SELECT id, ts, install, version, message FROM logs WHERE level = 'error' ORDER BY id DESC LIMIT 100`),
   ]);
   res.json({ feedback: feedback.rows, errors: errors.rows });
+}));
+
+// ---- Investigation ----------------------------------------------------------
+// One keyed trigger pulls everything the game exposes (roster, wiki, patch notes),
+// packs it with the observed-play aggregates into a dossier, and has Claude look
+// for broken/OP interactions and patterns. The result replaces the watchlist and
+// feeds the advisor's scoring. Manual only — a run costs real money.
+
+const arr = (x) => Array.isArray(x) ? x : [];
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5';
+
+// Kept small on purpose: the model gets derived aggregates plus a handful of full
+// builds, not the whole DB. Everything here is already public on the site.
+async function buildDossier() {
+  const one = async (q, p) => (await pool.query(q, p)).rows;
+  const [classes, passives, mods, rates, top] = await Promise.all([
+    one(`SELECT archetype, count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level
+         ${PUB} GROUP BY archetype ORDER BY 2 DESC`),
+    // jsonb_typeof guards: one row storing a non-array here would otherwise error
+    // out the whole query. Row caps keep the prompt (and its cost) bounded.
+    one(`SELECT archetype, left(n->>'name', 120) AS node, count(*)::int AS players,
+                round(avg((substring(n->>'rank' from '^\\d+'))::int), 1) AS avg_rank
+         FROM installs, jsonb_array_elements(data->'passives'->'nodes') n
+         WHERE name IS NOT NULL AND data ? 'equipped'
+           AND jsonb_typeof(data->'passives'->'nodes') = 'array' AND n->>'rank' ~ '^[1-9]'
+         GROUP BY 1, 2 ORDER BY 1, 3 DESC LIMIT 600`),
+    one(`SELECT archetype, left(trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')), 120) AS mod,
+                count(DISTINCT id)::int AS players
+         FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m
+         WHERE name IS NOT NULL AND jsonb_typeof(data->'equipped') = 'array'
+           AND jsonb_typeof(it->'mods') = 'array' AND m->>'t' IS NOT NULL
+         GROUP BY 1, 2 HAVING count(DISTINCT id) > 1 ORDER BY 1, 3 DESC LIMIT 600`),
+    one(`SELECT left(trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')), 120) AS affix,
+                round(avg((substring(m->>'t' from '([0-9]+\\.?[0-9]*)'))::numeric
+                          / NULLIF((substring(it->>'tier' from '\\d+'))::int, 0)), 4) AS per_tier,
+                count(*)::int AS samples
+         FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m
+         WHERE jsonb_typeof(data->'equipped') = 'array' AND jsonb_typeof(it->'mods') = 'array'
+           AND m->>'t' ~ '[0-9]' AND it->>'tier' ~ '\\d'
+         GROUP BY 1 HAVING count(*) >= 3 ORDER BY 3 DESC LIMIT 300`),
+    // Full loadouts for the highest-level players — the sharp end of the meta,
+    // where a broken interaction shows up first.
+    one(`SELECT name, archetype, level, data->'stats' AS stats, data->'equipped' AS equipped,
+                data->'passives' AS passives ${PUB} ORDER BY level DESC NULLS LAST LIMIT 10`),
+  ]);
+  const current = await latestInvestigation();
+  const dossier = {
+    generated: new Date().toISOString(),
+    wiki: wikiTrees,                              // class trees: skills, specs, modifiers
+    patchNotes: arr(patchNotes).slice(0, 12),     // most recent dates — older ones are settled history
+    observed: { classes, passives, mods, affixRates: rates, topBuilds: top },
+    currentWatchlist: current ? current.data.interactions
+      : JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'watchlist.json'), 'utf8')).interactions,
+  };
+  // Hard ceiling on what one run can cost. Well above the ~400KB a healthy
+  // dossier weighs; if it is ever hit, something upstream has grown unbounded.
+  const body = JSON.stringify(dossier);
+  if (body.length > 2e6) throw new Error(`dossier too large (${body.length} bytes) — refusing to send`);
+  return { dossier, body };
+}
+
+const SYSTEM = `You analyse a live Twitch idle-RPG ("Path of Dust") for the operator, who runs the community's stats site.
+
+Your job: read everything you are given and find (a) broken or overpowered interactions and gear/tree/class combinations, and (b) patterns in how the game actually behaves that players would not get from the wiki. Findings feed two places: a watchlist page the operator reads, and a build advisor that scores classes against a player's actual gear.
+
+Ground every finding in the dossier. Cite what it rests on in the evidence field — a wiki modifier, a patch note date, an affix rate, a pick rate, a specific top build. Prefer a mechanism you can trace over a hunch; if something is a suspicion, say so in the text rather than dropping it.
+
+The dossier's currentWatchlist is the operator's existing list. Return the FULL updated list, not a diff: keep entries that still hold (edit their text when patch notes or data have moved them), drop entries a patch note has invalidated, and add what you have newly found. Say in the entry's text when a patch changed it.
+
+Name classes exactly as the dossier's archetypes are spelled — the advisor matches on that string, so a paraphrase silently drops the finding.
+
+For each interaction set rolls to the gear affix / stat names it leans on, using the dossier's own affix wording where possible, so the advisor can match them against a player's mods. Leave rolls empty when an interaction does not depend on gear.
+
+Write for someone who plays this game daily: specific, concrete numbers, no hedging filler.`;
+
+const FINDINGS_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['summary', 'interactions', 'patterns'],
+  properties: {
+    summary: { type: 'string', description: 'What changed since the previous investigation, in a few sentences.' },
+    interactions: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['title', 'type', 'classes', 'text', 'impact', 'rolls', 'evidence'],
+        properties: {
+          title: { type: 'string' },
+          type: { type: 'string', enum: ['combat', 'crafting', 'tree', 'economy', 'bug', 'synergy'] },
+          classes: { type: 'array', items: { type: 'string' } },
+          text: { type: 'string' },
+          impact: { type: 'string', enum: ['high', 'medium', 'low'] },
+          rolls: { type: 'array', items: { type: 'string' } },
+          evidence: { type: 'string' },
+        },
+      },
+    },
+    patterns: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['title', 'text', 'evidence'],
+        properties: { title: { type: 'string' }, text: { type: 'string' }, evidence: { type: 'string' } },
+      },
+    },
+  },
+};
+
+async function initInvestigations() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS investigations (
+    id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), model TEXT, data JSONB, usage JSONB)`);
+}
+async function latestInvestigation() {
+  if (!pool) return null;
+  try {
+    const { rows } = await pool.query(`SELECT id, ts, model, data, usage FROM investigations ORDER BY id DESC LIMIT 1`);
+    return rows[0] || null;
+  } catch { return null; } // table may not exist yet on a cold DB
+}
+
+// In-memory run state — the trigger returns immediately and the page polls.
+// ponytail: single global run, no queue; a second trigger is refused while one runs.
+let run = { status: 'idle', startedAt: null, finishedAt: null, step: null, error: null };
+
+async function runInvestigation() {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic(); // ANTHROPIC_API_KEY from env
+  run.step = 'scraping game data';
+  await Promise.all([scrapeRoster(), scrapeWiki(), scrapePatchNotes()]);
+  run.step = 'building dossier';
+  const { body } = await buildDossier();
+  run.step = 'analysing';
+  // Streamed: the answer is long and a non-streaming call this size risks an
+  // HTTP timeout. Fallbacks on by default — a safety decline should not lose the run.
+  const req = {
+    model: ANTHROPIC_MODEL,
+    max_tokens: 32000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    system: SYSTEM,
+    output_config: { effort: 'high', format: { type: 'json_schema', schema: FINDINGS_SCHEMA } },
+    messages: [{ role: 'user', content: body }],
+  };
+  let message;
+  try {
+    message = await client.beta.messages.stream(req).finalMessage();
+  } catch (e) {
+    // Server-side fallback is a beta: if this account or model can't take it,
+    // the analysis itself is still fine — drop the parameter and run plain.
+    if (!/fallback/i.test(e.message || '')) throw e;
+    console.error('retrying without server-side fallback:', e.message);
+    const { betas, fallbacks, ...plain } = req;
+    message = await client.messages.stream(plain).finalMessage();
+  }
+  if (message.stop_reason === 'refusal') throw new Error('model declined the request');
+  const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const data = JSON.parse(text);
+  await pool.query(`INSERT INTO investigations (model, data, usage) VALUES ($1,$2,$3)`,
+    [message.model || ANTHROPIC_MODEL, JSON.stringify(data), JSON.stringify(message.usage || {})]);
+  return data;
+}
+
+// Trigger + status share one keyed route: POST starts a run, GET reports on it
+// and returns the newest findings.
+app.post('/api/investigate', h(async (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!pool) return res.sendStatus(503);
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY not set' });
+  if (run.status === 'running') return res.status(409).json(run);
+  // Cooldown, checked against the stored row so a redeploy (which clears the
+  // in-memory state) can't be used to re-run a costly analysis back to back.
+  // ?force=1 overrides when a rerun is genuinely wanted.
+  const last = await latestInvestigation();
+  const sinceMin = last ? (Date.now() - new Date(last.ts)) / 60000 : Infinity;
+  if (sinceMin < 15 && req.query.force !== '1') {
+    return res.status(429).json({ error: `last investigation ran ${Math.round(sinceMin)} min ago — add &force=1 to run anyway` });
+  }
+  run = { status: 'running', startedAt: new Date().toISOString(), finishedAt: null, step: 'starting', error: null };
+  runInvestigation()
+    .then(() => { run = { ...run, status: 'done', step: null, finishedAt: new Date().toISOString() }; })
+    .catch((e) => {
+      console.error('investigation failed:', e.message);
+      run = { ...run, status: 'failed', step: null, error: e.message, finishedAt: new Date().toISOString() };
+    });
+  res.status(202).json(run);
+}));
+
+app.get('/api/investigate', h(async (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  const found = await latestInvestigation();
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    run, configured: !!process.env.ANTHROPIC_API_KEY,
+    latest: found && { ts: found.ts, model: found.model, usage: found.usage, ...found.data },
+    patchNotes,
+  });
 }));
 
 // Freshness watermark for the site footer: deploy identity + when data last moved.
@@ -483,11 +694,51 @@ async function scrapeWiki() {
   } catch (e) { console.error('wiki scrape failed:', e.message); }
 }
 
+// ---- Patch notes -------------------------------------------------------------
+// The game's /patch-notes page is public (no cookie needed) and is the only record
+// of what the developer changed — the investigation leans on it to date findings
+// and retire ones a patch has fixed. Markup: h2 = date, h3 = entry, li = bullets.
+let patchNotes = null;
+function parsePatchNotes(t) {
+  const out = [];
+  for (const block of t.split('<h2>').slice(1)) {
+    const date = wstrip(block.split('</h2>')[0]);
+    const entries = block.split('<h3>').slice(1).map((chunk) => {
+      const body = chunk.split('</h3>')[1] || '';
+      const bullets = [...body.matchAll(/<li>([\s\S]*?)<\/li>/g)].map((m) => wstrip(m[1]));
+      return {
+        title: wstrip(chunk.split('</h3>')[0]),
+        text: bullets.length ? bullets.join(' • ')
+          : wstrip((body.match(/<p[^>]*>([\s\S]*?)<\/p>/) || [])[1] || ''),
+      };
+    }).filter((e) => e.title);
+    if (date && entries.length) out.push({ date, entries });
+  }
+  return out;
+}
+async function scrapePatchNotes() {
+  try {
+    const out = parsePatchNotes(await getPage('/patch-notes'));
+    if (out.length) { patchNotes = out; console.log('patch notes:', out.length, 'dates'); }
+    else console.error('patch notes: nothing parsed — markup changed? keeping previous');
+  } catch (e) { console.error('patch notes scrape failed:', e.message); }
+}
+app.get('/api/patch-notes', (_req, res) => {
+  if (!patchNotes) return res.sendStatus(503);
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ dates: patchNotes });
+});
+
+// Required as a module (test-parsers.js) — export the parsers and start nothing.
+if (require.main !== module) { module.exports = { parsePatchNotes, parseCharacter, parsePassives, parseWiki }; return; }
+
 if (process.env.SCRAPE !== 'off') {
   setTimeout(scrapeRoster, 60e3); // first pass shortly after boot, once DB init settled
   setInterval(scrapeRoster, 30 * 60e3);
   setTimeout(scrapeWiki, 20e3);
   setInterval(scrapeWiki, 6 * 3600e3); // trees change rarely
+  setTimeout(scrapePatchNotes, 25e3);
+  setInterval(scrapePatchNotes, 6 * 3600e3);
 }
 
 // Serve regardless of DB state so / always answers; init (and retry) in background.
