@@ -32,15 +32,18 @@
   #down { position: fixed; inset: 0; z-index: 15; background: #000 center/cover no-repeat; display: none;
     align-items: center; justify-content: center; flex-direction: column; gap: 10px;
     overflow: hidden; text-align: center; }
-  /* Tint is a gradient layer on the same background, not an ::after overlay —
-     keeps the stacking trivial: backdrop, then logo, then text. */
-  #down.art { background-image: linear-gradient(rgba(6,4,14,0.68), rgba(6,4,14,0.68)), url("assets/loading.png"); }
   #down.open { display: flex; }
-  #down .dlogo { position: absolute; width: min(46vh, 46vw); max-width: 420px;
+  /* Explicit layers, back to front: animated backdrop, scrim, logo, text. */
+  #down .dbg { position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; z-index: 0; pointer-events: none; }
+  #down .dscrim { position: absolute; inset: 0; background: rgba(6,4,14,0.68);
+    z-index: 1; opacity: 0; transition: opacity 0.4s; pointer-events: none; }
+  #down.art .dscrim { opacity: 1; }
+  #down .dlogo { position: absolute; z-index: 2; width: min(46vh, 46vw); max-width: 420px;
     opacity: 0.5; filter: drop-shadow(0 0 40px rgba(143,123,216,0.45));
     animation: dpulse 4.8s ease-in-out infinite; pointer-events: none; }
-  #down .dtitle, #down .dmsg { position: relative; z-index: 1; }
-  #down .p { z-index: 1; }
+  #down .dtitle, #down .dmsg { position: relative; z-index: 3; }
+  #down .p { z-index: 3; }
   #down .dtitle { color: #c9bdf0; font-size: 1.3rem; font-weight: 700;
     text-shadow: 0 2px 12px #000; animation: dpulse 2.4s ease-in-out infinite; }
   #down .dmsg { color: #b3a6dd; font-size: 0.9rem; text-shadow: 0 1px 8px #000; }
@@ -269,9 +272,8 @@
 <div id="down">
   <span class="p"></span><span class="p"></span><span class="p"></span><span class="p"></span>
   <span class="p"></span><span class="p"></span><span class="p"></span><span class="p"></span>
-  <img class="dlogo" id="downLogo" src="assets/logo.png" alt=""
-       onload="document.getElementById('down').classList.add('art')"
-       onerror="this.remove()">
+  <div class="dscrim"></div>
+  <img class="dlogo" id="downLogo" alt="">
   <div class="dtitle" id="downTitle">💤 Server Is Down</div>
   <div class="dmsg">Waiting for it to come back — this screen clears itself.</div>
 </div>
@@ -602,10 +604,42 @@
   // the first success we drop the curtain and reload the dead iframe.
   let siteFails = 0, isDown = false;
   document.getElementById('downTitle').textContent = `💤 ${GAME_NAME} Is Down`;
+  // The downtime artwork is an 80MB animated GIF, so it is attached only while
+  // the curtain is actually up and detached the moment it comes down — a hidden
+  // <img> would otherwise keep its decoded frames (and keep animating) for the
+  // rest of the session. Clearing src as well as removing the node makes the
+  // teardown explicit rather than leaving it to when GC feels like it.
+  function downArt(on) {
+    const el = document.getElementById('down');
+    const logo = document.getElementById('downLogo');
+    let bg = el.querySelector('.dbg');
+    if (on) {
+      if (!logo.getAttribute('src')) logo.src = 'assets/logo.png';
+      if (!bg) {
+        bg = document.createElement('img');
+        bg.className = 'dbg';
+        bg.alt = '';
+        // Only claim the artwork layer once it has actually decoded; if the
+        // files aren't there (install predating them) the plain curtain stands.
+        bg.onload = () => el.classList.add('art');
+        bg.onerror = () => bg.remove();
+        bg.src = 'assets/loading.gif';
+        el.prepend(bg);
+      }
+    } else if (bg) {
+      el.classList.remove('art');
+      bg.onload = bg.onerror = null;
+      bg.removeAttribute('src'); // drop the decoder's reference (src='' would
+                                 // re-resolve to the document URL and refetch)
+      bg.remove();
+      logo.removeAttribute('src');
+    }
+  }
   function setDown(on) {
     if (on === isDown) return;
     isDown = on;
     document.getElementById('down').classList.toggle('open', on);
+    downArt(on);
     if (!on) { const ov = document.getElementById('overlay'); ov.setAttribute('src', ov.getAttribute('src')); } // revive iframe
   }
   loadStats();
