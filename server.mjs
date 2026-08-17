@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 78;
+const BRIDGE_REV = 79;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -239,10 +239,13 @@ export function rosterOf(text) { // exported for scrape smoke-tests
     // The login only exists in the card's href — it's never printed as text.
     const login = decodeURIComponent((chunk.match(/href="\/characters\/([^"]+)"/) || [])[1] || '');
     const lv = chunk.match(/class="roster-meta"[^>]*>\s*Level\s+(\d+)\s+([A-Za-z]+)/) || [];
-    const wl = chunk.match(/class="roster-meta"[^>]*>\s*(\d+)W\s*\/\s*(\d+)L\s*\(([^)]*)\)/) || [];
+    // W/L go through the site's format_number, so past 1000 they arrive
+    // abbreviated ("1.2K", "3.4M") — never plain digits. Kept as the strings
+    // the site rendered rather than parsed back into numbers we'd only reprint.
+    const wl = chunk.match(/class="roster-meta"[^>]*>\s*([\d.]+[KMBT]?)W\s*\/\s*([\d.]+[KMBT]?)L\s*\(([^)]*)\)/) || [];
     if (!name || !lv[2]) continue;
     list.push({ login, name, cls: lv[2], level: +lv[1],
-      wins: +wl[1] || 0, losses: +wl[2] || 0, winrate: wl[3] || '—',
+      wins: wl[1] || '0', losses: wl[2] || '0', winrate: strip(wl[3] || '') || '—',
       sprite: SITE + ((chunk.match(/class="roster-sprite" src="([^"]+)"/) || [])[1] || '') });
   }
   return list;

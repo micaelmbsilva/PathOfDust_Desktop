@@ -1813,7 +1813,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 78) showRestartBanner(); // 78: fights-json passthrough removed; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 79) showRestartBanner(); // 79: roster W/L parse fix; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 

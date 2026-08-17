@@ -18,6 +18,16 @@ run.txt
 # internal doc describing the reverse-engineered endpoints — keep private
 README-actions.md
 
+# Owner-only investigation working files — the dossier pulled from
+# /api/dossier, the findings posted to /api/findings, and the intel/watchlist
+# snapshots read back. All of it is pre-publication balance analysis: it names
+# exploits before they are fixed and quotes internal source. Publishing is what
+# makes a finding public, not committing it.
+dossier*.json
+findings*.json
+intel*.json
+watchlist*.json
+
 # Claude Code scratch: throwaway worktrees and per-machine settings.
 # .claude/skills/ IS tracked — the investigation workflow lives there.
 .claude/*
