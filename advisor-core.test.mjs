@@ -35,6 +35,10 @@ assert.equal(p.splash, 2.24); // sacred kept, outside the 4 cap
 assert.equal(p.weaponPower, 120);
 const noCelestial = parseItem({ slot: 'Helm', tier: 't10', mods: [], implicits: [{ t: 'Celestial Conversion: x' }] }, model);
 assert.deepEqual(noCelestial.splash, 0);
+// live scrape prefixes the implicit with a "✦ " glyph — must still count
+const glyph = parseItem({ slot: 'Helm', tier: 'Tier 99', mods: [], implicits: [{ t: '✦ Sacred: +307.39% lightning damage (dmg taken debuff chance)' }] }, model);
+assert.ok(Math.abs(glyph.elemLightning - 3.0739) < 1e-9);
+assert.equal(glyph.tier, 99);
 
 // classScore: overflow — raw 0.90 DR at cap 0.75 → eff 0.75, spill 0.15 into inc
 const g1 = { ...emptyBuckets(), dr: 0.90 };
