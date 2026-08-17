@@ -56,11 +56,17 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 87;
+const BRIDGE_REV = 88;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
   '.gif': 'image/gif', '.webm': 'video/webm', '.mp4': 'video/mp4', '.ico': 'image/x-icon' };
+
+// The build dossier is an owner tool, not another public static page. Both the
+// friendly endpoint and the template's filename pass through this server-side
+// identity check so knowing the file name does not bypass the gate.
+const OWNER_BUILDS_LOGIN = 'lokati_gaming';
+export const ownerBuildsAllowed = (name) => String(name || '').trim().toLowerCase() === OWNER_BUILDS_LOGIN;
 
 // Pull our character sheet and extract name + stat rows. Regex over the site's
 // own markup — brittle-by-design is fine, it's one page we control the read of.
@@ -643,10 +649,15 @@ async function pullInterface() {
       console.log(`interface updated -> ${manifest.version}`);
       return { updated: true, version: manifest.version };
     } catch (e) {
-      // Most often a 429 from raw.githubusercontent. Back off rather than
-      // retrying on the next tick and making the limit worse.
-      pullBackoffUntil = Date.now() + 60 * 60000;
-      console.error('interface pull failed:', e.message);
+      // Back off, but not equally for every failure. A 429 means we are the
+      // problem and should stay away for a long while. Anything else — a 404
+      // from a manifest listing a file that was never pushed, a dropped
+      // connection — is usually transient or fixed upstream within minutes, and
+      // an hour-long lockout there means one bad push freezes every client's
+      // updates long after the push has been corrected.
+      const rateLimited = /\b429\b/.test(String(e.message));
+      pullBackoffUntil = Date.now() + (rateLimited ? 60 : 5) * 60000;
+      console.error(`interface pull failed (${e.message}); retrying in ${rateLimited ? 60 : 5} min`);
       return { updated: false, error: true };
     } finally { pulling = null; }
   })();
@@ -674,6 +685,21 @@ const srv = createServer(async (req, res) => {
     if (url.pathname === '/config.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
       return res.end(`window.GAME_NAME=${JSON.stringify(GAME_NAME)};`);
+    }
+    if (url.pathname === '/owner/builds' || url.pathname === '/builds.html') {
+      const identity = await me();
+      if (!ownerBuildsAllowed(identity.name)) {
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end('<!doctype html><html><head><meta charset="utf-8"><title>Not Found</title></head><body><h1>Not Found</h1></body></html>');
+      }
+      let page;
+      try { page = await readFile(new URL('./builds.html', ROOT)); }
+      catch (e) {
+        if (e.code !== 'ENOENT' || !globalThis.__bundledDir) throw e;
+        page = await readFile(join(globalThis.__bundledDir, 'builds.html'));
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(page);
     }
     if (url.pathname === '/api/version') {
       let webRev = 0;
