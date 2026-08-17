@@ -59,6 +59,7 @@
   .roll.t4 { color: #82aaff; } .roll.t5 { color: #7fdba3; } .roll.t6 { color: #5fb3b3; }
   .roll.t7 { color: #9aa0b5; } .roll.t8 { color: #6b6f80; }
   .hint { cursor: help; }
+  .dur { color: #ffd479; } .dur.broke { color: #ff8080; font-weight: 700; }
   .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   button { border-radius: 7px; padding: 5px 10px; font-size: 0.8rem; cursor: pointer;
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.18); color: #eae6f5; }
@@ -117,7 +118,8 @@
   async function api(endpoint, fields) {
     // currency-capable actions (craft/veil/polish/reforge/disenchant) are stamped
     // so the main window's battle toast can flag deltas mixed with crafting
-    if (/craft|disenchant/.test(endpoint)) localStorage.setItem('lastCraftAt', Date.now());
+    // repair- (not toggle-auto-repair, which costs nothing) also moves dust
+    if (/craft|disenchant|repair-/.test(endpoint)) localStorage.setItem('lastCraftAt', Date.now());
     let r;
     try {
       r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -150,10 +152,22 @@
     return `<div class="mline">${mt}` +
       `<span class="roll t${t}${r > 90 ? ' gold' : ''}">T${t} · ${r}%</span></div>`;
   };
+  // Worn-down gear only. Indestructible items and anything still at 100% say nothing.
+  const dura = (it) => {
+    const d = it.durability;
+    if (!d || d.indestructible || d.pct == null || d.pct >= 100) return '';
+    return ` · <span class="dur${d.pct === 0 ? ' broke' : ''}"${tip(d.pct === 0 ? 'Broken — this item gives no bonus until repaired' : 'Durability')}>🔧 ${d.pct}%</span>`;
+  };
+  // The site renders no repair form at all when there's nothing to fix, so the
+  // button simply isn't there — same rule as the site's own pages.
+  const repairBtn = (it) => it.repair
+    ? `<button data-rep="${it.repair.endpoint}" data-repf="${it.repair.field}" data-repv="${esc(it.repair.value)}"${it.repair.disabled ? ' disabled' : ''}` +
+      ` title="${it.repair.disabled ? 'Not enough dust' : 'Repair this item with dust'}">🔧 Repair (${it.repair.cost}d)</button>`
+    : '';
   const itemCard = (it, acts) => `
     <div class="item">
       <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : it.unique ? ' unique' : ''}">${it.name} ${it.protected ? '<span class="locked">🔒</span>' : ''}</div>
-      <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}</div>
+      <div class="s">${slotOf(it.slot)} · ${it.tier} · ${qual(it)} · ${it.primary || ''}${dura(it)}</div>
       ${(it.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${i.t}</div>`).join('')}
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
       <div class="acts">${acts}</div>
@@ -254,6 +268,9 @@
     $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
       inv.tokens.map(t => `<span class="chip">${t}</span>`).join('') +
       `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-Repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
+      // Site omits the whole form when nothing is damaged, so no chip either.
+      (meData.repairAll ? `<button class="chip repair" data-repall="1"${meData.repairAll.disabled ? ' disabled' : ''}
+        title="Repair every damaged equipped item">🔧 Repair All (${meData.repairAll.cost}d)</button>` : '') +
       (ad ? `<span class="chip autodis" title="Auto-disenchant new items below the chosen threshold (site-side setting)">
         <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
           <input type="checkbox" id="adOn" ${ad.enabled ? 'checked' : ''}> 🗑️ Auto Disenchant Below</label>
@@ -275,7 +292,7 @@
     }
 
     $('equipped').innerHTML = inv.equipped.map(it =>
-      itemCard(it, `<button data-un="${it.slot}">Unequip</button> ${shareBtn(it)}`)).join('') || '<p class="muted">Nothing equipped.</p>';
+      itemCard(it, `<button data-un="${it.slot}">Unequip</button> ${repairBtn(it)} ${shareBtn(it)}`)).join('') || '<p class="muted">Nothing equipped.</p>';
 
     // pending choice card: veiled/token craft picker OR the veiled-Chancing
     // wizard (multi-step). Choices replay the site's own forms verbatim.
@@ -392,7 +409,7 @@
     `<button data-eq="${it.id}">Equip</button>
      <button data-lock="${it.id}">${it.protected ? 'Unlock' : '🔒 Lock'}</button>
      <button class="danger" data-dis="${it.id}" data-name="${it.name}">Disenchant</button>
-     ${shareBtn(it)}`);
+     ${repairBtn(it)} ${shareBtn(it)}`);
   function renderBag() {
     const items = [...lastBag];
     const cmp = { tier: (a, b) => numTier(b) - numTier(a), quality: (a, b) => numQual(b) - numQual(a),
@@ -419,9 +436,19 @@
 
   // One delegated listener instead of re-binding every button after each render.
   document.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-un],[data-eq],[data-lock],[data-dis],[data-veilpick],[data-share],[data-craft]');
+    const b = e.target.closest('[data-un],[data-eq],[data-lock],[data-dis],[data-veilpick],[data-share],[data-craft],[data-rep],[data-repall]');
     if (!b) return;
     const d = b.dataset;
+    // Repair spends dust and the site answers with a bare 303 either way, so
+    // diff the result like a craft does rather than claiming success blindly.
+    if (d.rep !== undefined) {
+      await craftAct(d.rep.replace(/^\//, ''), { [d.repf]: d.repv }, 'Repair', { currency: true });
+      return refresh();
+    }
+    if (d.repall !== undefined) {
+      await craftAct('repair-all', {}, 'Repair all', { currency: true });
+      return refresh();
+    }
     if (d.un !== undefined) { await api('unequip', { slot: d.un }); return refresh(); }
     if (d.eq !== undefined) { await api('equip', { item_id: d.eq }); return refresh(); }
     if (d.lock !== undefined) { await api('toggle-disenchant-protect', { item_id: d.lock, protect: 'on' }); return refresh(); }

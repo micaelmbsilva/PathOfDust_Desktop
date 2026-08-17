@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Path of Dust — Fight History</title>
+<script src="/config.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: "Segoe UI", Arial, sans-serif;
+    background: #0c0a16; color: #eae6f5; }
+  h1 { font-size: 1.2rem; margin: 0; }
+  h3 { font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase;
+    color: #8a7fb0; margin: 12px 0 4px; }
+  .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
+    padding: 4px 10px; font-size: 0.85rem; }
+  button.chip { cursor: pointer; color: #eae6f5; font: inherit; font-size: 0.85rem; }
+  .fight { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .fight > summary { cursor: pointer; font-weight: 700; list-style: none; }
+  .fight > summary::-webkit-details-marker { display: none; }
+  .fight .when { font-size: 0.75rem; color: #8a7fb0; font-weight: 400; }
+  .won { color: #7fdba3; } .lost { color: #ff8080; }
+  ul { margin: 0; padding-left: 20px; font-size: 0.85rem; line-height: 1.5; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 0.8rem; }
+  th, td { text-align: left; padding: 3px 10px 3px 0; white-space: nowrap; }
+  th { color: #8a7fb0; font-weight: 600; }
+  .muted { color: #8a7fb0; }
+  #err { color: #ff8080; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <h1>📜 Fight History</h1>
+    <button class="chip" id="reload" title="Refresh">🔄</button>
+    <span class="chip muted">The site's own server-side breakdown — the last 10 encounters.</span>
+  </div>
+  <div id="err"></div>
+  <div id="list"><p class="muted">Loading…</p></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const list = (arr, empty) => arr.length
+    ? `<ul>${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
+    : `<p class="muted">${empty}</p>`;
+
+  async function load() {
+    $('err').textContent = '';
+    let d;
+    try { d = await fetch('/api/fights', { cache: 'no-store' }).then(r => r.json()); }
+    catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
+    if (d.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
+    if (d.gated) {
+      // The game hardcodes a single allowed login for this page and 404s the
+      // rest — say so plainly rather than showing an empty list.
+      $('list').innerHTML = '<p class="muted">The game only serves this page to the streamer\'s account, so there\'s nothing to show here.</p>';
+      return;
+    }
+    if (!d.fights.length) { $('list').innerHTML = '<p class="muted">No fights logged yet.</p>'; return; }
+    // First fight open, the rest collapsed — ten full breakdowns is a lot of page.
+    $('list').innerHTML = d.fights.map((f, i) => `
+      <details class="fight"${i ? '' : ' open'}>
+        <summary><span class="${f.won ? 'won' : 'lost'}">${esc(f.title)}</span>
+          <div class="when">${esc(f.meta)}</div></summary>
+        ${f.boss.length ? `<h3>Boss Stats</h3>${list(f.boss, '')}` : ''}
+        <h3>Battle Report</h3>${list(f.report, 'Nothing recorded.')}
+        <h3>Loot</h3>${list(f.loot, 'None.')}
+        <h3>Broken Gear</h3>${list(f.broken, 'None.')}
+        <h3>Skills Cast</h3>${list(f.skills, 'None logged.')}
+        ${f.buffs.length ? `<h3>Buff / Debuff Stack Activity</h3><div class="scroll"><table>
+          <tr><th>Unit</th><th>Buff/Debuff</th><th>Samples</th><th>Avg</th><th>Peak</th></tr>
+          ${f.buffs.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}
+        </table></div>` : ''}
+      </details>`).join('');
+  }
+  $('reload').onclick = load;
+  document.title = `${GAME_NAME} — Fight History`;
+  load();
+</script>
+</body>
+</html>

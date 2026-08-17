@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Path of Dust — Character</title>
+<script src="/config.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: "Segoe UI", Arial, sans-serif;
+    background: #0c0a16; color: #eae6f5; }
+  h1 { font-size: 1.2rem; margin: 0; }
+  h2 { font-size: 1rem; color: #c9bdf0; margin: 20px 0 8px; }
+  .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #hdr { position: sticky; top: 0; z-index: 10; background: #0c0a16;
+    margin: 0 -16px 8px; padding: 8px 16px 10px; border-bottom: 1px solid rgba(160,140,255,0.15); }
+  .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
+    padding: 4px 10px; font-size: 0.85rem; color: #eae6f5; }
+  button.chip { cursor: pointer; }
+  button.chip[aria-pressed="true"] { border-color: #6f5ad9; background: rgba(120,90,255,0.28); }
+  select, input[type="search"] { background: #1c1830; color: #eae6f5;
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 0.85rem; }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .who img { width: 56px; height: 56px; image-rendering: pixelated; }
+  .xpbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.07); overflow: hidden; margin-top: 6px; }
+  .xpfill { height: 100%; background: #6f5ad9; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .stat { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.2);
+    border-radius: 8px; padding: 6px 10px; }
+  .stat .l { font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: #8a7fb0; }
+  .stat .v { font-weight: 700; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .item { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 10px; }
+  .item.empty { opacity: 0.45; }
+  .item .n { font-weight: 700; }
+  .item .s { font-size: 0.72rem; color: #b0a2d9; }
+  .perfect { color: #ffd76b; font-weight: 700; }
+  .sacredq { color: #d6f0ff; font-weight: 700; }
+  .item .n.sacred { color: #d6f0ff; text-shadow: 0 0 8px rgba(120,200,255,0.6); }
+  .item .n.unique { color: #ffd76b; text-shadow: 0 0 6px rgba(255,215,107,0.4); }
+  .item .n.krangled { color: #b23a3a; }
+  .imp { font-size: 0.78rem; color: #d6f0ff; font-weight: 600; line-height: 1.35;
+    background: rgba(120,200,255,0.12); border: 1px solid rgba(120,200,255,0.4);
+    border-radius: 6px; padding: 4px 7px; margin-top: 6px; width: fit-content; }
+  .imp.gold { color: #ffd76b; background: rgba(255,215,107,0.1); border-color: rgba(255,215,107,0.35); }
+  .item .m { font-size: 0.8rem; color: #c9bdf0; margin: 6px 0 0; }
+  .mline { display: flex; align-items: center; gap: 6px; }
+  .mt.crit { color: #6ee08a; font-weight: 600; }
+  .roll { font-size: 0.68rem; font-weight: 700; padding: 0 5px; border-radius: 4px;
+    border: 1px solid currentColor; white-space: nowrap; }
+  .roll.gold { color: #ffcf5a; }
+  .roll.t1 { color: #ffcf5a; } .roll.t2 { color: #ffb347; } .roll.t3 { color: #c792ea; }
+  .roll.t4 { color: #82aaff; } .roll.t5 { color: #7fdba3; } .roll.t6 { color: #5fb3b3; }
+  .roll.t7 { color: #9aa0b5; } .roll.t8 { color: #6b6f80; }
+  .dur { color: #ffd479; } .dur.broke { color: #ff8080; font-weight: 700; }
+  .hint { cursor: help; }
+  .roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .rcard { display: flex; align-items: center; gap: 10px; text-align: left; width: 100%;
+    background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px;
+    padding: 8px 10px; color: #eae6f5; font: inherit; cursor: pointer; }
+  .rcard:hover { border-color: #6f5ad9; background: rgba(120,90,255,0.16); }
+  .rcard img { width: 32px; height: 32px; image-rendering: pixelated; }
+  .rcard .rn { font-weight: 700; font-size: 0.9rem; }
+  .rcard .rm { font-size: 0.72rem; color: #b0a2d9; }
+  .muted { color: #8a7fb0; }
+  #err { color: #ff8080; }
+</style>
+</head>
+<body>
+  <div id="hdr">
+    <div class="bar">
+      <h1>🧍 Characters</h1>
+      <input type="search" id="find" placeholder="Search the roster…" style="min-width:200px">
+      <select id="pick"></select>
+      <button class="chip" id="reload" title="Refresh">🔄</button>
+      <button class="chip" id="tab-sheet" aria-pressed="true">Sheet</button>
+      <button class="chip" id="tab-tree" aria-pressed="false">Passives</button>
+    </div>
+  </div>
+  <div id="err"></div>
+  <div id="roster" class="roster"></div>
+  <div id="sheet"></div>
+  <div id="tree" style="display:none">
+    <div class="bar" id="treeBar"></div>
+    <div id="legend"></div>
+    <div id="stage"></div>
+    <div class="bar" id="secBar"></div>
+    <div id="secStage"></div>
+  </div>
+
+<script src="/tree.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const tip = (s) => s ? ` data-tip="${esc(s)}"` : '';
+  const get = (p) => fetch(p, { cache: 'no-store' }).then(r => r.json());
+
+  // ---- item card, same visual language as the Bag page (read-only here) ----
+  const SLOT_EMOJI = { weapon: '⚔️', helm: '🪖', body: '🛡️', gloves: '🧤', boots: '🥾' };
+  const title = (s) => (s || '').charAt(0).toUpperCase() + (s || '').slice(1).toLowerCase();
+  const slotOf = (s) => `${SLOT_EMOJI[(s || '').toLowerCase()] || ''} ${title(s)}`.trim();
+  const qual = (it) => {
+    const q = it.quality || '';
+    const inner = it.sacred || q === 'Sacred' ? `<span class="sacredq">${esc(q)}</span>`
+      : q.includes('Perfect') ? `<span class="perfect">${esc(q)}</span>` : esc(q);
+    return it.qtip ? `<span class="hint"${tip(it.qtip)}>${inner}</span>` : inner;
+  };
+  // Roll % → tier (T1 best), identical thresholds to bag.html.
+  const rollOf = (t) => { const m = (t || '').match(/(\d+(?:\.\d+)?)\s*%/); return m ? +m[1] : null; };
+  const tierOf = (r) => r >= 95 ? 1 : r >= 90 ? 2 : r >= 75 ? 3 : r >= 50 ? 4 : r >= 35 ? 5 : r >= 25 ? 6 : r >= 15 ? 7 : 8;
+  const modLine = (m) => {
+    const r = rollOf(m.tip);
+    const mt = `<span class="mt${m.crit ? ' crit' : ''}">${esc(m.t)}</span>`;
+    if (r == null) return `<div class="mline">${mt}</div>`;
+    const t = tierOf(r);
+    return `<div class="mline">${mt}<span class="roll t${t}${r > 90 ? ' gold' : ''}">T${t} · ${r}%</span></div>`;
+  };
+  const dura = (it) => {
+    const d = it.durability;
+    if (!d || d.indestructible || d.pct == null || d.pct >= 100) return '';
+    return ` · <span class="dur${d.pct === 0 ? ' broke' : ''}">🔧 ${d.pct}%</span>`;
+  };
+  const itemCard = (it) => !it.name ? `<div class="item empty"><div class="n">— empty —</div><div class="s">${slotOf(it.slot)}</div></div>` : `
+    <div class="item">
+      <div class="n${it.krangled ? ' krangled' : it.sacred ? ' sacred' : it.unique ? ' unique' : ''}">${esc(it.name)}</div>
+      <div class="s">${slotOf(it.slot)} · ${esc(it.tier)} · ${qual(it)} · ${esc(it.primary || '')}${dura(it)}</div>
+      ${(it.implicits || []).map(i => `<div class="imp${i.gold ? ' gold' : ''}">${esc(i.t)}</div>`).join('')}
+      <div class="m">${(it.mods || []).map(modLine).join('')}</div>
+    </div>`;
+
+  // ---- roster ----
+  let rosterList = [];
+  let current = null; // login being shown, null = roster grid
+
+  function renderRoster() {
+    const q = $('find').value.trim().toLowerCase();
+    const hits = rosterList.filter(r => !q || r.name.toLowerCase().includes(q) || r.cls.toLowerCase().includes(q));
+    $('roster').innerHTML = hits.length
+      ? hits.map(r => `<button class="rcard" data-login="${esc(r.login)}">
+          <img src="${esc(r.sprite)}" alt="" onerror="this.style.visibility='hidden'">
+          <span><span class="rn">${esc(r.name)}</span><br>
+          <span class="rm">Lv ${r.level} ${esc(r.cls)} · ${r.wins}W/${r.losses}L (${esc(r.winrate)})</span></span>
+        </button>`).join('')
+      : '<p class="muted">Nobody matches that.</p>';
+    $('pick').innerHTML = '<option value="">— pick a character —</option>' +
+      rosterList.map(r => `<option value="${esc(r.login)}"${r.login === current ? ' selected' : ''}>${esc(r.name)} — Lv ${r.level} ${esc(r.cls)}</option>`).join('');
+  }
+
+  // ---- character sheet ----
+  async function showCharacter(login) {
+    current = login;
+    $('err').textContent = '';
+    $('roster').style.display = 'none';
+    const c = await get('/api/character?login=' + encodeURIComponent(login));
+    if (c.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
+    if (c.notFound) { $('err').textContent = 'No such character.'; back(); return; }
+    document.title = `${GAME_NAME} — ${c.name}`;
+    $('sheet').innerHTML = `
+      <div class="who">
+        <img src="${esc(c.sprite)}" alt="" onerror="this.style.visibility='hidden'">
+        <div style="flex:1">
+          <h1>${esc(c.name)} <span class="chip">${esc(c.archetype)}</span></h1>
+          <div class="muted" style="font-size:0.8rem">${esc(c.xp.label)}</div>
+          <div class="xpbar"><div class="xpfill" style="width:${c.xp.pct}%"></div></div>
+        </div>
+      </div>
+      <h2>Stats</h2>
+      <div class="stats">${c.stats.map(s => `<div class="stat"${tip(s.tip || s.vtip)}>
+        <div class="l">${esc(s.label)}</div><div class="v">${esc(s.value)}</div></div>`).join('')}</div>
+      <h2>Gear</h2>
+      <div class="grid">${c.equipped.map(itemCard).join('') || '<p class="muted">Nothing equipped.</p>'}</div>
+      <h2>Bag (${c.bag.length})</h2>
+      <div class="grid">${c.bag.map(itemCard).join('') || '<p class="muted">Empty.</p>'}</div>`;
+    $('tab-tree').disabled = !c.hasTree; // Commoner has no tree at all
+    showTab('sheet');
+    loadTree(login);
+  }
+
+  async function loadTree(login) {
+    const p = await get('/api/character-passives?login=' + encodeURIComponent(login));
+    if (p.notFound || p.noTree || !(p.nodes || []).length) {
+      $('treeBar').innerHTML = '<span class="muted">No passive tree — this character is still a Commoner.</span>';
+      PodTree.render($('stage'), { stage: { w: 0, h: 0 }, nodes: [] });
+      PodTree.render($('secStage'), { stage: { w: 0, h: 0 }, nodes: [] });
+      $('secBar').innerHTML = '';
+      return;
+    }
+    $('treeBar').innerHTML = `<span class="chip">${esc(p.archetype)}</span><span class="chip">🪓 ${esc(p.points)}</span>
+      <span class="muted">Read-only — this is their saved build.</span>`;
+    $('legend').innerHTML = PodTree.legend;
+    PodTree.render($('stage'), p);          // no onAllocate = read-only
+    if (p.secondary && (p.secondary.nodes || []).length) {
+      $('secBar').innerHTML = '<span class="chip">🧠 2nd Class (Split Personality)</span>';
+      PodTree.render($('secStage'), p.secondary);
+    } else {
+      $('secBar').innerHTML = '';
+      PodTree.render($('secStage'), { stage: { w: 0, h: 0 }, nodes: [] });
+    }
+  }
+
+  function showTab(which) {
+    $('sheet').style.display = which === 'sheet' ? '' : 'none';
+    $('tree').style.display = which === 'tree' ? '' : 'none';
+    $('tab-sheet').setAttribute('aria-pressed', which === 'sheet');
+    $('tab-tree').setAttribute('aria-pressed', which === 'tree');
+  }
+  function back() {
+    current = null;
+    document.title = `${GAME_NAME} — Characters`;
+    $('roster').style.display = '';
+    $('sheet').innerHTML = '';
+    $('tree').style.display = 'none';
+    renderRoster();
+  }
+
+  async function loadRoster() {
+    $('err').textContent = '';
+    try { rosterList = await get('/api/roster'); }
+    catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
+    if (rosterList.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
+    rosterList = (rosterList || []).filter(r => r.login);
+    renderRoster();
+  }
+
+  $('find').oninput = () => { if (!current) renderRoster(); };
+  $('pick').onchange = () => { const v = $('pick').value; v ? showCharacter(v) : back(); };
+  $('reload').onclick = () => current ? showCharacter(current) : loadRoster();
+  $('tab-sheet').onclick = () => current ? showTab('sheet') : back();
+  $('tab-tree').onclick = () => current && showTab('tree');
+  $('roster').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-login]');
+    if (b) showCharacter(b.dataset.login);
+  });
+
+  // ?login=<name> opens straight onto that character (how the party panel links in)
+  const want = new URLSearchParams(location.search).get('login');
+  loadRoster().then(() => { if (want) showCharacter(want); });
+</script>
+<script src="/tooltip.js"></script>
+</body>
+</html>

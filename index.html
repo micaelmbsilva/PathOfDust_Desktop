@@ -119,7 +119,7 @@
   /* Twitch chat — .apanel shell; the embed includes the channel-points redeem button */
   #chatpanel { top: 60px; right: 16px; z-index: 36; width: 360px; height: 560px;
     min-width: 280px; min-height: 260px; }
-  #chatpanel .cwrap { flex: 1; min-height: 0; }
+  .apanel .cwrap { flex: 1; min-height: 0; }
   .apanel.collapsed .cwrap, .apanel.collapsed .swrap { display: none; }
   .apanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
@@ -301,6 +301,30 @@
       <button title="close" onclick="toggleModal('inbox', false)">✕</button></span>
   </div>
   <div class="abody" id="inboxBody"><p class="muted">Loading…</p></div>
+</div>
+
+<div class="apanel" id="characterspanel" style="top:70px;left:120px;width:1080px;height:740px">
+  <div class="cbar" id="charactersbar">
+    <span class="ctitle">🧍 Characters</span>
+    <span class="cbtns">
+      <button id="charactersPop" title="pop out to its own window">⧉</button>
+      <button id="charactersCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('characters', false)">✕</button>
+    </span>
+  </div>
+  <div class="cwrap"><iframe id="charactersFrame" title="Characters"></iframe></div>
+</div>
+
+<div class="apanel" id="fightspanel" style="top:90px;left:160px;width:900px;height:700px">
+  <div class="cbar" id="fightsbar">
+    <span class="ctitle">📜 Fight History</span>
+    <span class="cbtns">
+      <button id="fightsPop" title="pop out to its own window">⧉</button>
+      <button id="fightsCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('fights', false)">✕</button>
+    </span>
+  </div>
+  <div class="cwrap"><iframe id="fightsFrame" title="Fight history"></iframe></div>
 </div>
 
 <div class="apanel" id="buffspanel" style="bottom:14px;left:16px;width:620px;height:150px">
@@ -504,6 +528,11 @@
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
         `${r.autoRepairTip ? ` data-tip="${r.autoRepairTip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">🔧 Auto-Repair</span><span class="v">${r.autoRepair ? 'On' : 'Off'}</span></div>`;
+      // Repair All — the site omits the form entirely when nothing is damaged,
+      // so no row unless there's something to fix.
+      const raRow = r.repairAll ? `<div class="srow repair${r.repairAll.disabled ? '' : ' on'}" id="raRow"` +
+        ` data-tip="${r.repairAll.disabled ? 'Not enough dust to repair everything' : 'Repair every damaged equipped item with dust'}">` +
+        `<span class="l">🛠️ Repair All</span><span class="v">${r.repairAll.cost.toLocaleString()}d</span></div>` : '';
       // XP progress (from the character sheet's own bar)
       const xpRow = r.xp?.label ? `<div class="srow"><span class="l">${r.xp.label}</span></div><div class="xpbar"><div style="width:${r.xp.pct}%"></div></div>` : '';
       // Wings of Flight — owners only; click toggles flying
@@ -518,10 +547,16 @@
       // out on every stats refresh until the next tick.
       const eta0 = S().showEta ? nextBattleEta() : null;
       const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time. The 💀 counter tracks the usual 3-normals-then-boss pattern (a guess, not a schedule)."><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') + bossHint() : ''}</span></div>`;
-      document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
+      document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + raRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
+      const raEl = document.getElementById('raRow');
+      if (raEl && !r.repairAll.disabled) raEl.onclick = async () => {
+        if (!confirm(`Repair all damaged gear for ${r.repairAll.cost.toLocaleString()} dust?`)) return;
+        localStorage.setItem('lastCraftAt', Date.now()); // dust spend — don't blame the battle toast
+        await action('repair-all', {}); loadStats();
+      };
       const wr = document.getElementById('wingsRow');
       if (wr) wr.onclick = async () => { await action('toggle-flying', {}); loadStats(); };
       reconcileReforge(r.reforge);
@@ -666,7 +701,7 @@
   let lastRoster = null; // latest `state` message
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   // Panels open at close reopen next launch (positions already persist via lay.*)
-  const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'battles', 'settings', 'inbox', 'chat', 'stream'];
+  const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'battles', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
   let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
   const persistPanels = () => LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
     document.getElementById(w + 'panel')?.classList.contains('open')));
@@ -679,7 +714,8 @@
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
-      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox })[which]();
+      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox,
+         characters: framePanel('characters', '/character.html'), fights: framePanel('fights', '/fights.html') })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
       const r = p.getBoundingClientRect();
@@ -718,6 +754,25 @@
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
   wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
   wirePanel('inboxpanel', 'inboxbar', 'inboxCollapse', 'lay.inbox');
+  wirePanel('characterspanel', 'charactersbar', 'charactersCollapse', 'lay.characters');
+  wirePanel('fightspanel', 'fightsbar', 'fightsCollapse', 'lay.fights');
+  // Both host one of our own pages in an iframe, so the panel and its pop-out
+  // window run the same code. Loaded on first open, then left alone so the
+  // page keeps its state (which character you were looking at) while hidden.
+  const framePanel = (which, path) => () => {
+    const f = document.getElementById(which + 'Frame');
+    if (!f.getAttribute('src')) f.src = path;
+  };
+  for (const [which, path, w, h] of [['characters', '/character.html', 1240, 900], ['fights', '/fights.html', 1100, 900]])
+    document.getElementById(which + 'Pop').onclick = () => {
+      openWin(document.getElementById(which + 'Frame').getAttribute('src') || path, which, w, h);
+      toggleModal(which, false);
+    };
+  // Open the Characters panel straight onto someone (party cell click).
+  function showCharacter(login) {
+    document.getElementById('charactersFrame').src = '/character.html?login=' + encodeURIComponent(login);
+    toggleModal('characters', true);
+  }
 
   // ---- customizable toolbar ----
   // Data-driven topbar: an item registry + a persisted layout of loose items and
@@ -728,6 +783,7 @@
   const ITEMS = {
     bag: { label: '🎒 Bag', act: () => openWin('/bag.html', 'bag', 1140, 880) },
     passives: { label: '🌳 Passives', act: () => openWin('/passives.html', 'passives', 1840, 860) },
+    characters: { label: '🧍 Characters', title: "Browse the roster — anyone's gear, stats, and passive tree", act: () => toggleModal('characters'), isActive: panelOpen('characters') },
     chat: { label: '💬 Chat', act: () => toggleChat(), isActive: panelOpen('chat') },
     party: { label: '👥 Party', title: "Who's fighting right now — DPS/Heal/Tank, status", act: () => toggleModal('party'), isActive: panelOpen('party') },
     buffs: { label: '✨ Buffs &amp; Debuffs', title: 'Active buffs/debuffs — channel-point events and your in-fight buffs', act: () => toggleModal('buffs'), isActive: panelOpen('buffs') },
@@ -744,13 +800,16 @@
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
     inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
+    fights: { label: '📜 Fight History', title: 'Operator only — the site\'s server-side breakdown of the last 10 encounters', act: () => toggleModal('fights'), isActive: panelOpen('fights') },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the
-  // backend's PING_KEY (sent by the bridge) is the actual auth.
-  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'] };
+  // backend's PING_KEY (sent by the bridge) is the actual auth. /fights is
+  // narrower still: the game hardcodes one login and 404s everyone else.
+  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'],
+    fights: ['lokati_gaming'] };
   const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
-    { i: 'bag' }, { i: 'passives' }, { i: 'chat' },
+    { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
     { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'battles'] } },
     { i: 'stream' }, { i: 'highlight' }, { i: 'autolock' },
     { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'refresh', 'update', 'feedback'] } },
@@ -988,6 +1047,9 @@
   }
   setTimeout(loadRosterClasses, 3000); setInterval(loadRosterClasses, 30 * 60000);
   const classOf = (c) => (rosterCls[c.displayName.toLowerCase()] || {}).cls || '';
+  // The site's URL slug, which is NOT the display name — only the roster scrape
+  // knows it, so party cells are only clickable once that has landed.
+  const loginOf = (c) => (rosterCls[c.displayName.toLowerCase()] || {}).login || '';
   // null = class unknown (roster scrape unavailable) — caller falls back to the
   // observed-behavior role. A Split Personality 2nd class isn't visible here.
   const kitRolesOf = (c) => { const k = classOf(c); return k ? (CLASS_ROLES[k] || ['dps']) : null; };
@@ -1034,7 +1096,7 @@
       ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)} data-tip="Role coverage by class kit — dual-role classes (Warrior, Paladin, Druid, Monk) count in each of their roles, so the pips can sum past the party size.">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
       `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
-      `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}">
+      `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
         <div class="pn">${CLASS_ICON[of(c)]} ${esc(c.displayName)}</div>
         ${classOf(c) ? `<div class="pc" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></div>` : ''}
         <div class="ps">Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
@@ -1045,6 +1107,7 @@
       partyFilter = (v === 'all' || partyFilter === v) ? null : v;
       renderParty();
     });
+    document.querySelectorAll('#partyBody [data-char]').forEach(el => el.onclick = () => showCharacter(el.dataset.char));
   }
 
   // Fold an encounter's ~15-45k events into a small report (raw events are never kept).
@@ -1654,7 +1717,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 73) showRestartBanner(); // 73: chancing wizard, expiry detection, /api/broadcast, fight logs
+    if (!v.bridgeRev || v.bridgeRev < 75) showRestartBanner(); // 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
