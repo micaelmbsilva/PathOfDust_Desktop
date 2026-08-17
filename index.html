@@ -292,6 +292,15 @@
   <div class="abody" id="partyBody"><p class="muted">Waiting for battle data…</p></div>
 </div>
 
+<div class="apanel" id="inboxpanel" style="top:80px;left:340px;width:460px">
+  <div class="cbar" id="inboxbar">
+    <span class="ctitle">📬 Feedback Inbox</span>
+    <span class="cbtns"><button id="inboxCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('inbox', false)">✕</button></span>
+  </div>
+  <div class="abody" id="inboxBody"><p class="muted">Loading…</p></div>
+</div>
+
 <div class="apanel" id="buffspanel" style="bottom:14px;left:16px;width:620px;height:150px">
   <div class="cbar" id="buffsbar">
     <span class="ctitle">✨ Buffs &amp; Debuffs</span>
@@ -482,7 +491,7 @@
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
-      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); renderToolbar(); } // enable highlight + operator items once we know the name
+      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); renderToolbar(); pollFeedback(); } // enable highlight + operator items once we know the name
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
@@ -657,7 +666,7 @@
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
-      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings })[which]();
+      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
       const r = p.getBoundingClientRect();
@@ -695,6 +704,7 @@
   wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
   wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
+  wirePanel('inboxpanel', 'inboxbar', 'inboxCollapse', 'lay.inbox');
 
   // ---- customizable toolbar ----
   // Data-driven topbar: an item registry + a persisted layout of loose items and
@@ -720,10 +730,11 @@
     update: { label: '⬆️ Check for Updates', title: 'Check for updates', act: () => updateAction() },
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
+    inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the
   // backend's PING_KEY (sent by the bridge) is the actual auth.
-  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'] };
+  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'] };
   const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'chat' },
@@ -1779,6 +1790,32 @@
     document.getElementById('dismissAll').after(el); updateDismissAll();
     document.getElementById('bcText').focus();
   }
+  // Operator feedback inbox: newest-50 list + a new-feedback toast. Gated by
+  // the same OPERATOR_ITEMS name check as the toolbar item; non-operators never
+  // poll. Opening the panel marks everything read.
+  function renderInbox() {
+    const bodyEl = document.getElementById('inboxBody');
+    fetch('/api/feedback-list').then(r => r.json()).then(list => {
+      if (!Array.isArray(list)) list = [];
+      if (list.length) LS.set('inboxSeen', list[0].id);
+      bodyEl.innerHTML = list.length ? list.map(f => `
+        <div class="bent open"><div class="bh"><span class="bsub">${new Date(f.ts).toLocaleString()}${f.version ? ` · v${esc(f.version)}` : ''}${f.contact ? ` · 📇 ${esc(f.contact)}` : ''}</span></div>
+        <div class="bbody" style="white-space:pre-wrap">${esc(f.message)}</div></div>`).join('')
+        : '<p class="muted">No feedback yet.</p>';
+    }).catch(() => { bodyEl.innerHTML = '<p class="muted">Couldn\'t load — restart the app if it just updated.</p>'; });
+  }
+  async function pollFeedback() {
+    if (itemHidden('inbox')) return; // not an operator (or name not known yet)
+    try {
+      const list = await fetch('/api/feedback-list').then(r => r.json());
+      if (!Array.isArray(list) || !list.length) return;
+      const seen = Math.max(+LS.get('inboxSeen', 0), +LS.get('inboxNotified', 0));
+      const fresh = list.filter(f => f.id > seen).length;
+      if (fresh) { infoToast(`📬 ${fresh} new feedback message${fresh > 1 ? 's' : ''} — see the Feedback Inbox`); LS.set('inboxNotified', list[0].id); }
+    } catch {}
+  }
+  setTimeout(pollFeedback, 15000); setInterval(pollFeedback, 5 * 60000);
+
   let _lastLog = 0;
   function logRemote(level, message) {
     const now = Date.now(); if (now - _lastLog < 2000) return; _lastLog = now; // throttle

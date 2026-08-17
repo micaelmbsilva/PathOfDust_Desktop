@@ -55,7 +55,7 @@ async function ping() {
 const PORT = 8787;
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 73;
+const BRIDGE_REV = 74;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -433,6 +433,15 @@ const srv = createServer(async (req, res) => {
       const { level, message } = JSON.parse(await body(req) || '{}');
       telemetry('/log', { level, message });
       return json(res, { ok: true });
+    }
+    if (url.pathname === '/api/feedback-list') {
+      // Operator inbox: proxy the backend's feedback feed (key stays bridge-side).
+      if (!TELEMETRY_URL) return json(res, []);
+      try {
+        const r = await fetch(`${TELEMETRY_URL}/feedback-recent`,
+          { headers: { 'x-pod-key': PING_KEY }, signal: AbortSignal.timeout(10000) });
+        return json(res, r.ok ? await r.json() : []);
+      } catch { return json(res, []); }
     }
     if (url.pathname === '/api/roster-classes') {
       return json(res, await rosterClasses());
