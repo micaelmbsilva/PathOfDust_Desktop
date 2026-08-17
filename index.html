@@ -1495,10 +1495,16 @@
     const maxAt = evs.length ? evs[evs.length - 1].atMs || 1 : 1;
     // group my events into 1s sim-time buckets so the log reads, not spams
     const mySnaps = [];
+    // Every player who went down this fight (by display name). Fight History has
+    // no per-player death flag from the summary, only firstToDie — so we hand it
+    // the full set, carried on the encounter broadcast. players[] is non-boss,
+    // non-enemy only, so bosses/adds never count as a death.
+    const downed = new Set();
     const groups = new Map();
     const G = (key, mk) => { let g = groups.get(key); if (!g) { g = mk(); groups.set(key, g); } return g; };
     for (const ev of evs) {
       const b = Math.floor((ev.atMs || 0) / 1000);
+      if (ev.kind === 'defeat' && players[ev.unit]) downed.add(players[ev.unit]);
       // absorbed/mitigated portion of a hit (armor, shields, damage-reduction buffs)
       const mit = (ev) => Math.max(0, (ev.unmitigatedDamage || 0) - (ev.damage || 0));
       if (ev.kind === 'attack' && ev.attacker === myId) {
@@ -1534,7 +1540,7 @@
     const dur = d.displayDurationMs || maxAt;
     fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
-      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0 };
+      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, downed: [...downed] };
     // A fresh fight replays from full HP for the party bars too. The timer runs
     // while EITHER the fight panel or the party panel wants it.
     startFightTimer();
@@ -1722,8 +1728,10 @@
           // summary before broadcasting, so /fights.json already has this fight
           // by the time anyone reacts. Same-origin channel, so it reaches the
           // Fight History pane whether it's a panel iframe or popped out.
-          try { podChannel?.postMessage({ type: 'encounter', at: Date.now(), stage: d.stage }); } catch {}
           try { startFight(d); } catch {} // live replay — even if we're not in it
+          // startFight first, so the broadcast can carry who went down (fight.downed)
+          // — the summary tier Fight History reads has no per-player death flag.
+          try { podChannel?.postMessage({ type: 'encounter', at: Date.now(), stage: d.stage, downed: (fight && fight.downed) || [] }); } catch {}
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
             armBattleToast(d);
             // fightRecord reads startFight's feed, so it has to run after it.
