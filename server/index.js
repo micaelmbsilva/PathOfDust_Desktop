@@ -44,6 +44,8 @@ async function init() {
   // ponytail: no retention/pruning — volumes are tiny; add if tables ever matter.
   await pool.query(`CREATE INDEX IF NOT EXISTS logs_err_ts ON logs (ts DESC) WHERE level = 'error'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS feedback_ts ON feedback (ts DESC)`);
+  // Scrape-created garbage rows (welcome banners parsed as characters) — clean up.
+  await pool.query(`DELETE FROM installs WHERE id LIKE 'web:%' AND archetype IS NULL AND level IS NULL`);
   // Class tree layouts survive redeploys — the scrape only improves them.
   await pool.query(`CREATE TABLE IF NOT EXISTS tree_layouts (
     archetype TEXT PRIMARY KEY, data JSONB, updated TIMESTAMPTZ DEFAULT now())`);
@@ -362,7 +364,8 @@ async function scrapeRoster() {
     for (const slug of slugs) {
       try {
         const c = parseCharacter(await getPage('/characters/' + encodeURIComponent(slug)));
-        if (!c.name) continue;
+        // Not a character sheet (onboarding/banner pages have an h1 too) — skip.
+        if (!c.name || (!c.archetype && !c.level) || /^welcome\b/i.test(c.name)) continue;
         const id = 'web:' + slug.slice(0, 60);
         const data = { scraped: new Date().toISOString(), name: c.name, stats: c.stats, equipped: c.equipped };
         try {

@@ -41,7 +41,8 @@
       {
        "s": "Block",
        "top": true,
-       "why": "Feeds Unbreakable's overflow — gear counts toward the 75% cap, and everything past it becomes damage"
+       "sat": 150,
+       "why": "Feeds Unbreakable's overflow — gear counts toward the 75% cap, and the rest becomes damage. Stack to ~150% total, then pivot: Unbreakable's channel saturates there and further block only pays the small baseline conversion"
       },
       {
        "s": "Increased Dmg Dealt",
@@ -53,7 +54,8 @@
       },
       {
        "s": "Reduced Dmg Taken",
-       "why": "Overwhelming Force converts 30% of it into damage — defense that attacks"
+       "sat": 150,
+       "why": "Overwhelming Force converts 30% of it into damage — defense that attacks. Useful to ~150% total; past that the conversion channel is saturated and only the baseline overflow pays"
       },
       {
        "s": "Max HP",
@@ -161,7 +163,8 @@
       {
        "s": "Evasion",
        "top": true,
-       "why": "The whole build — every % past 75 double-converts to crit (and attack speed). Roll it on EVERY slot"
+       "sat": 400,
+       "why": "The whole build — every % past 75 double-converts to crit (and attack speed). Roll it on every slot up to ~400% total; there Elusive/Phantom/Duskveil all saturate and extra evasion only pays the baseline conversion"
       },
       {
        "s": "Increased Crit Dmg Dealt",
@@ -219,7 +222,8 @@
       {
        "s": "Evasion",
        "top": true,
-       "why": "One stat feeds offense (Stone Fist + Granite Skin), defense, and Meditation sustain"
+       "sat": 300,
+       "why": "One stat feeds offense (Stone Fist + Granite Skin), defense, and Meditation sustain. Stack to ~300% total, then pivot — the conversion channels cap at +10%/rank and are full there"
       },
       {
        "s": "Attack Speed",
@@ -285,7 +289,8 @@
       },
       {
        "s": "Intervene",
-       "why": "Past 50% it overflow-converts to damage reduction via Aegis Ward (flex path)"
+       "sat": 250,
+       "why": "Past 50% it overflow-converts to damage reduction via Aegis Ward (flex path). Useful to ~250% total — Aegis Ward saturates there"
       },
       {
        "s": "Splash",
@@ -521,7 +526,8 @@
       },
       {
        "s": "Intervene",
-       "why": "Soak redirected hits for the party"
+       "sat": 50,
+       "why": "Soak redirected hits for the party — hard-capped at 50% with no overflow channel in this tree, so one good roll is enough"
       }
      ]
     }
@@ -575,7 +581,8 @@
       },
       {
        "s": "Evasion",
-       "why": "Root synergy; Shifting Form flex path double-converts overflow"
+       "sat": 300,
+       "why": "Root synergy; Shifting Form flex path double-converts overflow — useful to ~300% total, then the channel saturates"
       },
       {
        "s": "Max HP",

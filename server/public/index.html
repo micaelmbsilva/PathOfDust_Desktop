@@ -193,16 +193,27 @@ function staticData() {
 }
 
 // Role-aware "power" score: LVL alone doesn't explain who's on top.
-const TANKS = { Warrior: 1, Paladin: 1 };
-const roleOf = (cls, passives) => TANKS[cls] ? 'tank'
-  : (passives && passives[cls] && passives[cls].role) === 'Support' ? 'healer' : 'dps';
+// Classes can fill multiple roles (kit-derived from the trees); the first entry
+// is the default. Cleric heals but has no self-mitigation — healer only.
+const ROLES = { Warrior: ['tank', 'dps'], Paladin: ['healer', 'tank'], Druid: ['healer', 'tank'],
+  Monk: ['dps', 'tank'], Cleric: ['healer'] };
+const rolesOf = (cls, passives) => (Object.hasOwn(ROLES, cls) ? ROLES[cls] : null)
+  || ((passives && passives[cls] && passives[cls].role) === 'Support' ? ['healer'] : ['dps']);
+// The single role used for the Power metric / stat buckets — data-driven for
+// hybrids: an actively-healing Paladin/Druid shows eHPS, a tank-specced one eHP.
+const displayRole = (p, passives) => {
+  const rs = rolesOf(p.archetype, passives);
+  const s = (p.stats && typeof p.stats === 'object') ? p.stats : {};
+  if (rs.includes('healer') && (rs.length === 1 || num(s.HPS) > num(s.DPS))) return 'healer';
+  return rs.find(x => x !== 'healer') || rs[0];
+};
 const num = (v) => { const m = String(v == null ? '' : v).replace(/,/g, '').match(/^([\d.]+)\s*([KMB])?/i);
   return m ? +m[1] * ({ K: 1e3, M: 1e6, B: 1e9 }[(m[2] || '').toUpperCase()] || 1) : 0; };
 const fmt = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M'
   : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
 function power(p, passives) {
   const s = (p.stats && typeof p.stats === 'object') ? p.stats : {};
-  const role = roleOf(p.archetype, passives);
+  const role = displayRole(p, passives);
   if (role === 'healer') {
     const val = num(s.HPS) * (1 + num(s['Lingering Effect']) / 100);
     return { val, unit: 'eHPS', why: `Healer: HPS ${s.HPS || '0'} × (1 + lingering ${s['Lingering Effect'] || '0'}). Healing power (${s['Healing Power'] || '?'}) is already baked into HPS.` };
@@ -225,7 +236,7 @@ function advStats(players, passives) {
   };
   const TITLES = { dps: 'DPS players', tank: 'Tanks', healer: 'Healers' };
   const byRole = { dps: [], tank: [], healer: [] };
-  for (const p of players) byRole[roleOf(p.archetype, passives)].push(p);
+  for (const p of players) byRole[displayRole(p, passives)].push(p);
   const cards = Object.keys(SETS).map(role => {
     const ps = byRole[role];
     if (!ps.length) return null;
@@ -262,7 +273,7 @@ function playersTable(players, passives) {
     : k === 'power' ? r.pw.val : k === 'seen' ? str(r.p.last_seen) : (+r.p.level || 0);
   function render() {
     const shown = rows.filter(r => (!cls || str(r.p.archetype) === cls)
-        && (!roleF || roleOf(r.p.archetype, passives) === roleF))
+        && (!roleF || rolesOf(r.p.archetype, passives).includes(roleF)))
       .sort((a, b) => (get(a, sortKey) > get(b, sortKey) ? 1 : get(a, sortKey) < get(b, sortKey) ? -1 : 0) * dir);
     const th = (label, key, right) => {
       const e = el('th', { class: (right ? 'r ' : '') + 'sortable' }, label, sortKey === key ? (dir < 0 ? ' ▾' : ' ▴') : '');
@@ -486,20 +497,26 @@ async function advisor(name) {
   const modValsOf = (kws) => worn.filter(t => hit(t, kws)).reduce((s, t) => s + num(t.match(/[\d.]+/)?.[0]), 0);
   // A match's weight = its rolled value in "t100 average mod" units (a t100 avg
   // roll ≈ 1.0) × the worn/bag factor. Affixes with no rate data fall back to 0.5.
-  const matchWeight = (kws) => { const rate = rateOf(kws);
-    return entries.filter(e => hit(e.t, kws))
-      .reduce((s, e) => s + e.w * (rate ? num(e.t.match(/[\d.]+/)?.[0]) / (rate * 100) : 0.5), 0); };
+  // Capped stats (roll.sat, in %) stop scoring past saturation — the tree's
+  // overflow channels are full there and extra copies barely pay.
+  const matchWeight = (kws, sat) => { const rate = rateOf(kws);
+    const es = entries.filter(e => hit(e.t, kws));
+    const raw = es.reduce((s, e) => s + e.w * num(e.t.match(/[\d.]+/)?.[0]), 0);
+    const v = sat ? Math.min(raw, sat) : raw;
+    if (rate) return v / (rate * 100);
+    // no rate data: 0.5 per match, scaled down past saturation
+    return es.reduce((s, e) => s + e.w * 0.5, 0) * (raw > v ? v / raw : 1); };
 
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
   function render() {
     const ranked = Object.entries(builds.classes)
-      .filter(([cls]) => !role || roleOf(cls, passives) === role)
+      .filter(([cls]) => !role || rolesOf(cls, passives).includes(role))
       .map(([cls, cb]) => {
         const build = arr(cb.builds)[0];
         let score = 0; const hits = [];
         arr(build && build.rolls).forEach((roll, i) => {
           const kws = ROLL_KW[roll.s] || [str(roll.s).toLowerCase()];
-          const n = matchWeight(kws);
+          const n = matchWeight(kws, +roll.sat || 0);
           if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${(Math.round(n * 10) / 10)}`); }
         });
         score = Math.round(score * 10) / 10;
@@ -537,7 +554,7 @@ async function advisor(name) {
       const cur = modValsOf(kws);
       const proj = rate ? SLOTS * rate * T + (roll.top ? 2 * rate * T : 0) : null;
       const sheetNow = SHEET[roll.s] != null && stats[SHEET[roll.s]] != null ? num(stats[SHEET[roll.s]]) : null;
-      return { s: roll.s, top: roll.top, cur, proj, sheetNow };
+      return { s: roll.s, top: roll.top, cur, proj, sheetNow, sat: +roll.sat || null };
     });
 
     // Per-item crafting advice against the pick's priorities
@@ -591,7 +608,8 @@ async function advisor(name) {
               el('td', { class: 'r' }, p.sheetNow != null ? fmt(p.sheetNow) + '%' : '—'),
               el('td', { class: 'r' }, p.sheetNow != null && delta != null ? '≈' + fmt(p.sheetNow + delta) + '%' : '—'),
               el('td', { class: 'r' }, p.cur ? fmt(p.cur) + '%' : '—'),
-              el('td', { class: 'r' }, p.proj != null ? fmt(p.proj) + '%' : 'no data yet'));
+              el('td', { class: 'r' }, p.proj != null ? fmt(p.proj) + '%' : 'no data yet',
+                p.sat && p.proj != null && p.proj > p.sat ? el('span', { class: 'sub' }, ` (useful to ~${p.sat}%)`) : null));
           }))),
         craftRows.length ? [el('h2', null, 'Crafting worklist'),
           el('ul', { class: 'rolls' }, craftRows)] : null,
