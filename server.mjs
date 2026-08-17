@@ -56,10 +56,11 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 80;
+const BRIDGE_REV = 81;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
+  '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
+  '.gif': 'image/gif', '.webm': 'video/webm', '.mp4': 'video/mp4', '.ico': 'image/x-icon' };
 
 // Pull our character sheet and extract name + stat rows. Regex over the site's
 // own markup — brittle-by-design is fine, it's one page we control the read of.
@@ -744,7 +745,17 @@ const srv = createServer(async (req, res) => {
     // static
     let p = url.pathname === '/' ? '/index.html' : url.pathname;
     const file = new URL('.' + p, ROOT);
-    const data = await readFile(file);
+    // ROOT is the RESOLVED app dir, which is userData/app once an interface
+    // hot-pull has happened. Binaries (icons, artwork) are never there — the
+    // updater fetches every file as text, so images only ever exist in the
+    // bundled install. Fall back to it before giving up. url.pathname is
+    // already normalised by the URL parser, so it can't climb out with '..'.
+    let data;
+    try { data = await readFile(file); }
+    catch (e) {
+      if (e.code !== 'ENOENT' || !globalThis.__bundledDir) throw e;
+      data = await readFile(join(globalThis.__bundledDir, p));
+    }
     res.writeHead(200, { 'Content-Type': MIME[extname(p)] || 'application/octet-stream' });
     res.end(data);
   } catch (e) {

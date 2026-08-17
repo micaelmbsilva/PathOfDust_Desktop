@@ -205,6 +205,10 @@ async function start() {
   // the location and a safe way to show it (no shell-string interpolation).
   global.__fightLogsDir = path.join(app.getPath('userData'), 'fight-logs');
   global.__openPath = (p) => shell.openPath(p);
+  // The bundled install, for files the hot-update path can't carry — it writes
+  // everything as text, so images live here and only here (see the bridge's
+  // static fallback).
+  global.__bundledDir = __dirname;
   const bridge = await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);
@@ -216,6 +220,9 @@ async function start() {
     width: mb.width || 1440, height: mb.height || 900,
     ...(mb.x != null && mb.y != null ? { x: mb.x, y: mb.y } : {}),
     backgroundColor: '#0c0a16', autoHideMenuBar: true, title: GAME_NAME,
+    // Always the bundled copy, never the hot-updated dir — the updater writes
+    // files as text, so binaries only ever arrive with the installer.
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
   });
   initWindowPersistence(win, winState); // remember main + child windows across launches
 

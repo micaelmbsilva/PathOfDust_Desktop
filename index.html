@@ -25,13 +25,25 @@
   /* downtime curtain — covers the dead (white) overlay iframe while the game
      server is down; above zoomcapture, below the topbar/panels so the app stays
      usable. display:none also stops the particle animations (no idle CPU). */
-  #down { position: fixed; inset: 0; z-index: 15; background: #000; display: none;
+  /* Layered: artwork backdrop, logo centred behind the text, text in front.
+     The images ship with the installer and can't arrive by hot-update (the
+     updater writes files as text), so everything here degrades to the plain
+     black curtain if they're missing rather than breaking. */
+  #down { position: fixed; inset: 0; z-index: 15; background: #000 center/cover no-repeat; display: none;
     align-items: center; justify-content: center; flex-direction: column; gap: 10px;
     overflow: hidden; text-align: center; }
+  /* Tint is a gradient layer on the same background, not an ::after overlay —
+     keeps the stacking trivial: backdrop, then logo, then text. */
+  #down.art { background-image: linear-gradient(rgba(6,4,14,0.68), rgba(6,4,14,0.68)), url("assets/loading.png"); }
   #down.open { display: flex; }
+  #down .dlogo { position: absolute; width: min(46vh, 46vw); max-width: 420px;
+    opacity: 0.5; filter: drop-shadow(0 0 40px rgba(143,123,216,0.45));
+    animation: dpulse 4.8s ease-in-out infinite; pointer-events: none; }
+  #down .dtitle, #down .dmsg { position: relative; z-index: 1; }
+  #down .p { z-index: 1; }
   #down .dtitle { color: #c9bdf0; font-size: 1.3rem; font-weight: 700;
-    animation: dpulse 2.4s ease-in-out infinite; }
-  #down .dmsg { color: #8a7fb0; font-size: 0.9rem; }
+    text-shadow: 0 2px 12px #000; animation: dpulse 2.4s ease-in-out infinite; }
+  #down .dmsg { color: #b3a6dd; font-size: 0.9rem; text-shadow: 0 1px 8px #000; }
   @keyframes dpulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
   /* drifting dust motes */
   #down .p { position: absolute; bottom: -12px; border-radius: 50%;
@@ -257,6 +269,9 @@
 <div id="down">
   <span class="p"></span><span class="p"></span><span class="p"></span><span class="p"></span>
   <span class="p"></span><span class="p"></span><span class="p"></span><span class="p"></span>
+  <img class="dlogo" id="downLogo" src="assets/logo.png" alt=""
+       onload="document.getElementById('down').classList.add('art')"
+       onerror="this.remove()">
   <div class="dtitle" id="downTitle">💤 Server Is Down</div>
   <div class="dmsg">Waiting for it to come back — this screen clears itself.</div>
 </div>
@@ -1876,7 +1891,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 80) showRestartBanner(); // 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 81) showRestartBanner(); // 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 

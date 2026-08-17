@@ -38,12 +38,15 @@
       "!*.md"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "artifactName": "PathOfDust-Setup.${ext}"
+      "artifactName": "PathOfDust-Setup.${ext}",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
     },
     "publish": {
       "provider": "github",
