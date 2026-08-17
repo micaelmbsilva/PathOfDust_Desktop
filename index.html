@@ -178,6 +178,7 @@
   .partial { font-size: 0.74rem; color: #ffd479; background: rgba(255,212,121,0.1);
     border: 1px solid rgba(255,212,121,0.35); border-radius: 6px;
     padding: 4px 8px; margin: 2px 0 8px; cursor: help; }
+  .partial.ok { color: #7fdba3; background: rgba(127,219,163,0.08); border-color: rgba(127,219,163,0.3); }
   .btabs { display: flex; gap: 6px; margin: 6px 0; }
   .btabs button { border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.15); color: #eae6f5; }
@@ -1132,9 +1133,11 @@
   // ponytail: caps hardcoded to mirror the server's constants — if it retunes
   // them we get false negatives (silence), which is the safe direction.
   const OVERLAY_CAP = { player: 500, boss: 1000 };
-  const partialNote = (t) => !t ? '' :
-    `<div class="partial" data-tip="The game caps the live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth, and drops the rest. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. The website's own Fight History page still has the complete log.">` +
-    `⚠️ Partial data — the game trimmed this fight's live feed, so these totals are under-counts.</div>`;
+  const partialNote = (t) => !t ? '' : t.exact
+    ? `<div class="partial ok" data-tip="The game caps the live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. The totals and leaderboard here come from the game's own summary instead, built from the complete log.">` +
+      `📊 Totals below are exact — only the personal event log was trimmed, so it may skip some of your hits.</div>`
+    : `<div class="partial" data-tip="The game caps the live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth, and drops the rest. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. The website's own Fight History page still has the complete log.">` +
+      `⚠️ Partial data — the game trimmed this fight's live feed, so these totals are under-counts.</div>`;
   const actorOf = (ev) => ev.attacker || ev.healer || ev.unit || '';
   function thinningOf(d) {
     const boss = new Set((d.units || []).filter(u => u.isBoss || /^__enemy/.test(u.id)).map(u => u.id));
@@ -1176,6 +1179,22 @@
         if (ev.target === myId) me.healRecv += ev.amount || 0;
       } else if (ev.kind === 'defeat' && players[ev.unit]) deaths.push(players[ev.unit]);
     }
+    // The game now ships per-player aggregates on the broadcast (2026-08-18),
+    // computed from the FULL event log before thin_events_for_overlay runs — so
+    // where the loop above can only see the trimmed feed, these are exact.
+    // Prefer them and keep the loop as the fallback for older servers.
+    // healRecv and the death list have no summary equivalent, so those stay
+    // feed-derived either way.
+    const sp = d.summary && d.summary.players;
+    if (sp && sp.length) {
+      for (const p of sp) {
+        agg[p.id] = { d: p.damageDealt || 0, h: p.healingDone || 0, t: p.damageTaken || 0 };
+        if (!players[p.id]) players[p.id] = p.displayName;
+      }
+      const mine = sp.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
+      if (mine) Object.assign(me, { dmg: mine.damageDealt || 0, taken: mine.damageTaken || 0,
+        heal: mine.healingDone || 0, hits: mine.hits || 0, crits: mine.crits || 0, evaded: mine.evaded || 0 });
+    }
     const totalDmg = Object.values(agg).reduce((n, a) => n + a.d, 0);
     me.share = totalDmg ? me.dmg / totalDmg : 0;
     const lootText = (o) => o && o.autoDisenchanted ? `auto-disenchanted → +${(o.autoDisenchanted.dust || 0).toLocaleString()} dust` : 'kept';
@@ -1185,7 +1204,9 @@
       myLoot: (d.loot || []).filter(l => l.displayName.toLowerCase() === myName.toLowerCase())
         .map(l => ({ item: l.itemName, slot: l.slot, outcome: lootText(l.outcome) })),
       board: Object.entries(agg).map(([id, a]) => ({ n: players[id], ...a })),
-      thinned: thinningOf(d), // null when the whole fight fit under the caps
+      // `exact` = the totals above came from the server's own summary, so only
+      // the personal event log below is short. Without it, everything is short.
+      thinned: (() => { const t = thinningOf(d); return t && { ...t, exact: !!(sp && sp.length) }; })(),
     };
   }
   function saveBattle(rep) {
@@ -1239,7 +1260,7 @@
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
         <span>Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''}</span>
-        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`}${rep.thinned ? ' <span class="pmark" data-tip="Under-count — the game trimmed this fight\'s live feed. Open the entry for detail.">⚠️</span>' : ''} · ${ago(rep.at)}</span></div>
+        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`}${rep.thinned && !rep.thinned.exact ? ' <span class="pmark" data-tip="Under-count — the game trimmed this fight\'s live feed. Open the entry for detail.">⚠️</span>' : ''} · ${ago(rep.at)}</span></div>
         <div class="bbody">
           ${partialNote(rep.thinned)}
           ${idle ? '<p class="muted" style="margin:2px 0 8px">🪦 You sat this one out — downed, retreated, or joined late.</p>' : `<div class="bstats">
@@ -1857,7 +1878,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 79) showRestartBanner(); // 79: roster W/L parse fix; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 80) showRestartBanner(); // 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
