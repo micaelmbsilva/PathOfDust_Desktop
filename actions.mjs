@@ -8,6 +8,20 @@
 // change-archetype, change-model, purchase-wings, toggle-auto-repair.
 const ORIGIN = 'https://adventure.lokati.net';
 
+// How much we actually pull off the game site, per page. Measurement only —
+// nothing reads this to make a decision. The overlay WebSocket (the other, and
+// probably bigger, half of the app's traffic) is counted in index.html, since
+// the page connects to it directly and never comes through here.
+// Sizes are String.length (UTF-16 code units), not bytes: near-exact for this
+// mostly-ASCII HTML, slightly under for non-ASCII display names.
+export const netStats = { since: Date.now(), paths: {} };
+// Collapse per-player pages into one bucket so a roster browse doesn't produce
+// a hundred single-hit rows. Exported for the smoke-test.
+export const netKey = (path) => ('/' + String(path || '/').replace(/^\//, ''))
+  .split(/[?#]/)[0]
+  .replace(/^\/characters\/[^/]+(\/.*)?$/, (_, rest) => '/characters/*' + (rest || ''))
+  .replace(/\/+$/, '') || '/';
+
 // Cookie set by the app after login. Required — every request needs it.
 let runtimeCookie = null;
 export function setCookie(header) { runtimeCookie = header || null; }
@@ -41,6 +55,8 @@ export async function getAuthed(path = '/') {
   });
   if (res.status >= 500) throw new Error(`site down: ${res.status}`);
   const text = await res.text();
+  const st = (netStats.paths[netKey(path)] ||= { n: 0, size: 0 });
+  st.n++; st.size += text.length;
   // Expired adv_session: the site 302s to its login page, which fetch follows —
   // so an "OK" response can actually be the logged-out page. Without this every
   // scrape silently parses as an empty inventory/character. res.redirected

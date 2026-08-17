@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises';
 import { exec } from 'node:child_process';
 import { extname, join } from 'node:path';
-import { post, getAuthed, loginRedirect } from './actions.mjs';
+import { post, getAuthed, loginRedirect, netStats } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL, PING_KEY } from './config.mjs';
 
 // Anonymous telemetry/feedback → the Railway backend. No-op if no URL set.
@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 75;
+const BRIDGE_REV = 76;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -651,6 +651,11 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/fights') {
       return json(res, await fights());
+    }
+    if (url.pathname === '/api/netstats') {
+      // How much this bridge has pulled off the game site since it started.
+      // Read-only; nothing acts on it. The page adds its own WebSocket numbers.
+      return json(res, { since: netStats.since, paths: netStats.paths });
     }
     if (url.pathname === '/api/me') {
       return json(res, await me());
