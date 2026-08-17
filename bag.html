@@ -113,6 +113,9 @@
 <script>
   const $ = (id) => document.getElementById(id);
   async function api(endpoint, fields) {
+    // currency-capable actions (craft/veil/polish/reforge/disenchant) are stamped
+    // so the main window's battle toast can flag deltas mixed with crafting
+    if (/craft|disenchant/.test(endpoint)) localStorage.setItem('lastCraftAt', Date.now());
     const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
     if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
