@@ -27,6 +27,7 @@
   table { border-collapse: collapse; font-size: 0.8rem; }
   th, td { text-align: left; padding: 3px 10px 3px 0; white-space: nowrap; }
   th { color: #8a7fb0; font-weight: 600; }
+  tr.mine td { color: #ffd76b; font-weight: 700; }
   .muted { color: #8a7fb0; }
   #err { color: #ff8080; }
 </style>
@@ -63,6 +64,7 @@
     // else, so for almost every player this page has no server data at all.
     // Fall back to what the app recorded itself off the live fight feed.
     if (d.gated || !d.fights.length) return renderLocal(d.gated);
+    if (d.source === 'summary') return renderSummary(d.fights);
     $('source').textContent = "The site's own breakdown — the last 10 encounters.";
     // First fight open, the rest collapsed — ten full breakdowns is a lot of page.
     $('list').innerHTML = d.fights.map((f, i) => `
@@ -80,6 +82,48 @@
         </table></div>` : ''}
       </details>`).join('');
   }
+  // ---- the game's own per-fight summary tier ----
+  // Per-player aggregates built from the complete event log before the overlay
+  // thinning runs, so unlike anything derived from the live feed these totals
+  // are exact. Every participant gets a row, including the ones who did nothing.
+  // In the summary tier `outcome` is real JSON, not the Debug string the HTML
+  // page printed — either "kept" or { autoDisenchanted: { dust: N } }.
+  const outcomeText = (o) => !o ? '' : typeof o === 'string'
+    ? o.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
+    : Object.entries(o).map(([k, v]) => k.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase() +
+        (v && v.dust ? ` +${(+v.dust).toLocaleString()} dust` : '')).join(', ');
+  let myName = '';
+  fetch('/api/me').then(r => r.json()).then(m => { if (m.name && m.name !== myName) { myName = m.name; load(); } }).catch(() => {});
+
+  function renderSummary(fights) {
+    $('source').textContent = `The game's own per-fight summary — exact totals, last ${fights.length}.`;
+    const when = (ms) => ms ? new Date(ms).toLocaleString() : 'time unknown';
+    $('list').innerHTML = fights.map((f, i) => {
+      const secs = Math.max(1, (f.displayDurationMs || 0) / 1000);
+      const rows = [...(f.players || [])].sort((a, b) => (b.damageDealt || 0) - (a.damageDealt || 0));
+      const total = rows.reduce((n, p) => n + (p.damageDealt || 0), 0);
+      const mine = rows.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
+      return `<details class="fight"${i ? '' : ' open'}>
+        <summary><span class="${f.won ? 'won' : 'lost'}">${f.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(f.stage)}${f.kind === 'boss' ? ' 💀 Boss' : ''}</span>
+          <div class="when">${esc(when(f.startedAtUnixMs))} · ${esc(f.participants)} in the party${
+            mine ? ` · you dealt ${fmtN(mine.damageDealt || 0)}${total ? ` (${((mine.damageDealt || 0) / total * 100).toFixed(1)}%)` : ''}` : ' · you sat this one out'}</div></summary>
+        <h3>Party</h3>
+        <div class="scroll"><table>
+          <tr><th>#</th><th>Player</th><th>Damage</th><th>DPS</th><th>Taken</th><th>Healing</th><th>Hits</th><th>Crit</th></tr>
+          ${rows.map((p, n) => `<tr${(p.displayName || '').toLowerCase() === myName.toLowerCase() ? ' class="mine"' : ''}>
+            <td>${n + 1}</td><td>${esc(p.displayName)}</td>
+            <td>${fmtN(p.damageDealt || 0)}</td><td>${fmtN((p.damageDealt || 0) / secs)}</td>
+            <td>${fmtN(p.damageTaken || 0)}</td><td>${fmtN(p.healingDone || 0)}</td>
+            <td>${p.hits || 0}</td><td>${p.hits ? Math.round((p.crits || 0) / p.hits * 100) : 0}%</td></tr>`).join('')}
+        </table></div>
+        ${f.firstToDie ? `<h3>First Down</h3><p>💀 ${esc(f.firstToDie)}</p>` : ''}
+        <h3>Loot</h3>${list((f.loot || []).map(l =>
+          `${l.displayName} — ${l.itemName} T${l.tier} (${l.slot}${l.outcome ? ', ' + outcomeText(l.outcome) : ''})`), 'None.')}
+        <h3>Broken Gear</h3>${list((f.broken || []).map(b => `${b.displayName} — ${b.itemName}`), 'None.')}
+      </details>`;
+    }).join('');
+  }
+
   // ---- fallback: the fights this app recorded itself ----
   // Same localStorage the Combat History panel reads (same origin), deliberately
   // rendered thin — outcome, your line, loot. The full view (fight logs, party

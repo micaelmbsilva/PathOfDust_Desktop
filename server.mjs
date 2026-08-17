@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 79;
+const BRIDGE_REV = 80;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -495,21 +495,35 @@ async function characterPassives(login) {
 // Streamer-only fight breakdown. The site hardcodes the allowed login and
 // serves a bare "Not Found" card to everyone else — no nav, no header — so
 // absence of the page header is how we report "you can't see this".
-// DON'T "upgrade" this to the site's /fights.json feed. It exists (added Aug
-// 2026 alongside opening this page up) and it is the wrong tool for a UI panel:
-// it returns the raw EncounterResult per fight, event logs included. Measured
-// 2026-08-17, same 10 fights, same session:
+// How many fights the Fight History panel asks for. The summary tier retains
+// 200 (SUMMARY_FIGHTS_CAPACITY), far more than the 10-fight coarse tier the
+// HTML page reads — but they're a few KB each, so asking for a sane page of
+// them stays cheap.
+const FIGHTS_LIMIT = 50;
+
+// /fights.json used to return the raw EncounterResult per fight, event logs
+// included — 67.8 MB for 10 fights, measured 2026-08-17. It now serves a
+// per-fight summary tier instead (2026-08-18): full untruncated per-player
+// damage/healing/hits, loot and broken gear, a few KB each, built from the
+// complete log BEFORE the overlay thinning runs. That makes it both smaller
+// and more accurate than the HTML page we used to scrape — which had to
+// re-parse ~10 fights x ~200k events per request and took 26s to answer.
 //
-//     /fights.json   67.8 MB   (176,823 events in the largest single fight)
-//     /fights (HTML)  113 KB   -> 52 KB of parsed JSON
-//
-// ~600x. The HTML page is the server's own aggregation — top DPS/tanks/heals,
-// skills cast, the buff table, loot — which is exactly what we render, computed
-// where the data already lives. The JSON feed is for offline analysis, not for
-// re-deriving a leaderboard on the client from a million events.
+// The scrape stays as a fallback for a server that predates the JSON tier.
 async function fights() {
+  try {
+    const { status, text } = await getAuthed(`/fights.json?limit=${FIGHTS_LIMIT}`);
+    if (status === 401 || status === 403) return { gated: true, fights: [] };
+    if (status < 400) {
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) return { gated: false, source: 'summary', fights: data };
+    }
+  } catch (e) {
+    if (e.expired) throw e; // dead session — let the 401 path handle it
+    // anything else (404 on an older server, malformed JSON): fall through
+  }
   const { text } = await getAuthed('/fights');
-  return fightsOf(text);
+  return { ...fightsOf(text), source: 'scrape' };
 }
 export function fightsOf(text) { // exported for scrape smoke-tests
   if (!/<h1>Fight History<\/h1>/.test(text)) return { gated: true, fights: [] };
