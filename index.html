@@ -1110,17 +1110,24 @@
       for (const s of fight.mySnaps) { if (s.at <= cursor) snap = s; else break; }
       const live = Date.now() - fight.t0 < fight.dur;
       if (snap && snap.buffs.length) {
-        const groups = { buff: [], debuff: [], charge: [], unknown: [] };
-        for (const [k, v] of snap.buffs) { const b = PodFeed.buff(k); groups[b.kind].push([b, v]); }
-        const block = (kind, head, note) => groups[kind].length ? `<div class="fhead">${head}</div>` +
-          `<div class="rolechips">${groups[kind].map(([b, v]) =>
-            `<span class="chip bchip ${kind}"${b.desc ? ` data-tip="${esc(b.desc)}"` : ''}>` +
-            `${PodFeed.KIND_ICON[kind]} ${esc(b.label)}: <b>${esc(buffVal(b.key, v, kind))}</b></span>`).join('')}</div>` +
+        // Grouped by WHERE it came from, not just whether it's good. A shield
+        // on you may be a Cleric's doing, and "your build working" would be a
+        // lie in that case — which is the whole distinction people want here.
+        const groups = { enemy: [], party: [], self: [], own: [], unknown: [] };
+        for (const [k, v] of snap.buffs) { const b = PodFeed.buff(k); (groups[b.origin] || groups.unknown).push([b, v]); }
+        const block = (origin, head, note) => groups[origin].length ? `<div class="fhead">${head}</div>` +
+          `<div class="rolechips">${groups[origin].map(([b, v]) => {
+            // Blank lines between the paragraphs; tooltip.js renders pre-line.
+            const tip = [b.desc, b.from ? `Comes from: ${b.from}` : '', `${b.key} = ${v}`].filter(Boolean).join('\n\n');
+            return `<span class="chip bchip ${b.kind}" data-tip="${esc(tip)}">` +
+              `${PodFeed.KIND_ICON[b.kind]} ${esc(b.label)}: <b>${esc(buffVal(b.key, v, b.kind))}</b></span>`;
+          }).join('')}</div>` +
           (note ? `<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">${note}</div>` : '') : '';
         parts.push(`<div class="fhead" style="margin-bottom:2px">🗡️ You${live ? '' : ' — last fight'}</div>`);
-        parts.push(block('debuff', '🔴 Done to you', 'Applied by the enemy — these are working against you.'));
-        parts.push(block('buff', '🟢 Your build working', 'From your own class, passives and gear.'));
-        parts.push(block('charge', '🔵 Your charges', 'Pools and counters — neither good nor bad.'));
+        parts.push(block('enemy', '🔴 Done to you', 'Put on you by what you are fighting.'));
+        parts.push(block('party', '🤝 From your party', 'An ally can be the source — several of these you can also cast on yourself. Hover for which.'));
+        parts.push(block('self', '🟢 Your own kit', 'Only your class, passives and gear produce these.'));
+        parts.push(block('own', '🔵 Your charges', 'Pools and counters — neither good nor bad.'));
         parts.push(block('unknown', '⚪ Unrecognised', 'New to the game since this app last learned the list.'));
       }
     }

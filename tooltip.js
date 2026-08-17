@@ -7,6 +7,9 @@
     'background:rgba(20,16,32,0.98)', 'border:1px solid rgba(160,140,255,0.45)',
     'color:#eae6f5', 'font:12px/1.45 "Segoe UI",Arial,sans-serif',
     'padding:7px 10px', 'border-radius:8px', 'box-shadow:0 8px 24px #000a', 'display:none',
+    // Lets a data-tip carry paragraphs — the buff hovers use them for
+    // "what it does" / "where it comes from" / the raw key.
+    'white-space:pre-line',
   ].join(';');
   document.body.appendChild(tip); // this script is loaded at end of <body>, so body exists
 
