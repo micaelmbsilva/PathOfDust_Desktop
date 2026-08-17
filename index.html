@@ -211,6 +211,12 @@
   .tmenu button:hover { background: rgba(120,90,255,0.25); }
   .tmenu button.active { background: rgba(120,90,255,0.4); }
 
+  /* settings panel controls */
+  #settingsBody select { background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3);
+    border-radius: 6px; padding: 2px 6px; font-size: 0.8rem; max-width: 180px; }
+  #settingsBody .srow { align-items: center; }
+  #settingsBody .fhead { margin-bottom: 4px; }
+
   /* saved fight log inside a Combat History entry */
   .flog summary { cursor: pointer; font-size: 0.8rem; color: #c9bdf0; margin: 6px 0 2px; }
   .flog summary button { background: none; border: 1px solid rgba(160,140,255,0.35); border-radius: 5px;
@@ -250,6 +256,7 @@
   <button data-m="battles" title="Your saved battle reports, fight logs, and per-fight leaderboards">⚔️ Combat History</button>
 </div>
 <div class="tmenu" id="moreMenu">
+  <button data-mm="settings" data-m="settings" title="App options — notifications, display, performance, history retention">⚙️ Settings</button>
   <button data-mm="wiki" title="Open the game wiki in your browser">📖 Wiki</button>
   <button data-mm="patch-notes" title="Open the game's patch notes in your browser">📜 Patch Notes</button>
   <button data-mm="refresh" title="Refresh now">🔄 Refresh</button>
@@ -296,6 +303,15 @@
       <button title="close" onclick="toggleModal('buffs', false)">✕</button></span>
   </div>
   <div class="abody" id="buffsBody"><p class="muted">Nothing active.</p></div>
+</div>
+
+<div class="apanel" id="settingspanel" style="top:70px;left:200px;width:380px;height:520px">
+  <div class="cbar" id="settingsbar">
+    <span class="ctitle">⚙️ Settings</span>
+    <span class="cbtns"><button id="settingsCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('settings', false)">✕</button></span>
+  </div>
+  <div class="abody" id="settingsBody"></div>
 </div>
 
 <div class="apanel" id="fightpanel" style="top:90px;left:60px;width:440px;height:540px">
@@ -402,9 +418,11 @@
     const p = document.getElementById('chatpanel'), b = document.getElementById('chatBtn'),
           f = document.getElementById('chatFrame');
     const open = show === undefined ? !p.classList.contains('open') : show;
-    if (open && !f.getAttribute('src'))
+    const src = f.getAttribute('src');
+    if (open && (!src || src === 'about:blank'))
       // full popout chat (send-capable) — the app strips Twitch's frame headers so it loads
       f.src = `https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`;
+    if (!open && S().chatUnload) f.src = 'about:blank'; // free CPU/RAM while hidden (setting)
     p.classList.toggle('open', open);
     b.classList.toggle('active', open);
   }
@@ -413,7 +431,7 @@
     const p = document.getElementById('streampanel'), b = document.getElementById('streamBtn'),
           f = document.getElementById('streamFrame');
     const open = show === undefined ? !p.classList.contains('open') : show;
-    if (open) f.src = `https://player.twitch.tv/?channel=${TWITCH_LOGIN}&parent=localhost&muted=true`;
+    if (open) f.src = `https://player.twitch.tv/?channel=${TWITCH_LOGIN}&parent=localhost&muted=${S().streamMuted}`;
     else f.removeAttribute('src'), f.src = 'about:blank'; // stop playback when hidden
     p.classList.toggle('open', open);
     b.classList.toggle('active', open);
@@ -489,7 +507,7 @@
       // Next-battle ETA (estimated from recent battle cadence; ticked by its 1s
       // interval). Rendered with its live value — a hidden default would blink
       // out on every stats refresh until the next tick.
-      const eta0 = nextBattleEta();
+      const eta0 = S().showEta ? nextBattleEta() : null;
       const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time"><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') : ''}</span></div>`;
       document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
@@ -567,6 +585,8 @@
     battleToastT = setTimeout(() => {
       if (pendingBattle !== battle) return; // superseded by a newer fight
       pendingBattle = null;
+      const bt = S().battleToast;
+      if (bt === 'off' || (bt === 'wins' && !battle.won)) return; // user muted these
       const f = battle.frozen; // no qualified poll landed -> plain result, no stale recompute
       const money = f && f.parts.length
         ? ` — 💰 net ${f.dirty ? '~' : ''}${f.parts.join(' · ')}${f.dirty ? ' (mixed with crafting)' : ''}` : '';
@@ -587,11 +607,33 @@
   setInterval(() => {
     const el = document.getElementById('nextBattle');
     if (!el) return;
-    const eta = nextBattleEta();
+    const eta = S().showEta ? nextBattleEta() : null;
     el.style.display = eta ? '' : 'none';
     if (eta) el.querySelector('.v').textContent =
       eta > Date.now() ? `~${mmss(eta - Date.now())}` : 'any moment…';
   }, 1000);
+
+  // ---- app settings: one JSON blob merged over defaults; knobs apply live ----
+  const SET_DEFAULTS = { lootToast: 'all', lootTtl: 0, battleToast: 'all', reforgeRemind: true,
+    showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
+    histCap: 40, histAgeH: 0 };
+  const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
+  const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
+  const rerenderIfOpen = (which, fn) => { if (document.getElementById(which + 'panel').classList.contains('open')) fn(); };
+
+  // Battle history read + retention in one place (age filter then cap; list is
+  // newest-first). Writes back only when something was pruned.
+  const HIST_CAPS = [10, 20, 40, 100], HIST_AGES = [0, 24, 72, 168, 720];
+  function battleLog() {
+    const s = S();
+    const cap = HIST_CAPS.includes(+s.histCap) ? +s.histCap : 40;   // allowlist — manual edits can't break it
+    const ageH = HIST_AGES.includes(+s.histAgeH) ? +s.histAgeH : 0; // 0 = never
+    let log = LS.get('battleLog', []);
+    if (!Array.isArray(log)) log = [];
+    const pruned = log.filter(r => !ageH || Date.now() - r.at < ageH * 3600e3).slice(0, cap);
+    if (pruned.length !== log.length) LS.set('battleLog', pruned);
+    return pruned;
+  }
 
   // ---- Party modal + battle reports (all data from the game WS) ----
   let lastRoster = null; // latest `state` message
@@ -604,7 +646,7 @@
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
-      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs })[which]();
+      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
       const r = p.getBoundingClientRect();
@@ -637,6 +679,7 @@
     });
     bar.addEventListener('pointerup', (e) => { drag = false; bar.classList.remove('grabbing'); bar.releasePointerCapture(e.pointerId); save(); });
   }
+  wirePanel('settingspanel', 'settingsbar', 'settingsCollapse', 'lay.settings');
   wirePanel('partypanel', 'partybar', 'partyCollapse', 'lay.party');
   wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
   wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
@@ -657,6 +700,7 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
   document.querySelectorAll('#combatMenu [data-m]').forEach(b => b.onclick = () => { toggleModal(b.dataset.m); closeMenus(); });
   const MORE = {
+    'settings': () => toggleModal('settings'),
     'wiki': () => fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: 'wiki' }) }),
     'patch-notes': () => fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page: 'patch-notes' }) }),
     'refresh': () => { loadStats(); pollBag(); pullInterface(false); },
@@ -700,7 +744,7 @@
   // WS role is the fallback (support = Heal, rest = DPS).
   const CLASS_ICON = { dps: '🗡️', heal: '🩹', tank: '🛡️' };
   function classifyParty() {
-    const rep = LS.get('battleLog', [])[0];
+    const rep = battleLog()[0]; // via retention — an expired report must not drive roles
     const cls = {};
     if (rep && rep.board?.length) {
       const n = rep.board.length;
@@ -785,10 +829,12 @@
     };
   }
   function saveBattle(rep) {
-    const log = LS.get('battleLog', []);
+    const log = battleLog();
     log.unshift(rep);
-    LS.set('battleLog', log.slice(0, 40));
-    if (document.getElementById('battlespanel').classList.contains('open')) renderBattles();
+    LS.set('battleLog', log);
+    battleLog(); // re-apply retention (cap) to what we just stored
+    rerenderIfOpen('battles', renderBattles);
+    rerenderIfOpen('settings', renderSettings); // keep the Clear-history count fresh
   }
 
   const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
@@ -808,8 +854,11 @@
         keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table>`;
   }
   function renderBattles() {
-    const log = LS.get('battleLog', []);
-    if (!log.length) return; // placeholder stays
+    const log = battleLog();
+    if (!log.length) { // explicit empty state — after a Clear, stale cards must not linger
+      document.getElementById('battlesBody').innerHTML = '<p class="muted">No battles recorded yet — reports appear after each boss fight.</p>';
+      return;
+    }
     const lb = (rep) => lbTable(rep.board, Math.max(1, (rep.durMs || 0) / 1000), 'data-lb');
     document.getElementById('battlesBody').innerHTML = log.map((rep, i) => {
       const m = rep.me, secs = Math.max(1, (rep.durMs || 0) / 1000);
@@ -863,6 +912,62 @@
       const openIdxs = [...document.querySelectorAll('.bent.open')].map(el => el.dataset.i);
       renderBattles();
       for (const i of openIdxs) document.querySelector(`.bent[data-i="${i}"]`)?.classList.add('open');
+    });
+  }
+
+  // ---- ⚙️ Settings panel ----
+  function renderSettings() {
+    const s = S();
+    const sel = (key, opts) => `<select data-set="${key}">${opts.map(([v, l]) =>
+      `<option value="${v}"${String(s[key]) === String(v) ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+    const chk = (key) => `<input type="checkbox" data-set="${key}"${s[key] ? ' checked' : ''}>`;
+    const row = (label, ctrl, tip) => `<div class="srow"${tip ? ` data-tip="${tip.replace(/"/g, '&quot;')}"` : ''}><span class="l">${label}</span><span class="v">${ctrl}</span></div>`;
+    document.getElementById('settingsBody').innerHTML =
+      `<div class="fhead">🔔 Notifications</div>` +
+      row('Loot Toasts', sel('lootToast', [['all', 'All Drops'], ['rare', 'Perfect / Sacred / Unique'], ['off', 'Off']]), 'Which new drops pop a toast. Auto-Lock keeps working either way.') +
+      row('Auto-Dismiss Loot Toasts', sel('lootTtl', [[0, 'Never'], [10, '10s'], [30, '30s'], [60, '60s']])) +
+      row('Battle Results', sel('battleToast', [['all', 'All'], ['wins', 'Wins Only'], ['off', 'Off']]), 'The battle-end toast with the dust/sand readout.') +
+      row('Reforge Reminder', chk('reforgeRemind'), 'The hourly ⚒️ Reforge Gear Ready toast.') +
+      `<div class="fhead" style="margin-top:10px">🖥️ Display</div>` +
+      row('Show Next-Battle ETA', chk('showEta'), 'Countdown estimated from recent battle cadence.') +
+      row('Operator Broadcasts', chk('showBroadcasts'), 'Announcements from the app operator. Restart and update warnings always show.') +
+      row('Stream Starts Muted', chk('streamMuted'), 'Unmuted autoplay may still be blocked by the player.') +
+      `<div class="fhead" style="margin-top:10px">⚡ Performance</div>` +
+      row('Refresh Mode', sel('refresh', [['resp', 'Responsive'], ['bal', 'Balanced'], ['low', 'Low Data']]), 'How often stats and bag re-poll. Responsive: 3s (30s while live events flow). Balanced: half that. Low Data: quarter.') +
+      row('Unload Chat When Hidden', chk('chatUnload'), 'Frees CPU/RAM while chat is closed; reopening reloads it.') +
+      `<div class="fhead" style="margin-top:10px">📜 Combat History</div>` +
+      row('Keep Battles', sel('histCap', HIST_CAPS.map(v => [v, String(v)]))) +
+      row('Auto-Delete Older Than', sel('histAgeH', [[0, 'Never'], [24, '1 Day'], [72, '3 Days'], [168, '7 Days'], [720, '30 Days']]), 'Old reports are removed when history is next used.') +
+      `<div class="fhead" style="margin-top:10px">🧹 Maintenance</div>
+      <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        <button class="tbtn" id="clearHist">🗑️ Clear Combat History (${battleLog().length})</button>
+        <button class="tbtn" id="resetLay" title="Puts every panel back at its default spot and resets overlay zoom/pan — reloads the app page">📐 Reset Panels &amp; Zoom</button>
+      </div>`;
+    document.querySelectorAll('#settingsBody [data-set]').forEach(el => el.onchange = () => {
+      setS(el.dataset.set, el.type === 'checkbox' ? el.checked : (/^\d+$/.test(el.value) ? +el.value : el.value));
+      battleLog(); // retention may have tightened — prune now
+      rerenderIfOpen('battles', renderBattles);
+      rerenderIfOpen('party', renderParty); // role classification reads the latest report
+      renderSettings(); // refresh counts (keeps focus loss acceptable — selects just changed)
+    });
+    // two-click confirm, same pattern as the loot toast's Disenchant
+    const arm = (btn, fn) => btn.onclick = () => {
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; const o = btn.textContent; btn.textContent = 'Sure? (no undo)';
+        setTimeout(() => { btn.dataset.armed = ''; btn.textContent = o; }, 4000);
+        return;
+      }
+      btn.dataset.armed = ''; fn();
+    };
+    arm(document.getElementById('clearHist'), () => {
+      localStorage.removeItem('battleLog');
+      rerenderIfOpen('battles', renderBattles);
+      rerenderIfOpen('party', renderParty);
+      renderSettings();
+    });
+    arm(document.getElementById('resetLay'), () => {
+      Object.keys(localStorage).filter(k => k.startsWith('lay.')).forEach(k => localStorage.removeItem(k));
+      location.reload();
     });
   }
 
@@ -970,11 +1075,13 @@
         known.add(item.id);
         // auto-lock Perfect/Sacred/unique (e.g. Celestial Shard) drops before
         // toasting, so the toast shows it locked
-        if (autoLockOn() && !item.protected && ((item.quality || '').includes('Perfect') || item.sacred || item.unique)) {
+        const rare = (item.quality || '').includes('Perfect') || item.sacred || item.unique;
+        if (autoLockOn() && !item.protected && rare) {
           const r = await action('toggle-disenchant-protect', { item_id: item.id, protect: 'on' }).catch(() => null);
           if (r && r.ok) item.protected = true; // only claim locked on confirmed success
         }
-        toast(item);
+        const lt = S().lootToast; // settings filter — auto-lock above still ran
+        if (lt === 'all' || (lt === 'rare' && rare)) toast(item);
       }
       // forget ids no longer in the bag so they'd re-notify if they come back
       known = new Set([...known].filter(id => ids.has(id)));
@@ -990,7 +1097,12 @@
   // pushes changes near-instantly, so polling backs off to a 30s safety net;
   // without it (offline, WS down) we poll every 3s as before.
   let wsOk = false, pollTick = 0;
-  setInterval(() => { if (wsOk && ++pollTick % 10) return; loadStats(); pollBag(); }, 3000);
+  setInterval(() => {
+    // Refresh Mode setting: skip multipliers on the base 3s tick — [no-WS, with-WS]
+    const M = ({ resp: [1, 10], bal: [2, 20], low: [5, 40] })[S().refresh] || [1, 10];
+    if (++pollTick % (wsOk ? M[1] : M[0])) return;
+    loadStats(); pollBag();
+  }, 3000);
 
   // Event-driven refresh: the server pushes to /ws whenever something happens
   // (fights, drops). Refresh stats+bag on push (debounced) so changes show
@@ -1083,6 +1195,8 @@
     const dismissAll = document.getElementById('dismissAll');
     dismissAll.after(el); // newest just below the dismiss-all bar
     updateDismissAll();
+    const ttl = +S().lootTtl; // 0 = keep until dismissed
+    if (ttl) setTimeout(close, ttl * 1000);
   }
 
   // show "Dismiss all" only when more than 2 notifications are stacked
@@ -1172,6 +1286,7 @@
   // Show the reforge toast while available; remove it once used/on cooldown.
   function reconcileReforge(rf) {
     const cur = document.querySelector('.toast.reforge');
+    if (!S().reforgeRemind) { if (cur) { cur.remove(); updateDismissAll(); } return; } // muted in settings
     if (rf && rf.available) { if (!cur && !reforgeDismissed) showReforge(rf); }
     else { reforgeDismissed = false; if (cur) { cur.remove(); updateDismissAll(); } } // window over — arm the next one
   }
@@ -1222,6 +1337,7 @@
   // message id, so each broadcast is seen once.
   const TELEMETRY = 'https://pathofdustdesktop-production.up.railway.app';
   async function checkBroadcast() {
+    if (!S().showBroadcasts) return; // muted in settings (restart/update banners unaffected)
     try {
       const b = await fetch(TELEMETRY + '/broadcast', { cache: 'no-store' }).then(r => r.json());
       if (b.id && localStorage.getItem('bcSeen') !== b.id)
