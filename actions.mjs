@@ -40,5 +40,15 @@ export async function getAuthed(path = '/') {
     headers: { 'Cookie': cookieHeader() },
   });
   if (res.status >= 500) throw new Error(`site down: ${res.status}`);
-  return { status: res.status, text: await res.text() };
+  const text = await res.text();
+  // Expired adv_session: the site 302s to its login page, which fetch follows —
+  // so an "OK" response can actually be the logged-out page. Without this every
+  // scrape silently parses as an empty inventory/character. res.redirected
+  // guards against non-redirect pages (maintenance etc.) that merely mention login.
+  if (res.redirected && /Login with Twitch/i.test(text.slice(0, 30000)) && !text.includes('top-nav-stats')) {
+    const e = new Error('session expired'); e.expired = true; throw e;
+  }
+  return { status: res.status, text };
 }
+// A craft/equip POST against a dead session 302s to the login page too.
+export const loginRedirect = (location) => !!location && /login|signin|twitch/i.test(location);

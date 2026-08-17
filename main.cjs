@@ -209,6 +209,17 @@ async function start() {
   if (!advSession) advSession = await runLogin(win);
 
   actions.setCookie(`adv_session=${advSession}`); // the bridge now acts as this user
+  // A persisted cookie can be invalidated server-side; without this check the
+  // UI's "restart to re-login" advice loops forever on the same dead cookie
+  // (runLogin resolves instantly while the stale cookie still exists).
+  try { await actions.getAuthed('/inventory'); }
+  catch (e) {
+    if (e.expired) {
+      await session.defaultSession.cookies.remove(SITE, 'adv_session').catch(() => {});
+      advSession = await runLogin(win);
+      actions.setCookie(`adv_session=${advSession}`);
+    } // site-down errors fall through to the normal downtime handling
+  }
   await relaxTwitchCookies();                     // make the chat embed see the login
   await session.defaultSession.clearCache().catch(() => {}); // drop stale cached app files
   win.loadURL(`http://localhost:${PORT}/`);

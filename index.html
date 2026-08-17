@@ -1380,7 +1380,7 @@
   function toast(item) {
     const el = document.createElement('div');
     el.className = 'toast';
-    const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span data-tip="${(m.tip || '').replace(/"/g, '&quot;')}">${m.t}</span>`).join('')}</div>` : '';
+    const mods = item.mods?.length ? `<div class="tmods">${item.mods.map(m => `<span${m.crit ? ' style="color:#6ee08a;font-weight:600"' : ''} data-tip="${(m.tip || '').replace(/"/g, '&quot;')}">${m.t}</span>`).join('')}</div>` : '';
     const qual = item.sacred ? `<span class="sacredq">${item.quality}</span>`
       : item.quality && item.quality.includes('Perfect') ? `<span class="perfect">${item.quality}</span>` : item.quality;
     el.innerHTML = `
@@ -1530,7 +1530,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 71) showRestartBanner();
+    if (!v.bridgeRev || v.bridgeRev < 72) showRestartBanner(); // 72: chancing-wizard parse + expiry detection + /api/broadcast
   }).catch(() => {});
 
   // Full-width system banner across the top; one per id. Used for restart

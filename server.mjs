@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 import { exec } from 'node:child_process';
 import { extname } from 'node:path';
-import { post, getAuthed } from './actions.mjs';
+import { post, getAuthed, loginRedirect } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL, PING_KEY } from './config.mjs';
 
 // Anonymous telemetry/feedback → the Railway backend. No-op if no URL set.
@@ -116,9 +116,16 @@ const strip = (s) => s.replace(/<[^>]*>/g, '')
 
 // data-tip (the site's hover text) out of an element's attribute string.
 const tipOf = (attrs) => strip((attrs.match(/data-tip="([^"]*)"/) || [])[1] || '');
-// modifiers with their roll-% tooltip: [{ t: "+5 max hp", tip: "Roll: 30%" }]
-const modsOf = (chunk) => [...chunk.matchAll(/class="mod-roll"([^>]*)>([^<]*)</g)]
-  .map(m => ({ t: strip(m[2]), tip: tipOf(m[1]) }));
+// HTML-entity decode for attribute values we re-submit verbatim (forms).
+const decode = (s) => (s || '').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+// modifiers with their roll-% tooltip: [{ t: "+5 max hp", tip: "Roll: 30%" }].
+// Class matched as a token — the site adds classes (mod-roll-crit = the green
+// Reforge/Recombine crit-granted affix), and the old exact match dropped those.
+const modsOf = (chunk) => [...chunk.matchAll(/<li([^>]*)>([^<]*)</g)]
+  .map(m => ({ attrs: m[1], raw: m[2], cls: ((m[1].match(/class="([^"]*)"/) || [])[1] || '').split(/\s+/) }))
+  .filter(x => x.cls.includes('mod-roll'))
+  .map(x => ({ t: strip(x.raw), tip: tipOf(x.attrs), ...(x.cls.includes('mod-roll-crit') ? { crit: true } : {}) }));
 // the gear-quality element's tooltip (Perfect Quality etc.)
 const qtipOf = (chunk) => tipOf((chunk.match(/class="gear-quality[^"]*"([^>]*)>/) || [])[1] || '');
 // Sacred/unique implicit callout ("✦ Sacred: +224% splash" / the gold unique line).
@@ -147,9 +154,53 @@ function bag(text) {
   return { items };
 }
 
+// Pending choice card: a veiled/token craft (id="veil-choice") or the veiled
+// Chancing walk (id="chancing-wizard") parks server-rendered forms and the
+// site blocks further crafting until a choice is made. Parsed generically —
+// one choice per <form>, replayed verbatim (action path + every submittable
+// input + the submit button's own name/value) — so wizard variants and
+// multi-step walks keep working without knowing their exact markup.
+// Exported for scrape smoke-tests.
+export function pendingOf(text) {
+  const pendRegion = (text.split(/id="(?:veil-choice|chancing-wizard)"/)[1] || '').split('bag-card')[0];
+  if (!pendRegion) return null;
+  const kind = text.includes('id="chancing-wizard"') ? 'chancing' : 'veil';
+  const title = strip((pendRegion.match(/<h2[^>]*>([^<]*)<\/h2>/) || [])[1] || 'Choose your outcome');
+  const note = strip((pendRegion.match(/<p[^>]*>([^<]*)<\/p>/) || [])[1] || '');
+  const choices = [];
+  for (const fm of pendRegion.matchAll(/<form([^>]*)>([\s\S]*?)<\/form>/g)) {
+    const action = decode((fm[1].match(/action="([^"]*)"/) || [])[1] || '/craft/choose-veil');
+    if (!/^\/[\w\/.-]*$/.test(action)) continue; // same-origin relative paths only
+    const inner = fm[2], fields = []; // ordered [name,value] pairs — duplicates allowed
+    for (const inp of inner.matchAll(/<input([^>]*)>/g)) {
+      const at = inp[1];
+      if (/\bdisabled\b/.test(at)) continue;                         // successful controls only
+      if (/type="(?:button|reset|submit|image)"/.test(at)) continue; // non-submitting input types
+      const box = /type="(?:checkbox|radio)"/.test(at);
+      if (box && !/\bchecked\b/.test(at)) continue;
+      const name = decode((at.match(/name="([^"]*)"/) || [])[1] || '');
+      const val = (at.match(/value="([^"]*)"/) || [])[1];
+      if (name) fields.push([name, val != null ? decode(val) : box ? 'on' : '']); // valueless checked box submits "on"
+    }
+    const btn = inner.match(/<button([^>]*)>([\s\S]*?)<\/button>/);
+    if (!btn) continue;
+    const bName = decode((btn[1].match(/name="([^"]*)"/) || [])[1] || '');
+    if (bName) fields.push([bName, decode((btn[1].match(/value="([^"]*)"/) || [])[1] || '')]);
+    choices.push({ action, fields, label: strip(btn[2]).replace(/^Option \d+:\s*/, '') });
+  }
+  if (!choices.length) return null;
+  const pend = { kind, title, note, choices };
+  // Legacy shape for not-yet-reloaded pages (pre rev-82): veil cards used to be
+  // { options: [{index, text}] } — keep emitting it so an old bag.html's
+  // inv.veil.options.map() doesn't throw while a choice is pending.
+  if (kind === 'veil') pend.options = choices.map((c, i) => ({
+    index: +((c.fields.find(f => f[0] === 'index') || [])[1] ?? i), text: c.label }));
+  return pend;
+}
+
 // Full inventory: currencies, tokens, equipped gear, bag, and the craft form's
 // item options + action buttons. Enough to drive a custom Bag page.
-async function inventory() {
+export async function inventory() { // exported for scrape smoke-tests
   const { text } = await getAuthed('/inventory');
   const nav = (text.match(/top-nav-stats">([^<]*)</) || [])[1] || '';
   // Exact balances live in the craft buttons' data-dust / data-sand attributes
@@ -179,8 +230,15 @@ async function inventory() {
   // Craft form: item_a options + action buttons.
   const craftForm = (text.split('action="/craft"')[1] || '').split('</form>')[0];
   const selA = (craftForm.match(/<select name="item_a">([\s\S]*?)<\/select>/) || [])[1] || '';
-  const options = [...selA.matchAll(/<option value="([^"]*)"[^>]*data-affixes="(\d+)"[^>]*data-tier="(\d+)"[^>]*data-quality="(\d+)"[^>]*data-perfect="(\d)"[^>]*>([^<]*)</g)]
-    .map(m => ({ id: m[1], affixes: +m[2], tier: +m[3], quality: +m[4], perfect: m[5] === '1', label: strip(m[6]) }));
+  // Attribute-order independent (the site appends new data-* attrs, e.g.
+  // data-polish-room in Aug '26). polishRoom: null = attr absent (old site).
+  const options = [...selA.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)</g)]
+    .map(m => {
+      const at = m[2], num = (n) => { const v = (at.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
+      return { id: m[1], affixes: num('data-affixes') ?? 0, tier: num('data-tier') ?? 0,
+        quality: num('data-quality') ?? 0, perfect: num('data-perfect') === 1,
+        polishRoom: num('data-polish-room'), label: strip(m[3]) };
+    });
   // Capture each button's cost data so the client can replicate the live
   // per-item cost calc (base + 3*tier, veil extras, reforge 30*tier, polish).
   const actions = [...craftForm.matchAll(/name="action" value="([^"]+)"([^>]*)>([^<]*)</g)]
@@ -191,11 +249,16 @@ async function inventory() {
         action: m[1], label: strip(m[3]), tip: tipOf(a),
         base: num('data-base'), veilExtra: num('data-veil-extra'),
         dataLabel: (a.match(/data-label="([^"]*)"/) || [])[1] || strip(m[3]).replace(/\s*\(.*\)\s*$/, ''),
-        recombine: /data-recombine/.test(a), polish: /data-polish/.test(a), reforge: /data-reforge/.test(a),
+        recombine: /data-recombine/.test(a), polish: /data-polish(?!-)/.test(a), reforge: /data-reforge/.test(a),
         dust: num('data-dust'), sand: num('data-sand'),
+        confirm: /data-confirm/.test(a), // site marks destructive/committing crafts itself
       };
     });
   const veilTip = tipOf((craftForm.match(/class="veil-check"([^>]*)>/) || [])[1] || '');
+  // Hideout Warrior's "Include Krangle" checkbox (name="hideout_krangle") —
+  // null when the site doesn't render it (pre-Aug-'26 or no hideout button).
+  const hk = craftForm.match(/<input([^>]*name="hideout_krangle"[^>]*)>/);
+  const hideoutKrangle = hk ? { name: 'hideout_krangle', value: (hk[1].match(/value="([^"]*)"/) || [])[1] || '1', checked: /\bchecked\b/.test(hk[1]) } : null;
 
   // Site-side auto-disenchant setting (form POST /set-auto-disenchant):
   // enabled + threshold tier (quality|perfect|sacred) + quality-% floor.
@@ -207,18 +270,9 @@ async function inventory() {
     options: [...adForm.matchAll(/<option value="([^"]+)"[^>]*>([^<]*)</g)].map(m => ({ value: m[1], label: strip(m[2]) })),
   } : null;
 
-  // Pending veil/token choice: a veiled or token craft rolls 3 outcomes and the
-  // site waits for the user to pick one (POST /craft/choose-veil, index 0-2).
-  let veil = null;
-  const vcRegion = (text.split('id="veil-choice"')[1] || '').split('bag-card')[0];
-  if (vcRegion) {
-    const title = strip((vcRegion.match(/<h2>([^<]*)<\/h2>/) || [])[1] || 'Choose your outcome');
-    const options = [...vcRegion.matchAll(/name="index" value="(\d+)"[\s\S]*?<button[^>]*>([^<]*)</g)]
-      .map(m => ({ index: +m[1], text: strip(m[2]).replace(/^Option \d+:\s*/, '') }));
-    if (options.length) veil = { title, options };
-  }
+  const veil = pendingOf(text);
 
-  return { dust, sand, tokens, equipped, bag: bag(text).items, craft: { options, actions, veilTip }, veil, autoDisenchant };
+  return { dust, sand, tokens, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle }, veil, autoDisenchant };
 }
 
 // Passive tree: points chip, respec/save availability, and every node.
@@ -365,7 +419,11 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/action' && req.method === 'POST') {
       const { endpoint, fields } = JSON.parse(await body(req));
-      return json(res, await post(endpoint, fields || {}));
+      const r = await post(endpoint, fields || {});
+      // Success-looking 302 to the login page = dead session; tell the UI apart
+      // from a normal craft redirect so it can say "restart to re-login".
+      if (r.ok && loginRedirect(r.location)) r.expired = true;
+      return json(res, r);
     }
     // static
     let p = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -374,6 +432,7 @@ const srv = createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME[extname(p)] || 'application/octet-stream' });
     res.end(data);
   } catch (e) {
+    if (e.expired) { res.writeHead(401, { 'Content-Type': 'application/json' }); return res.end('{"expired":true}'); }
     res.writeHead(e.code === 'ENOENT' ? 404 : 500);
     res.end(String(e.message || e));
   }
