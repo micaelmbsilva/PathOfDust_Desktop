@@ -398,6 +398,7 @@
 
 <div id="toasts"><button id="dismissAll">✕ Dismiss All</button></div>
 
+<script src="/feed.js"></script>
 <script>
   document.getElementById('appTitle').textContent = GAME_NAME;
   let appVersion = '';
@@ -1311,7 +1312,7 @@
         ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No log for this fight — recorded before the update.</div>'
         : !rep.feed.length
           ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No personal combat events this fight.</div>'
-          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length}) <button data-poplog="${i}" title="Open in its own window">⧉</button></summary>${feedChips()}<div class="ffeed">${
+          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length}) <button data-poplog="${i}" title="Open in its own window">⧉</button></summary>${feedChips()}<div class="ffeed pod-feed">${
               feedLines(rep.feed) || '<p class="muted">Nothing in this category.</p>'}</div></details>`;
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
@@ -1348,15 +1349,18 @@
       const rep = log[+b.dataset.poplog]; if (!rep?.feed?.length) return;
       const w = window.open('', 'flog', 'width=480,height=680,menubar=no,toolbar=no');
       w.document.title = `Fight Log — Stage ${rep.stage}`;
+      // The pop-out is a blank window, so it needs feed.js loaded into it too —
+      // otherwise it has no renderer and no styles of its own.
       w.document.body.innerHTML = `<style>
         body{background:#0c0a16;color:#eae6f5;font:13px "Segoe UI",Arial,sans-serif;padding:12px}
         h2{font-size:1rem;color:#c9bdf0;margin:0 0 10px}
-        .fl{font-size:0.85rem;padding:2px 0}.ft{color:#8a7fb0;font-variant-numeric:tabular-nums;margin-right:6px}
-        .fl.taken{color:#ff9d9d}.fl.healed{color:#7fdba3}.fl.death{color:#ff8080;font-weight:700}
-        .fl.healout{color:#7fdba3}.fl.shielded,.fl.shieldout{color:#82aaff}
-        .fl.buffgain{color:#c792ea}.fl.bufflost{color:#8a7fb0}.fl.myevaded,.fl.dodged{color:#9ad4d4}</style>
-        <h2>📜 Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''} — ${rep.won ? '🏆 Won' : '💀 Lost'} · ${new Date(rep.at).toLocaleTimeString()}</h2>` +
-        rep.feed.map(g => `<div class="fl ${g.kind}"><span class="ft">${fmtT(g.at)}</span>${FLINE[g.kind](g)}</div>`).join('');
+        .pod-feed{border-top:0;max-height:none}</style>
+        <h2>📜 Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''} — ${rep.won ? '🏆 Won' : '💀 Lost'} · ${new Date(rep.at).toLocaleTimeString()}</h2>
+        <div class="pod-feed" id="out"></div>`;
+      const s = w.document.createElement('script');
+      s.src = '/feed.js';
+      s.onload = () => { w.document.getElementById('out').innerHTML = w.PodFeed.lines(rep.feed, 'all'); };
+      w.document.head.appendChild(s);
       w.focus();
     });
     document.querySelectorAll('[data-lb]').forEach(b => b.onclick = (e) => {
@@ -1581,44 +1585,12 @@
   }
   // mitigation suffix: only shown when meaningful (>2% of the hit) — armor,
   // shields, and damage-reduction buffs all land in unmitigated-vs-actual
-  const mitTxt = (g, who) => g.mit > (g.dmg + g.mit) * 0.02 ? ` <span class="mit">(${fmtN(g.mit)} absorbed by ${who})</span>` : '';
-  const buffNames = (g) => g.names.map(k => esc(prettyBuff(k))).join(', ');
-  // Feed category filter (persisted in settings) + consecutive-duplicate
-  // collapse — shared by the live feed, Combat History logs, and the pop-out.
-  const FEED_CATS = { dmg: ['hit', 'taken', 'myevaded', 'dodged', 'death'],
-    heals: ['healed', 'healout', 'shielded', 'shieldout'], buffs: ['buffgain', 'bufflost'] };
-  const feedPass = (g) => { const f = S().feedCat; return !f || f === 'all' || (FEED_CATS[f] || []).includes(g.kind); };
-  const feedChips = () => `<div class="rolechips fchips">` +
-    [['all', 'All'], ['dmg', '⚔️ Damage'], ['heals', '💚 Heals'], ['buffs', '✨ Buffs']].map(([v, l]) =>
-      `<span class="chip pf${(S().feedCat || 'all') === v ? ' on' : ''}" data-fcat="${v}">${l}</span>`).join('') + '</div>';
-  const feedLines = (gs) => { // filter -> collapse identical consecutive lines -> render
-    const out = [];
-    for (const g of gs) {
-      if (!feedPass(g)) continue;
-      const txt = FLINE[g.kind](g);
-      const prev = out[out.length - 1];
-      // collapse only near-adjacent repeats (≤2s apart) — a repeat minutes later
-      // is its own event and keeps its own timestamp
-      if (prev && prev.txt === txt && (g.at || 0) - (prev.lastAt || 0) <= 2000) { prev.n++; prev.lastAt = g.at; continue; }
-      out.push({ at: g.at, lastAt: g.at, kind: g.kind, txt, n: 1 });
-    }
-    return out.map(l => `<div class="fl ${l.kind}"><span class="ft">${fmtT(l.at)}</span>${l.txt}${l.n > 1 ? ` <b>×${l.n}</b>` : ''}</div>`).join('');
-  };
-  const bindFeedChips = (root, rerender) => root.querySelectorAll('[data-fcat]').forEach(el =>
-    el.onclick = () => { setS('feedCat', el.dataset.fcat); rerender(); });
-  const FLINE = {
-    hit: (g) => `⚔️ You → ${esc(g.tgt)}: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits${g.crits ? `, ${g.crits} crit` : ''})` : g.crits ? ' (crit)' : ''}${mitTxt(g, 'their defenses')}`,
-    myevaded: (g) => `🌫️ ${esc(g.tgt)} evaded you${g.n > 1 ? ` ×${g.n}` : ''}`,
-    dodged: (g) => `🌀 You evaded ${esc(g.src)}${g.n > 1 ? ` ×${g.n}` : ''}`,
-    taken: (g) => `🩸 ${esc(g.src)} → you: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits)` : ''}${mitTxt(g, 'your defenses')}`,
-    healed: (g) => `💚 ${esc(g.src)} healed you <b>${fmtN(g.amt)}</b>`,
-    healout: (g) => `💚 You healed ${esc(g.tgt)} <b>${fmtN(g.amt)}</b>`,
-    shielded: (g) => `🛡️ ${esc(g.src)} shielded you <b>${fmtN(g.amt)}</b>`,
-    shieldout: (g) => `🛡️ You shielded ${esc(g.tgt)} <b>${fmtN(g.amt)}</b>`,
-    buffgain: (g) => `✨ Gained: <b>${buffNames(g)}</b>`,
-    bufflost: (g) => `🕯️ Faded: ${buffNames(g)}`,
-    death: () => `💀 You were defeated`,
-  };
+  // Feed rendering lives in feed.js (shared with Fight History). The category
+  // filter is persisted in settings here, so it is passed in and handed back.
+  const feedChips = () => PodFeed.chips(S().feedCat);
+  const feedLines = (gs) => PodFeed.lines(gs, S().feedCat);
+  const bindFeedChips = (root, rerender) => PodFeed.bindChips(root, (cat) => { setS('feedCat', cat); rerender(); });
+
   function renderFight() {
     const body = document.getElementById('fightBody');
     if (!fight) return; // placeholder stays
@@ -1643,7 +1615,7 @@
       ${partialNote(fight.thinned)}
       <div class="flb">${lbTable(board, Math.max(1, cursor / 1000), 'data-lbf')}</div>
       ${feedChips()}
-      <div class="ffeed">${feedLines(feedShown) || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
+      <div class="ffeed pod-feed">${feedLines(feedShown) || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
     bindFeedChips(body, renderFight);
     body.querySelectorAll('[data-lbf]').forEach(b => b.onclick = () => { localStorage.setItem('lbMetric', b.dataset.lbf); renderFight(); });
     const fe = body.querySelector('.ffeed');
