@@ -108,4 +108,13 @@ assert.deepEqual(trimOrder(order, 6), [{ n: 'A', r: 3 }, { n: 'B', r: 3 }]);
   if (inc2) assert.ok(Math.abs(inc2.avg - 6) < 1e-9);
 }
 
+// rollTargets: per-slot tier map — each slot's avg values use its own tier
+{
+  const r = rollTargets('Berserker', 50, { weapon: 100, helm: 50, body: 80, gloves: 80, boots: 80 }, model, null, null);
+  const w = r.plan.weapon.find(pk => pk.match === 'dmg dealt');
+  const h = r.plan.helm.find(pk => pk.match === 'dmg dealt');
+  if (w && h) assert.ok(Math.abs(w.avg / h.avg - 2) < 1e-9, `weapon ${w.avg} vs helm ${h.avg}`);
+  assert.ok(r.sacred.avg > 0);
+}
+
 console.log('advisor-core tests passed');

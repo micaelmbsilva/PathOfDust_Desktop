@@ -164,10 +164,13 @@ export function bestLoadout(equipped, bag, cls, level, model) {
 }
 
 // Derived craft plan: per slot, the 4 crafted mods (+1 sacred wish across the
-// set) with the biggest marginal class-score gain of one average roll at
-// `tier`. `empirical` (from api/affix-rates) overrides a model perTier when
-// they disagree by >20% — covers a live balance-toml override.
+// set) with the biggest marginal class-score gain of one average roll. `tier`
+// is a number, or a {slot: tier} map so each slot plans at the tier of the
+// base item actually being crafted on (mods roll at ITEM tier). `empirical`
+// (from api/affix-rates) overrides a model perTier when they disagree by
+// >20% — covers a live balance-toml override.
 export function rollTargets(cls, level, tier, model, baseBuckets, empirical) {
+  const tierOf = (s) => (tier && typeof tier === 'object') ? (+tier[s] || 1) : (+tier || 1);
   const perTier = (a) => {
     const emp = empirical && empirical[a.match];
     return (emp && Math.abs(emp - a.perTier) / a.perTier > 0.2) ? emp : a.perTier;
@@ -175,33 +178,36 @@ export function rollTargets(cls, level, tier, model, baseBuckets, empirical) {
   const g = { ...emptyBuckets(), ...(baseBuckets || {}) };
   const slots = ['weapon', 'helm', 'body', 'gloves', 'boots'];
   const plan = Object.fromEntries(slots.map(s => [s, []]));
-  const gain = (a, mult) => { // % variant targeted when crafting (flat max hp shares its label)
+  const gain = (a, t, mult) => { // % variant targeted when crafting (flat max hp shares its label)
     const before = classScore(cls, g, level, model).score;
-    const v = perTier(a) * tier * (mult || 1);
+    const v = perTier(a) * t * (mult || 1);
     g[a.bucket] += v;
     const after = classScore(cls, g, level, model).score;
     g[a.bucket] -= v;
     return after - before;
   };
   for (const slot of slots) {
+    const t = tierOf(slot);
     for (let pick = 0; pick < model.rules.modCap; pick++) {
       const eligible = model.affixes.filter(a =>
         (!a.slots || a.slots.includes(slot)) && !plan[slot].some(p => p.match === a.match));
       let best = null, bestGain = -1;
       for (const a of eligible) {
-        const d = gain(a);
+        const d = gain(a, t);
         if (d > bestGain) { bestGain = d; best = a; }
       }
       if (!best) break;
-      plan[slot].push({ match: best.match, avg: perTier(best) * tier });
-      g[best.bucket] += perTier(best) * tier;
+      plan[slot].push({ match: best.match, avg: perTier(best) * t });
+      g[best.bucket] += perTier(best) * t;
     }
   }
-  // One sacred wish: any affix, any slot, 1.38× an average max roll, dup allowed.
+  // One sacred wish: any affix, any slot, 1.38× an average max roll, dup
+  // allowed — valued at the best tier among the slots.
+  const maxT = Math.max(...slots.map(tierOf));
   let sacred = null, sacredGain = -1;
   for (const a of model.affixes) {
-    const d = gain(a, model.rules.sacredMult);
-    if (d > sacredGain) { sacredGain = d; sacred = { match: a.match, avg: perTier(a) * tier * model.rules.sacredMult }; }
+    const d = gain(a, maxT, model.rules.sacredMult);
+    if (d > sacredGain) { sacredGain = d; sacred = { match: a.match, avg: perTier(a) * maxT * model.rules.sacredMult }; }
   }
   return { plan, sacred };
 }
