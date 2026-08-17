@@ -50,6 +50,8 @@
   .grouphdr { font-size: 0.9rem; color: #b0a2d9; margin: 14px 0 6px; }
   select { background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; padding: 3px 6px; }
   .mline { display: flex; align-items: center; gap: 6px; }
+  /* Reforge/Recombine crit-granted bonus modifier — green, same as the site */
+  .mt.crit { color: #6ee08a; font-weight: 600; }
   .roll { font-size: 0.68rem; font-weight: 700; padding: 0 5px; border-radius: 4px;
     border: 1px solid currentColor; white-space: nowrap; }
   .roll.gold { color: #ffcf5a; }
@@ -116,9 +118,13 @@
     // currency-capable actions (craft/veil/polish/reforge/disenchant) are stamped
     // so the main window's battle toast can flag deltas mixed with crafting
     if (/craft|disenchant/.test(endpoint)) localStorage.setItem('lastCraftAt', Date.now());
-    const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
-    if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
+    let r;
+    try {
+      r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
+    } catch { r = { ok: false, status: 'network' }; } // bridge down / non-JSON 500 — surface, don't die silently
+    if (r.expired) { r.ok = false; $('err').textContent = 'Session expired — restart the app to log in again.'; }
+    else if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
     return r;
   }
   const esc = (s) => (s || '').replace(/"/g, '&quot;');
@@ -138,9 +144,10 @@
   const tierOf = (r) => r >= 95 ? 1 : r >= 90 ? 2 : r >= 75 ? 3 : r >= 50 ? 4 : r >= 35 ? 5 : r >= 25 ? 6 : r >= 15 ? 7 : 8;
   const modLine = (m) => {
     const r = rollOf(m.tip);
-    if (r == null) return `<div class="mline"><span class="mt">${m.t}</span></div>`;
+    const mt = `<span class="mt${m.crit ? ' crit' : ''}">${m.t}</span>`;
+    if (r == null) return `<div class="mline">${mt}</div>`;
     const t = tierOf(r);
-    return `<div class="mline"><span class="mt">${m.t}</span>` +
+    return `<div class="mline">${mt}` +
       `<span class="roll t${t}${r > 90 ? ' gold' : ''}">T${t} · ${r}%</span></div>`;
   };
   const itemCard = (it, acts) => `
@@ -198,7 +205,7 @@
       for (const m of (ai.mods || [])) {
         if (had.has(m.t)) continue;
         const r = rollOf(m.tip);
-        parts.push(`${ai.name}: ${m.t}${r != null ? ` <b>(T${tierOf(r)}·${r}%)</b>` : ''}`);
+        parts.push(`${ai.name}: ${m.crit ? `<span class="mt crit">${m.t} ✦ crit!</span>` : m.t}${r != null ? ` <b>(T${tierOf(r)}·${r}%)</b>` : ''}`);
       }
       if (ai.tier && bi.tier && ai.tier !== bi.tier) parts.push(`${ai.name}: ${bi.tier} → <b>${ai.tier}</b>`);
     }
@@ -239,6 +246,7 @@
       fetch('/api/me').then(r => r.json()).catch(() => ({})),
     ]); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
+    if (inv.expired || meData.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
 
     if (meData.name) document.title = `${GAME_NAME} — Bag — ${meData.name}`;
     const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
@@ -269,15 +277,18 @@
     $('equipped').innerHTML = inv.equipped.map(it =>
       itemCard(it, `<button data-un="${it.slot}">Unequip</button> ${shareBtn(it)}`)).join('') || '<p class="muted">Nothing equipped.</p>';
 
-    // pending veil/token choice: show the 3 outcomes to pick from (tier the roll if present)
+    // pending choice card: veiled/token craft picker OR the veiled-Chancing
+    // wizard (multi-step). Choices replay the site's own forms verbatim.
+    // NOTE: an option's % is the stat value, not a roll — no tier badge.
     if (inv.veil) {
-      $('veilChoice').innerHTML = `<div class="veilbox"><h2>${inv.veil.title}</h2>` +
-        `<p class="muted">Pick one — the other two are discarded.</p><div class="acts">` +
-        // NOTE: the option's % is the stat value, not a roll — the site doesn't
-        // expose the roll here, so no tier badge (would be misleading).
-        inv.veil.options.map(o => `<button data-veilpick="${o.index}">${o.text}</button>`).join('') +
+      const v = inv.veil;
+      pendChoices = v.choices || (v.options || []).map(o => // old-bridge shape (pre rev-72)
+        ({ action: 'craft/choose-veil', fields: [['index', String(o.index)]], label: o.text }));
+      $('veilChoice').innerHTML = `<div class="veilbox"><h2>${v.title}</h2>` +
+        `<p class="muted">${v.note || 'Pick one — the other options are discarded.'}</p><div class="acts">` +
+        pendChoices.map((c, i) => `<button data-veilpick="${i}">${c.label}</button>`).join('') +
         `</div></div>`;
-    } else { $('veilChoice').innerHTML = ''; }
+    } else { $('veilChoice').innerHTML = ''; pendChoices = null; }
 
     lastBag = inv.bag;
     renderBag();
@@ -290,6 +301,7 @@
       <label>Item A <select id="itemA">${inv.craft.options.map(opt).join('')}</select></label>
       <label>Item B (Recombine) <select id="itemB"><option value="">None</option>${inv.craft.options.map(opt).join('')}</select></label>
       <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"> Veil This Craft (+500 dust; Recombine also +500 per combined modifier)</label>
+      ${inv.craft.hideoutKrangle ? `<label class="hint" title="Hideout Warrior only: leave checked to end on Krangle (permanently locks the item); uncheck to stop after Exalt"><input type="checkbox" id="hideoutK"${inv.craft.hideoutKrangle.checked ? ' checked' : ''}> Include Krangle (Hideout Warrior)</label>` : ''}
       <div class="acts">${inv.craft.actions.filter(a => !a.polish && !a.reforge).map(a =>
         `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}</div>
       <div class="acts" style="align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(160,140,255,0.18)">
@@ -312,12 +324,21 @@
     $('itemA').onchange = () => { localStorage.setItem('craftItemA', $('itemA').value); updateCosts(); };
     $('itemB').onchange = () => { localStorage.setItem('craftItemB', $('itemB').value); updateCosts(); };
     $('veil').onchange = updateCosts;
+
+    // While a choice is pending the site rejects every craft — lock the form so
+    // "nothing happened" clicks can't pile up, and point at the pending card.
+    if (inv.veil) {
+      $('craft').querySelectorAll('button,select,input').forEach(el => el.disabled = true);
+      $('craft').insertAdjacentHTML('afterbegin',
+        '<p class="muted">⏳ Crafting is locked until you finish the pending choice above.</p>');
+    }
   }
 
   // Replicate the live site's per-item cost calc so button costs are correct
   // for the selected item (base + 3*tier; veil extras; reforge 30*tier; polish
   // by quality). Token-based buttons (Regal/Krangle) keep the server label.
   let lastCraft = { options: [], actions: [] };
+  let pendChoices = null; // pending-card choices, indexed by data-veilpick
   const batchTimes = () => +([...document.querySelectorAll('.batchx')].find(b => b.checked)?.value || 1);
   function updateCosts() {
     const byId = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
@@ -331,7 +352,7 @@
     for (const a of lastCraft.actions || []) {
       const btn = document.querySelector(`[data-craft="${a.action}"]`);
       if (!btn) continue;
-      if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c; continue; }
+      if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c || A?.polishRoom === 0; continue; }
       if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
       if (a.base == null) { btn.textContent = a.label; btn.disabled = false; continue; } // Regal/Krangle: token label
       let cost = a.recombine ? a.base : a.base + 3 * tierA;
@@ -408,7 +429,17 @@
       if (!confirm(`Disenchant ${d.name}? Can't be undone.`)) return;
       await craftAct('disenchant', { item_id: d.dis }, 'Disenchant', { currency: true }); return refresh();
     }
-    if (d.veilpick !== undefined) { await craftAct('craft/choose-veil', { index: d.veilpick }, 'Chosen'); return refresh(); }
+    if (d.veilpick !== undefined) {
+      // Replay the site's own form for this choice. No craftAct diffing: a
+      // multi-step walk (Chancing) parks the NEXT step instead of changing the
+      // inventory, which the diff would misread as "rejected" — just reload.
+      const c = (pendChoices || [])[+d.veilpick];
+      if (!c) return refresh();
+      document.querySelectorAll('[data-veilpick]').forEach(el => el.disabled = true); // no double-submit — could auto-advance a wizard step
+      const r = await api(c.action.replace(/^\//, ''), c.fields);
+      if (r.ok) toast('✅ Choice submitted');
+      return refresh();
+    }
     if (d.share !== undefined) {
       try { await navigator.clipboard.writeText(d.share); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
       catch { $('err').textContent = 'Clipboard blocked'; }
@@ -419,9 +450,15 @@
       const fields = { action, item_a: $('itemA').value };
       if (action === 'recombine' && $('itemB').value) fields.item_b = $('itemB').value;
       if ($('veil').checked) fields.veiled = '1';
+      if (action === 'hideout warrior' && lastCraft.hideoutKrangle && $('hideoutK')?.checked)
+        fields.hideout_krangle = lastCraft.hideoutKrangle.value; // unchecked = omitted, like a real form
       const times = batchTimes();
       if (times > 1 && (action === 'polishing' || action === 'reforge')) fields.times = String(times);
-      if ((action === 'scour' || action === 'krangle') && !confirm(`${action} this item? Can't be undone.`)) return;
+      // The site marks committing/destructive crafts itself (data-confirm);
+      // scour/krangle stay as a fallback for an old bridge without that field.
+      const aDef = (lastCraft.actions || []).find(x => x.action === action);
+      if ((aDef?.confirm || action === 'scour' || action === 'krangle') &&
+          !confirm(`${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
       await craftAct('craft', fields, title(action)); refresh();
     }
   });
