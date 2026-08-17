@@ -1239,34 +1239,43 @@
   // Fast-path bookkeeping: the fight ticks (900ms) rebuild the whole pane, which
   // wipes CSS transitions/animations. When only the bars move (same members,
   // order and flags) we mutate the existing nodes instead, so the fill glide,
-  // damage trail and low-HP pulse actually play. lastMaxHp remembers each
-  // member's max so idle/between-fight bars still get notches.
+  // damage trail and low-HP pulse actually play. hpCache remembers each member's
+  // max (persisted) so idle/between-fight bars still get correct notches.
   let lastPartySig = null;
-  const lastMaxHp = {};
-  // When we've never seen a member's max HP in a fight (fresh session, resting
-  // bars), the backend's build API exposes it: stats.Health, keyed by display
-  // name, from that player's pings. CORS is open so the renderer fetches it
-  // directly — once per member, cached (number | null=missing | 'pending').
+  // Persistent max-HP cache (pid -> {hp, at}) so bars never start at a default/0
+  // scale on a fresh session — seeded from localStorage, kept current from live
+  // fights and refreshed from the backend when stale. The build API exposes each
+  // player's max Health (stats.Health, by display name) from their pings; CORS is
+  // open so the renderer fetches it directly.
   const BUILD_API = 'https://pathofdustdesktop-production.up.railway.app';
-  const buildMaxHp = {};
+  const HP_CACHE = 'partyHpMax', HP_TTL = 12 * 3600 * 1000;
+  let hpCache = {}; try { hpCache = JSON.parse(localStorage.getItem(HP_CACHE)) || {}; } catch {}
+  { const cut = Date.now() - 30 * 86400000; for (const k in hpCache) if (!(hpCache[k] && hpCache[k].at > cut)) delete hpCache[k]; }
   const parseHp = (s) => { const m = String(s).match(/([\d.]+)\s*([kmb]?)/i);
     return m ? Math.round(+m[1] * ({ k: 1e3, m: 1e6, b: 1e9 }[(m[2] || '').toLowerCase()] || 1)) : 0; };
+  let hpSaveT = null;
+  const saveHpCache = () => { clearTimeout(hpSaveT); hpSaveT = setTimeout(() => {
+    try { localStorage.setItem(HP_CACHE, JSON.stringify(hpCache)); } catch {} }, 800); };
+  const setHp = (pid, hp) => { if (!(hp > 0)) return; const e = hpCache[pid];
+    if (e && e.hp === hp && Date.now() - e.at < 3600000) return; // fresh + unchanged — skip the write
+    hpCache[pid] = { hp, at: Date.now() }; saveHpCache(); };
+  const buildPending = {};
   let buildRepaintT = null;
   const fetchBuildHp = (name) => {
     const pid = name.toLowerCase();
-    if (pid in buildMaxHp) return; // pending/number/null all set the key — never refetch
-    buildMaxHp[pid] = 'pending';
-    fetch(`${BUILD_API}/api/build/${encodeURIComponent(name)}`, { cache: 'default' })
+    if (buildPending[pid]) return;
+    buildPending[pid] = 1;
+    fetch(`${BUILD_API}/api/build/${encodeURIComponent(name)}`)
       .then(r => r.ok ? r.json() : null)
       .then(j => {
+        delete buildPending[pid];
         const hp = j && j.stats && parseHp(j.stats.Health);
-        buildMaxHp[pid] = hp > 0 ? hp : null;
-        // One coalesced repaint once builds land, so notches/scale refine without
-        // a render per resolved fetch.
-        if (hp > 0) { clearTimeout(buildRepaintT); buildRepaintT = setTimeout(() => {
-          if (document.getElementById('partypanel').classList.contains('open')) renderParty(); }, 250); }
+        if (hp > 0) { setHp(pid, hp);
+          clearTimeout(buildRepaintT); buildRepaintT = setTimeout(() => {
+            if (document.getElementById('partypanel').classList.contains('open')) renderParty(); }, 250); }
+        else if (!hpCache[pid]) { hpCache[pid] = { hp: 0, at: Date.now() }; saveHpCache(); } // remember the miss
       })
-      .catch(() => { buildMaxHp[pid] = null; });
+      .catch(() => { delete buildPending[pid]; });
   };
   // Notch period as a % of a member's own bar. One fixed HP-per-notch across the
   // party (refMax/16, so the tankiest shows ~16), but each bar's notch COUNT is
@@ -1311,16 +1320,16 @@
     // aren't the roster login). Downed IS dead — a downed member always renders
     // empty/red regardless of the last HP sample. No fight data → full/neutral.
     // A shield_hp absorb rides on top as a bluish glow that shrinks as it's spent.
-    // Best-known max HP for a member: the live fight, else last seen in a fight
-    // this session, else the backend build (fetched lazily). 0 while unknown.
+    // Best-known max HP for a member: the live fight (authoritative, cached),
+    // else the persisted cache (refreshed in the background when stale), else the
+    // backend build (fetched lazily). Only a never-before-seen member reads 0.
     const maxOf = (c) => {
       const pid = c.displayName.toLowerCase();
       const u = unitOf(c);
-      if (u && u.max) { lastMaxHp[pid] = u.max; return u.max; }
-      if (lastMaxHp[pid]) return lastMaxHp[pid];
-      const b = buildMaxHp[pid];
-      if (typeof b === 'number') return b;
-      fetchBuildHp(c.displayName); // deduped; repaints when it lands
+      if (u && u.max) { setHp(pid, u.max); return u.max; }
+      const e = hpCache[pid];
+      if (e) { if (Date.now() - e.at > HP_TTL) fetchBuildHp(c.displayName); return e.hp || 0; }
+      fetchBuildHp(c.displayName); // first-ever sighting; repaints when it lands
       return 0;
     };
     // Party-wide HP scale (its biggest active member), so the fixed HP-per-notch —
