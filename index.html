@@ -174,6 +174,9 @@
   .bstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px;
     font-size: 0.82rem; margin-bottom: 8px; }
   .bstats .l { color: #b0a2d9; } .bstats b { font-variant-numeric: tabular-nums; }
+  .partial { font-size: 0.74rem; color: #ffd479; background: rgba(255,212,121,0.1);
+    border: 1px solid rgba(255,212,121,0.35); border-radius: 6px;
+    padding: 4px 8px; margin: 2px 0 8px; cursor: help; }
   .btabs { display: flex; gap: 6px; margin: 6px 0; }
   .btabs button { border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.15); color: #eae6f5; }
@@ -1114,6 +1117,41 @@
   // note here was an early guess and is off by up to an order of magnitude —
   // count scales with party size and stage, and the whole thing is pushed to
   // every viewer on the overlay socket.
+  // Did the game drop events out of this fight's live feed?
+  // thin_events_for_overlay (PathofDust combat.rs, 2026-08-17) caps how many
+  // events per second of DISPLAY time reach the socket — 500 player-caused,
+  // 1000 boss-caused — and drops the overflow. It runs after the fight is
+  // decided and persisted, so the site's own /fights page still has everything;
+  // only our copy is short. That makes every total we derive here an
+  // under-count, and not a fair sample either: it keeps the first N in each
+  // bucket by emission order, so the same units win every time. We can't
+  // recover the data, so the least we can do is not present it as complete.
+  //
+  // A bucket can never EXCEED its cap, so landing exactly on it is the tell.
+  // ponytail: caps hardcoded to mirror the server's constants — if it retunes
+  // them we get false negatives (silence), which is the safe direction.
+  const OVERLAY_CAP = { player: 500, boss: 1000 };
+  const partialNote = (t) => !t ? '' :
+    `<div class="partial" data-tip="The game caps the live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth, and drops the rest. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. The website's own Fight History page still has the complete log.">` +
+    `⚠️ Partial data — the game trimmed this fight's live feed, so these totals are under-counts.</div>`;
+  const actorOf = (ev) => ev.attacker || ev.healer || ev.unit || '';
+  function thinningOf(d) {
+    const boss = new Set((d.units || []).filter(u => u.isBoss || /^__enemy/.test(u.id)).map(u => u.id));
+    const perSec = new Map(); // sec -> [playerCount, bossCount]
+    for (const ev of d.events || []) {
+      const sec = Math.floor((ev.atMs || 0) / 1000);
+      let c = perSec.get(sec);
+      if (!c) perSec.set(sec, c = [0, 0]);
+      c[boss.has(actorOf(ev)) ? 1 : 0]++;
+    }
+    let pSec = 0, bSec = 0;
+    for (const [, c] of perSec) {
+      if (c[0] >= OVERLAY_CAP.player) pSec++;
+      if (c[1] >= OVERLAY_CAP.boss) bSec++;
+    }
+    return pSec || bSec ? { player: pSec, boss: bSec, secs: perSec.size } : null;
+  }
+
   function buildReport(d) {
     const players = {}; // id -> displayName (bosses/adds excluded)
     for (const u of d.units || []) if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName;
@@ -1146,6 +1184,7 @@
       myLoot: (d.loot || []).filter(l => l.displayName.toLowerCase() === myName.toLowerCase())
         .map(l => ({ item: l.itemName, slot: l.slot, outcome: lootText(l.outcome) })),
       board: Object.entries(agg).map(([id, a]) => ({ n: players[id], ...a })),
+      thinned: thinningOf(d), // null when the whole fight fit under the caps
     };
   }
   function saveBattle(rep) {
@@ -1185,6 +1224,7 @@
       return;
     }
     const lb = (rep) => lbTable(rep.board, Math.max(1, (rep.durMs || 0) / 1000), 'data-lb');
+    // Say it plainly rather than showing short numbers as if they were the truth.
     document.getElementById('battlesBody').innerHTML = log.map((rep, i) => {
       const m = rep.me, secs = Math.max(1, (rep.durMs || 0) / 1000);
       // no hits, damage, or healing either way — downed/retreated/just joined
@@ -1198,8 +1238,9 @@
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
         <span>Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''}</span>
-        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`} · ${ago(rep.at)}</span></div>
+        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`}${rep.thinned ? ' · ~' : ' · '}${ago(rep.at)}</span></div>
         <div class="bbody">
+          ${partialNote(rep.thinned)}
           ${idle ? '<p class="muted" style="margin:2px 0 8px">🪦 You sat this one out — downed, retreated, or joined late.</p>' : `<div class="bstats">
             <span><span class="l">Damage Dealt</span> <b>${fmtN(m.dmg)}</b> (${(m.share * 100).toFixed(1)}%)</span>
             <span><span class="l">DPS</span> <b>${fmtN(m.dmg / secs)}</b></span>
@@ -1443,7 +1484,8 @@
     }
     const dur = d.displayDurationMs || maxAt;
     fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, agg: {}, mySnaps,
-      players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind };
+      players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
+      thinned: thinningOf(d) };
     if (document.getElementById('fightpanel').classList.contains('open')) startFightTimer();
   }
   function startFightTimer() {
@@ -1512,6 +1554,7 @@
     const keepScroll = atBottom(body.querySelector('.ffeed'));
     body.innerHTML =
       `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}</div>
+      ${partialNote(fight.thinned)}
       <div class="flb">${lbTable(board, Math.max(1, cursor / 1000), 'data-lbf')}</div>
       ${feedChips()}
       <div class="ffeed">${feedLines(feedShown) || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
