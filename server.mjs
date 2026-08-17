@@ -154,6 +154,27 @@ function bag(text) {
   return { items };
 }
 
+// Party classes: the /characters roster shows "Level N Class" per player — the
+// game WS roster doesn't carry class at all. Cached ~30 min; lowercased names.
+// A failed/empty scrape keeps serving the last good cache.
+let rosterCache = { at: 0, classes: {} };
+export async function rosterClasses() { // exported for scrape smoke-tests
+  if (Date.now() - rosterCache.at < 30 * 60000) return rosterCache.classes;
+  let text;
+  // site down / scrape hiccup → serve the stale cache instead of a 500; a dead
+  // session still surfaces as 401 so the page can say "restart to re-login"
+  try { ({ text } = await getAuthed('/characters')); }
+  catch (e) { if (e.expired) throw e; return rosterCache.classes; }
+  const classes = {};
+  for (const chunk of text.split('class="roster-card"').slice(1)) {
+    const name = strip((chunk.match(/class="roster-name"[^>]*>([^<]*)</) || [])[1] || '');
+    const m = chunk.match(/class="roster-meta"[^>]*>\s*Level\s+(\d+)\s+([A-Za-z]+)/) || [];
+    if (name && m[2]) classes[name.toLowerCase()] = { cls: m[2], level: +m[1] };
+  }
+  if (Object.keys(classes).length) rosterCache = { at: Date.now(), classes };
+  return rosterCache.classes;
+}
+
 // Pending choice card: a veiled/token craft (id="veil-choice") or the veiled
 // Chancing walk (id="chancing-wizard") parks server-rendered forms and the
 // site blocks further crafting until a choice is made. Parsed generically —
@@ -412,6 +433,9 @@ const srv = createServer(async (req, res) => {
       const { level, message } = JSON.parse(await body(req) || '{}');
       telemetry('/log', { level, message });
       return json(res, { ok: true });
+    }
+    if (url.pathname === '/api/roster-classes') {
+      return json(res, await rosterClasses());
     }
     if (url.pathname === '/api/me') {
       return json(res, await me());
