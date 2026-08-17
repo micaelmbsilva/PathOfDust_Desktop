@@ -140,7 +140,7 @@
       ? hits.map(r => `<button class="rcard" data-login="${esc(r.login)}">
           <img src="${esc(r.sprite)}" alt="" onerror="this.style.visibility='hidden'">
           <span><span class="rn">${esc(r.name)}</span><br>
-          <span class="rm">Lv ${r.level} ${esc(r.cls)} · ${r.wins}W/${r.losses}L (${esc(r.winrate)})</span></span>
+          <span class="rm">Lv ${r.level} ${esc(r.cls)} · ${esc(r.wins)}W/${esc(r.losses)}L (${esc(r.winrate)})</span></span>
         </button>`).join('')
       : '<p class="muted">Nobody matches that.</p>';
     $('pick').innerHTML = '<option value="">— pick a character —</option>' +

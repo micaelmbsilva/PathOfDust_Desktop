@@ -101,9 +101,26 @@ const rosterPage = `<div class="roster-grid">
 const rl = rosterOf(rosterPage);
 assert.equal(rl.length, 2);
 assert.deepEqual([rl[0].login, rl[0].name, rl[0].cls, rl[0].level, rl[0].wins, rl[0].losses, rl[0].winrate],
-  ['lokati_gaming', 'Lokati', 'Slayer', 91, 140, 30, '82%']);
+  ['lokati_gaming', 'Lokati', 'Slayer', 91, '140', '30', '82%']);
 assert.match(rl[0].sprite, /^https:\/\/adventure\.lokati\.net\/sprites\/knight\.png$/, 'sprite URL is absolute');
-assert.equal(rl[1].wins, 0);
+assert.equal(rl[1].wins, '0');
+assert.equal(rl[1].winrate, '—', 'no games played renders an em dash, not 0%');
+
+// W/L pass through the site's format_number, so anyone past 1000 fights arrives
+// abbreviated. Parsing these as \d+ silently produced 0W/0L for the whole
+// roster — every character on the live site is well past that.
+const abbrev = `<a class="roster-card" href="/characters/veteran">
+  <div class="roster-name">Veteran</div>
+  <div class="roster-meta">Level 121 Warlock</div>
+  <div class="roster-meta">1.2KW / 340L (78%)</div></a>
+  <a class="roster-card" href="/characters/ancient">
+  <div class="roster-name">Ancient</div>
+  <div class="roster-meta">Level 121 Druid</div>
+  <div class="roster-meta">3.4MW / 1.1KL (75%)</div></a>`;
+const ab = rosterOf(abbrev);
+assert.deepEqual([ab[0].wins, ab[0].losses, ab[0].winrate], ['1.2K', '340', '78%']);
+assert.deepEqual([ab[1].wins, ab[1].losses, ab[1].winrate], ['3.4M', '1.1K', '75%']);
+assert.equal(ab[0].level, 121, 'level still parses alongside an abbreviated record');
 
 // --- Another player's sheet. Empty gear slots must survive (the grid keeps its
 // five cells); bag items must NOT be counted as equipped.
