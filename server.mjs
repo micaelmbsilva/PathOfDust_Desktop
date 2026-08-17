@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 82;
+const BRIDGE_REV = 83;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -554,6 +554,49 @@ export function fightsOf(text) { // exported for scrape smoke-tests
   return { gated: false, fights: list };
 }
 
+// Interface hot-pull: same sha-pinned fetch the shell does at launch, but
+// written next to the running bridge so static serving picks the new files up
+// immediately. Changes to server.mjs/actions.mjs themselves still need an app
+// restart — the running modules can't be re-imported, which is what BRIDGE_REV
+// vs version.json tells the UI.
+//
+// Deliberately the ONLY thing that talks to GitHub. Every open page polls this
+// bridge for the revision instead of checking upstream itself: raw.github
+// rate-limits per IP and hands back 429s, and five windows each checking would
+// reach that five times faster.
+let pulling = null;          // in-flight guard — concurrent callers share one pull
+let pullBackoffUntil = 0;    // set on failure so a 429 isn't hammered
+async function pullInterface() {
+  if (pulling) return pulling;
+  if (Date.now() < pullBackoffUntil) return { updated: false, throttled: true };
+  pulling = (async () => {
+    try {
+      const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' } }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
+      const cur = await appVersion();
+      const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
+      const base = `https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}`;
+      const manifest = JSON.parse(await g(`${base}/version.json`));
+      if (manifest.version <= cur) return { updated: false, version: cur };
+      const files = await Promise.all(manifest.files.map(f => g(`${base}/${f}`).then(t => [f, t]))); // all fetched before writing
+      for (const [f, t] of files) await writeFile(new URL('./' + f, import.meta.url), t);
+      await writeFile(new URL('./version.json', import.meta.url), JSON.stringify(manifest));
+      console.log(`interface updated -> ${manifest.version}`);
+      return { updated: true, version: manifest.version };
+    } catch (e) {
+      // Most often a 429 from raw.githubusercontent. Back off rather than
+      // retrying on the next tick and making the limit worse.
+      pullBackoffUntil = Date.now() + 60 * 60000;
+      console.error('interface pull failed:', e.message);
+      return { updated: false, error: true };
+    } finally { pulling = null; }
+  })();
+  return pulling;
+}
+// Check periodically so a long-running app picks changes up on its own; the
+// pages notice the new revision via /api/version and reload themselves.
+setTimeout(pullInterface, 2 * 60000);
+setInterval(pullInterface, 30 * 60000);
+
 let logChain = Promise.resolve(); // serializes fight-log write+prune
 
 const srv = createServer(async (req, res) => {
@@ -700,23 +743,7 @@ const srv = createServer(async (req, res) => {
       return json(res, await passives());
     }
     if (url.pathname === '/api/pull-interface' && req.method === 'POST') {
-      // On-demand interface hot-pull: same sha-pinned fetch the shell does at
-      // launch, but written next to the running bridge so static serving picks
-      // the new files up immediately (the caller reloads its window). Changes
-      // to server.mjs/actions.mjs themselves still need an app restart — the
-      // running modules can't be re-imported.
-      try {
-        const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' } }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
-        const cur = await appVersion();
-        const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
-        const base = `https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}`;
-        const manifest = JSON.parse(await g(`${base}/version.json`));
-        if (manifest.version <= cur) return json(res, { updated: false, version: cur });
-        const files = await Promise.all(manifest.files.map(f => g(`${base}/${f}`).then(t => [f, t]))); // all fetched before writing
-        for (const [f, t] of files) await writeFile(new URL('./' + f, import.meta.url), t);
-        await writeFile(new URL('./version.json', import.meta.url), JSON.stringify(manifest));
-        return json(res, { updated: true, version: manifest.version });
-      } catch { return json(res, { updated: false, error: true }); }
+      return json(res, await pullInterface());
     }
     if (url.pathname === '/api/open-wiki' && req.method === 'POST') {
       // Open the game wiki in the user's default browser. Fixed URL on purpose —
