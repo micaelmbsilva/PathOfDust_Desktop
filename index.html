@@ -800,13 +800,11 @@
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
     inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
-    fights: { label: '📜 Fight History', title: 'Operator only — the site\'s server-side breakdown of the last 10 encounters', act: () => toggleModal('fights'), isActive: panelOpen('fights') },
+    fights: { label: '📜 Fight History', title: "Recent fights — the site's own breakdown where it's available, otherwise the ones this app recorded", act: () => toggleModal('fights'), isActive: panelOpen('fights') },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the
-  // backend's PING_KEY (sent by the bridge) is the actual auth. /fights is
-  // narrower still: the game hardcodes one login and 404s everyone else.
-  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'],
-    fights: ['lokati_gaming'] };
+  // backend's PING_KEY (sent by the bridge) is the actual auth.
+  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'] };
   const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
