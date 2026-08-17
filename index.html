@@ -437,6 +437,11 @@
   // a window that starts that way left saving disabled for the entire session,
   // so nothing was ever persisted and every launch looked like a factory reset.
   // A deadline expires on its own no matter what does or doesn't fire.
+  // Every panel's save(), so pagehide can flush them all. Declared here, not
+  // beside wirePanel: the first wirePanel calls run ~300 lines earlier, and a
+  // const declared after them puts this in the temporal dead zone at that point,
+  // which throws and takes the whole script — and so the whole app — down.
+  const panelSaves = [];
   let restoreUntil = Date.now() + 20000; // generous cap if restore never runs at all
   const restoring = () => Date.now() < restoreUntil;
 
@@ -821,7 +826,6 @@
     }
   }
   // drag + collapse + geometry persistence — same behavior as the chat/stream panels
-  const panelSaves = [];
   function wirePanel(panelId, barId, cbtnId, key) {
     const panel = document.getElementById(panelId), bar = document.getElementById(barId), cbtn = document.getElementById(cbtnId);
     const save = persistPanel(panel, key);
