@@ -92,6 +92,27 @@
   .modn { margin: 6px 0 0 20px; font-size: 13px; }
   .modn b { color: var(--ink-2); }
 
+  /* Game-replica tree canvas (colors ported from the game's own /passives page) */
+  .gwrap { overflow-x: auto; background: #0c0a16; border: 1px solid var(--border); border-radius: 10px; padding: 18px 10px; }
+  .gstage { position: relative; margin: 0 auto; }
+  .gstage svg { position: absolute; left: 0; top: 0; pointer-events: none; shape-rendering: crispEdges; }
+  .gnode { position: absolute; transform: translate(-50%, -50%); background: #1c1830;
+           border: 1.5px solid rgba(160,140,255,0.18); border-radius: 10px; padding: 6px 8px;
+           text-align: center; cursor: help; color: #eae6f5; }
+  .gnode .gname { font-weight: 700; font-size: 12.5px; line-height: 1.2; }
+  .gnode.kind-skill .gname { font-size: 13.5px; }
+  .gnode.kind-mod .gname { font-size: 11.5px; }
+  .gnode .gkind { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: #766a99; }
+  .gnode.kind-root { background: linear-gradient(160deg, rgba(255,59,78,0.16), rgba(28,24,48,0.9));
+                     border-color: rgba(255,59,78,0.5); padding: 10px 14px; }
+  .gnode.pick { border-color: rgba(255,59,78,0.55); box-shadow: 0 0 0 1px rgba(255,59,78,0.12), 0 8px 22px rgba(255,59,78,0.12); }
+  .gnode.pick.gold { border-color: rgba(255,215,107,0.6); box-shadow: 0 0 0 1px rgba(255,215,107,0.15), 0 8px 22px rgba(255,215,107,0.12); }
+  .gnode.dead { opacity: 0.45; border-style: dashed; }
+  .gdots { display: flex; justify-content: center; gap: 3px; margin-top: 5px; }
+  .gdot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #766a99; }
+  .gdot.on { background: #ff3b4e; border-color: #ff3b4e; box-shadow: 0 0 6px rgba(255,59,78,0.7); }
+  .gdot.gold { background: #ffd76b; border-color: #ffd76b; box-shadow: 0 0 6px rgba(255,215,107,0.7); }
+
   /* Visual passive tree */
   .tskill { padding: 14px 16px; }
   .tnode { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px;
@@ -332,13 +353,14 @@ async function watchlist() {
       el('div', { class: 'chips', style: 'margin:0 0 14px' }, [
         chip('All classes', !clsF, () => { clsF = null; render(); }),
         ...classes.map(c => chip(c, clsF === c, () => { clsF = clsF === c ? null : c; render(); }))]),
-      el('div', { class: 'stack' }, shown.map(i => el('div', { class: 'card' },
-        el('div', { class: 'bname' }, str(i.title)),
-        el('div', { class: 'chips', style: 'margin:6px 0 0' },
-          i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
-          arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
-        el('p', null, str(i.text))))),
-      shown.length ? null : el('p', { class: 'status' }, 'Nothing matches this filter.'));
+      shown.length
+        ? el('div', { class: 'stack' }, shown.map(i => el('div', { class: 'card' },
+            el('div', { class: 'bname' }, str(i.title)),
+            el('div', { class: 'chips', style: 'margin:6px 0 0' },
+              i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
+              arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
+            el('p', null, str(i.text)))))
+        : el('p', { class: 'status' }, 'Nothing matches this filter.'));
   }
   render();
   view(el('p', null, el('a', { href: '#/' }, '← Ladder')), el('h1', null, 'OP interactions watchlist'), wrap);
@@ -565,7 +587,49 @@ async function advisor(name) {
   render();
 }
 
-function treeSection(archetype, passives, builds) {
+// Game-replica canvas: absolute node cards + connector lines at the game's own
+// coordinates (scraped layout), rank dots filled to the suggested build's ranks
+// (4th spec point gold, like the game).
+function gameTree(layout, builds, archetype) {
+  const cb = builds && builds.classes && builds.classes[archetype];
+  const picks = new Map(arr(cb && cb.builds[0] && cb.builds[0].order).map(o => [str(o.n), +o.r]));
+  const stage = el('div', { class: 'gstage', style: `width:${+layout.w || 1180}px;height:${+layout.h || 463}px` });
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', +layout.w || 1180); svg.setAttribute('height', +layout.h || 463);
+  for (const e of arr(layout.edges)) {
+    const l = document.createElementNS(svgNS, 'line');
+    l.setAttribute('x1', +e.x1 || 0); l.setAttribute('y1', +e.y1 || 0);
+    l.setAttribute('x2', +e.x2 || 0); l.setAttribute('y2', +e.y2 || 0);
+    l.setAttribute('stroke', 'rgba(160,140,255,0.35)'); l.setAttribute('stroke-width', '2');
+    svg.appendChild(l);
+  }
+  stage.appendChild(svg);
+  for (const n of arr(layout.nodes)) {
+    const take = picks.get(str(n.name)) || 0;
+    const dead = !!n.dead;
+    const gold = n.kind === 'spec' && take >= 4;
+    const dots = [];
+    for (let i = 0; i < (+n.max || 0); i++)
+      dots.push(el('span', { class: 'gdot' + (i < take ? (n.kind === 'spec' && i === 3 ? ' gold' : ' on') : '') }));
+    stage.appendChild(el('div', {
+      class: `gnode kind-${str(n.kind)}${take ? ' pick' : ''}${gold ? ' gold' : ''}${dead ? ' dead' : ''}`,
+      style: `left:${+n.x || 0}px;top:${+n.y || 0}px;width:${+n.w || 140}px`,
+      title: str(n.desc),
+    },
+      n.kind === 'root' || n.kind === 'skill' ? el('div', { class: 'gkind' }, n.kind === 'root' ? 'Class passive' : 'Skill') : null,
+      el('div', { class: 'gname' }, str(n.name) || str(archetype).toUpperCase()),
+      dots.length ? el('div', { class: 'gdots' }, dots) : null));
+  }
+  return el('div', { class: 'gwrap' }, stage);
+}
+
+function treeSection(archetype, passives, builds, layout) {
+  if (layout && arr(layout.nodes).length) {
+    return [el('h2', null, 'Passive tree'),
+      el('p', { class: 'sub' }, 'The game\'s own tree layout — filled dots are the suggested build (gold = the specializing 4th point), dashed nodes are inactive. Hover a node for its effect.'),
+      gameTree(layout, builds, archetype)];
+  }
   const t = passives && passives[archetype];
   if (!t) return null;
   // Highlight the suggested build's allocations on the tree itself.
@@ -588,7 +652,10 @@ function treeSection(archetype, passives, builds) {
 }
 
 async function classView(archetype) {
-  const [r, { builds, passives }] = await Promise.all([fetch('api/class/' + encodeURIComponent(archetype)), staticData()]);
+  const [r, { builds, passives }, layoutR] = await Promise.all([
+    fetch('api/class/' + encodeURIComponent(archetype)), staticData(),
+    fetch('api/tree/' + encodeURIComponent(archetype))]);
+  const layout = layoutR.ok ? await layoutR.json() : null;
   const known = (passives && passives[archetype]) || (builds && builds.classes && builds.classes[archetype]);
   if (r.status === 404 && !known) { view(el('p', { class: 'status' }, 'Unknown class. ', el('a', { href: '#/' }, 'Back to ladder'))); return; }
   if (!r.ok && r.status !== 404) throw new Error('class ' + r.status);
@@ -602,7 +669,7 @@ async function classView(archetype) {
       ? `${role ? str(role) + ' · ' : ''}what ${c.players} tracked player${c.players === 1 ? '' : 's'} run · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`
       : `${role ? str(role) + ' · ' : ''}no tracked players yet`),
     buildCards(archetype, builds),
-    treeSection(archetype, passives, builds),
+    treeSection(archetype, passives, builds, layout),
     c && arr(c.passives).length ? [el('h2', null, 'Popular passives'),
       el('div', { class: 'card' }, barChart(arr(c.passives).map(p => ({
         label: str(p.name) + (p.tier != null ? ` (T${str(p.tier)})` : ''),
