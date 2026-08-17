@@ -567,7 +567,11 @@
       const xpRow = r.xp?.label ? `<div class="srow"><span class="l">${r.xp.label}</span></div><div class="xpbar"><div style="width:${r.xp.pct}%"></div></div>` : '';
       // Wings of Flight — owners only; click toggles flying
       const wingsRow = r.wings?.owned ? `<div class="srow wings ${r.wings.flying ? 'on' : ''}" id="wingsRow" title="Wings of Flight — hover above the crowd. Click to toggle.">` +
-        `<span class="l">🕊️ Flying</span><span class="v">${r.wings.flying ? 'On' : 'Off'}</span></div>` : '';
+        `<span class="l">🕊️ Flying</span><span class="v">${r.wings.flying ? 'On' : 'Off'}</span></div>`
+        // Only offered while they're not owned — the site drops the form once they are.
+        : r.buyWings ? `<div class="srow repair${r.buyWings.disabled ? '' : ' on'}" id="buyWingsRow"` +
+          ` data-tip="Wings of Flight let your character hover above the crowd on the overlay.${r.buyWings.disabled ? ' Not enough dust yet.' : ''}">` +
+          `<span class="l">🕊️ Buy Wings</span><span class="v">${esc(r.buyWings.label.replace(/^Purchase\s*/, ''))}</span></div>` : '';
       // Retreated (any non-Reforge countdown card the site shows): banner + time left
       const mmssLeft = (ms) => { const s = Math.max(0, Math.round((ms - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
       const retreatRow = (r.countdowns || []).filter(c => !/Reforge/i.test(c.title))
@@ -577,7 +581,9 @@
       // out on every stats refresh until the next tick.
       const eta0 = S().showEta ? nextBattleEta() : null;
       const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time. The 💀 counter tracks the usual 3-normals-then-boss pattern (a guess, not a schedule)."><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') + bossHint() : ''}</span></div>`;
-      document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + raRow + wingsRow + xpRow + r.stats.map(s =>
+      const joinRow = r.canJoin ? `<div class="srow repair on" id="joinRow" data-tip="You don't have a character yet — this is the same as typing !join in chat.">` +
+        `<span class="l">🎉 Join the Adventure</span><span class="v">Start</span></div>` : '';
+      document.getElementById('rows').innerHTML = joinRow + nextRow + retreatRow + arRow + raRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
@@ -589,6 +595,14 @@
       };
       const wr = document.getElementById('wingsRow');
       if (wr) wr.onclick = async () => { await action('toggle-flying', {}); loadStats(); };
+      const bw = document.getElementById('buyWingsRow');
+      if (bw && !r.buyWings.disabled) bw.onclick = async () => {
+        if (!confirm(`Buy Wings of Flight for ${r.buyWings.label.replace(/^Purchase\s*/, '')}?`)) return;
+        stampCraft(); await action('purchase-wings', {}); loadStats();
+      };
+      // Never joined: the site serves a Join card instead of a dashboard.
+      const jr = document.getElementById('joinRow');
+      if (jr) jr.onclick = async () => { await action('join', {}); loadStats(); };
       reconcileReforge(r.reforge);
       lastMe = r; // buffTable etc. for the Buffs panel
       siteFails = 0; setDown(false);
@@ -1901,7 +1915,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 84) showRestartBanner(); // 84: krangle name prompt; 83: periodic interface pull; 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 85) showRestartBanner(); // 85: model/wings/join/bag-cap; 84: krangle name prompt; 83: periodic interface pull; 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 

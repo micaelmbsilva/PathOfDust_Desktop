@@ -62,6 +62,12 @@
   .rcard img { width: 32px; height: 32px; image-rendering: pixelated; }
   .rcard .rn { font-weight: 700; font-size: 0.9rem; }
   .rcard .rm { font-size: 0.72rem; color: #b0a2d9; }
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+  .mopt { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px;
+    padding: 6px 4px; cursor: pointer; text-align: center; color: #b0a2d9; font-size: 0.66rem; }
+  .mopt:hover { border-color: #6f5ad9; background: rgba(120,90,255,0.16); }
+  .mopt.on { border-color: #ffd76b; background: rgba(255,215,107,0.12); color: #ffd76b; }
+  .mopt img { width: 48px; height: 48px; object-fit: contain; image-rendering: pixelated; display: block; margin: 0 auto 3px; }
   .muted { color: #8a7fb0; }
   #err { color: #ff8080; }
 </style>
@@ -75,11 +81,16 @@
       <button class="chip" id="reload" title="Refresh">🔄</button>
       <button class="chip" id="tab-sheet" aria-pressed="true">Sheet</button>
       <button class="chip" id="tab-tree" aria-pressed="false">Passives</button>
+      <button class="chip" id="tab-model" aria-pressed="false" title="Change your own character sprite">🎭 My Sprite</button>
     </div>
   </div>
   <div id="err"></div>
   <div id="roster" class="roster"></div>
   <div id="sheet"></div>
+  <div id="model" style="display:none">
+    <div class="bar" id="modelBar"></div>
+    <div class="mgrid" id="modelGrid"></div>
+  </div>
   <div id="tree" style="display:none">
     <div class="bar" id="treeBar"></div>
     <div id="legend"></div>
@@ -199,11 +210,54 @@
     }
   }
 
+  // ---- your own sprite (POST /change-model) ----
+  // The picker is about YOUR character, not whoever is on screen, so it lives
+  // on its own tab rather than inside a sheet that is otherwise read-only.
+  // Selecting is local; nothing is sent until Save, matching the site's own
+  // radio-plus-submit form.
+  let modelData = null, modelPick = null;
+  async function loadModel() {
+    const me = await get('/api/me').catch(() => null);
+    modelData = me && me.model;
+    if (!modelData || !modelData.options.length) {
+      $('modelBar').innerHTML = '<span class="muted">No sprite picker available right now.</span>';
+      $('modelGrid').innerHTML = '';
+      return;
+    }
+    modelPick = modelPick || (modelData.options.find(o => o.selected) || {}).value || null;
+    renderModel();
+  }
+  function renderModel() {
+    const d = modelData, changed = modelPick && modelPick !== (d.options.find(o => o.selected) || {}).value;
+    $('modelBar').innerHTML =
+      `<span class="chip">Current: ${esc(d.current || (d.options.find(o => o.selected) || {}).label || '—')}</span>` +
+      `<button class="chip" id="mSave"${changed && !d.disabled ? '' : ' disabled'}>${esc(d.label)}</button>` +
+      (d.disabled ? '<span class="chip muted">Not enough dust</span>' : '') +
+      `<span class="chip muted">${d.options.length} sprites</span>`;
+    $('modelGrid').innerHTML = d.options.map(o =>
+      `<button class="mopt${o.value === modelPick ? ' on' : ''}" data-model="${esc(o.value)}" title="${esc(o.label)}">
+         <img src="${esc(o.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">${esc(o.label)}</button>`).join('');
+    const s = $('mSave');
+    if (s && !s.disabled) s.onclick = async () => {
+      s.disabled = true;
+      const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: 'change-model', fields: { model: modelPick } }) }).then(x => x.json()).catch(() => null);
+      if (!r || !r.ok) { $('err').textContent = 'Could not change sprite.'; s.disabled = false; return; }
+      modelPick = null; loadModel();
+    };
+  }
+  $('modelGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-model]');
+    if (b) { modelPick = b.dataset.model; renderModel(); }
+  });
+
   function showTab(which) {
-    $('sheet').style.display = which === 'sheet' ? '' : 'none';
-    $('tree').style.display = which === 'tree' ? '' : 'none';
-    $('tab-sheet').setAttribute('aria-pressed', which === 'sheet');
-    $('tab-tree').setAttribute('aria-pressed', which === 'tree');
+    for (const t of ['sheet', 'tree', 'model']) {
+      const el = $(t === 'sheet' ? 'sheet' : t);
+      if (el) el.style.display = which === t ? '' : 'none';
+      $('tab-' + t).setAttribute('aria-pressed', which === t);
+    }
+    if (which === 'model' && !modelData) loadModel();
   }
   function back() {
     current = null;
@@ -211,6 +265,8 @@
     $('roster').style.display = '';
     $('sheet').innerHTML = '';
     $('tree').style.display = 'none';
+    $('model').style.display = 'none';
+    for (const t of ['sheet', 'tree', 'model']) $('tab-' + t).setAttribute('aria-pressed', false);
     renderRoster();
   }
 
@@ -228,6 +284,8 @@
   $('reload').onclick = () => current ? showCharacter(current) : loadRoster();
   $('tab-sheet').onclick = () => current ? showTab('sheet') : back();
   $('tab-tree').onclick = () => current && showTab('tree');
+  // Your own sprite, so it works from the roster view too — no character selected.
+  $('tab-model').onclick = () => { $('roster').style.display = 'none'; showTab('model'); };
   $('roster').addEventListener('click', (e) => {
     const b = e.target.closest('[data-login]');
     if (b) showCharacter(b.dataset.login);

@@ -336,6 +336,7 @@
       inp.focus();
     }
 
+    lastCap = inv.bagCap;
     lastBag = inv.bag;
     renderBag();
 
@@ -415,7 +416,7 @@
   const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, 500); };
 
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
-  let lastBag = [];
+  let lastBag = [], lastCap = null;
   const numTier = (i) => +(i.tier?.match(/\d+/) || [0])[0];
   const numQual = (i) => i.sacred || i.quality === 'Sacred' ? 102 : i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
   const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
@@ -445,7 +446,7 @@
       roll: (a, b) => bestRoll(b) - bestRoll(a), name: (a, b) => a.name.localeCompare(b.name),
       slot: (a, b) => a.slot.localeCompare(b.slot) }[$('sortBy').value] || (() => 0);
     items.sort(cmp);
-    $('bagh').textContent = `Bag (${items.length})`;
+    $('bagh').textContent = `Bag (${items.length}${lastCap ? '/' + lastCap : ''})`;
     if (!items.length) { $('bag').innerHTML = '<p class="muted">Empty.</p>'; return; }
     if ($('groupBy').value === 'slot') {
       const g = {};
