@@ -169,6 +169,13 @@
   .rolechips .chip[data-pf] { cursor: pointer; }
   .rolechips .chip[data-pf]:hover { border-color: rgba(160,140,255,0.6); }
   .rolechips .chip.on { border-color: #7c5cff; color: #b98bff; }
+  /* buff pane: colour carries the good/bad meaning, the icon repeats it for
+     anyone who can't rely on colour alone */
+  .chip.bchip { cursor: help; }
+  .chip.bchip.buff { border-color: rgba(127,219,163,0.45); color: #b6f0cd; }
+  .chip.bchip.debuff { border-color: rgba(255,128,128,0.5); color: #ffb3b3; }
+  .chip.bchip.charge { border-color: rgba(130,170,255,0.45); color: #b9cdff; }
+  .chip.bchip.unknown { border-color: rgba(160,140,255,0.3); }
   .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 3px 9px; font-size: 0.78rem; }
   /* MMO raid-frame grid: compact member cells, status-tinted */
@@ -878,10 +885,11 @@
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
     inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
     fights: { label: '⚔️ Fight History', title: "Every recent fight, straight from the game's own records — exact totals, no estimates", act: () => toggleModal('fights'), isActive: panelOpen('fights') },
+    builds: { label: '📐 Build Dossier', title: 'Owner only — level-119 builds under ordinary four-mod gearing', act: () => openWin('/owner/builds', 'builds', 1260, 900) },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the
   // backend's PING_KEY (sent by the bridge) is the actual auth.
-  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'] };
+  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'], builds: ['lokati_gaming'] };
   const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
@@ -1077,29 +1085,57 @@
   // generically via /api/me) + my own in-fight buffs from the replay's
   // buffSnapshot events. Ticks while open.
   let buffsTimer = null, lastMe = null;
-  const prettyBuff = (k) => String(k).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  // Values arrive as raw numbers. Stack counters read best as plain integers;
+  // the multiplier-style ones are fractions where 0.25 means +25%.
+  const buffVal = (k, v, kind) => {
+    const n = +v;
+    if (!isFinite(n)) return String(v);
+    // An unrecognised key gets its number shown as-is. Guessing that a small
+    // value means a percentage is how "5" became "500%".
+    if (kind === 'unknown') return fmtN(n);
+    if (/stacks|count|charges|uses/.test(k)) return String(Math.round(n));
+    if (k === 'marked') return 'active';
+    if (k === 'shield_hp') return fmtN(n);
+    return Math.abs(n) < 10 ? `${(n * 100).toFixed(0)}%` : fmtN(n);
+  };
   function renderBuffs() {
     const body = document.getElementById('buffsBody');
     const parts = [];
-    // site-wide channel-point buffs/debuffs (first row is the header)
-    const t = lastMe?.buffTable;
-    if (t && t.length > 1) {
-      parts.push('<div class="fhead">📢 Channel Events</div>' +
-        `<table class="lb"><tr>${t[0].map(c => `<th style="text-align:left">${esc(c)}</th>`).join('')}</tr>` +
-        t.slice(1).map(rw => `<tr>${rw.map(c => `<td style="text-align:left">${esc(c)}</td>`).join('')}</tr>`).join('') + '</table>');
-    }
-    // my combat buffs, synced with the fight replay
+    // My own in-fight state, split by who caused it — the whole point of the
+    // pane is knowing at a glance whether a thing is your build working or the
+    // boss doing something to you.
     if (fight && fight.mySnaps?.length) {
       const cursor = Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale);
       let snap = null;
       for (const s of fight.mySnaps) { if (s.at <= cursor) snap = s; else break; }
       const live = Date.now() - fight.t0 < fight.dur;
       if (snap && snap.buffs.length) {
-        parts.push(`<div class="fhead">🗡️ Your Fight Buffs${live ? '' : ' (last fight)'}</div>` +
-          '<div class="rolechips">' + snap.buffs.map(([k, v]) => `<span class="chip">${esc(prettyBuff(k))}: <b>${esc(v)}</b></span>`).join('') + '</div>');
+        const groups = { buff: [], debuff: [], charge: [], unknown: [] };
+        for (const [k, v] of snap.buffs) { const b = PodFeed.buff(k); groups[b.kind].push([b, v]); }
+        const block = (kind, head, note) => groups[kind].length ? `<div class="fhead">${head}</div>` +
+          `<div class="rolechips">${groups[kind].map(([b, v]) =>
+            `<span class="chip bchip ${kind}"${b.desc ? ` data-tip="${esc(b.desc)}"` : ''}>` +
+            `${PodFeed.KIND_ICON[kind]} ${esc(b.label)}: <b>${esc(buffVal(b.key, v, kind))}</b></span>`).join('')}</div>` +
+          (note ? `<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">${note}</div>` : '') : '';
+        parts.push(`<div class="fhead" style="margin-bottom:2px">🗡️ You${live ? '' : ' — last fight'}</div>`);
+        parts.push(block('debuff', '🔴 Done to you', 'Applied by the enemy — these are working against you.'));
+        parts.push(block('buff', '🟢 Your build working', 'From your own class, passives and gear.'));
+        parts.push(block('charge', '🔵 Your charges', 'Pools and counters — neither good nor bad.'));
+        parts.push(block('unknown', '⚪ Unrecognised', 'New to the game since this app last learned the list.'));
       }
     }
-    body.innerHTML = parts.join('') || '<p class="muted">Nothing active.</p>';
+    // Channel-point events, which are party-wide rather than about you.
+    const t = lastMe?.buffTable;
+    if (t && t.length > 1) {
+      const meCol = (rw) => (rw[0] || '').toLowerCase() === myName.toLowerCase();
+      parts.push('<div class="fhead">📢 Channel Events <span class="muted" style="font-weight:400;font-size:0.72rem">— everyone, from channel-point redeems</span></div>' +
+        `<table class="lb"><tr>${t[0].map(c => `<th style="text-align:left">${esc(c)}</th>`).join('')}</tr>` +
+        t.slice(1).map(rw => `<tr class="${meCol(rw) ? 'mme' : ''}">${rw.map((c, i) => {
+          const b = i === 1 ? PodFeed.buff(String(c).toLowerCase().replace(/\s+/g, '_')) : null;
+          return `<td style="text-align:left">${b && b.kind !== 'unknown' ? PodFeed.KIND_ICON[b.kind] + ' ' : ''}${esc(c)}</td>`;
+        }).join('')}</tr>`).join('') + '</table>');
+    }
+    body.innerHTML = parts.filter(Boolean).join('') || '<p class="muted">Nothing active right now — this fills in during a fight.</p>';
   }
 
   // Party composition classed as DPS / Heal / Tank (not the site's melee/ranged/
@@ -1754,7 +1790,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 87) showRestartBanner(); // 87: craft optgroups; 86: disenchant dust range; 85: model/wings/join/bag-cap; 84: krangle name prompt; 83: periodic interface pull; 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 88) showRestartBanner(); // 88: owner build dossier gate; 87: craft optgroups; 86: disenchant dust range; 85: model/wings/join/bag-cap; 84: krangle name prompt; 83: periodic interface pull; 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
