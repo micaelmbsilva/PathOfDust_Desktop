@@ -30,6 +30,9 @@
   .card { background: var(--surface); border: 1px solid var(--border);
           border-radius: 8px; padding: 14px 16px; }
   .status { color: var(--muted); padding: 40px 0; text-align: center; }
+  #fbadge { position: fixed; right: 16px; bottom: 16px; z-index: 9; text-decoration: none;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+            padding: 8px 14px; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
 
   /* CSS bar chart: label | track | count. Thin bars, rounded data end. */
   .chart { display: grid; grid-template-columns: max-content 1fr max-content;
@@ -386,6 +389,58 @@ async function watchlist() {
   view(el('p', null, el('a', { href: '#/' }, '← Ladder')), el('h1', null, 'OP interactions watchlist'), wrap);
 }
 
+// Hidden route: #/feedback — operator inbox for in-app feedback plus recent app
+// errors. Same key gate as the watchlist; no nav links to it.
+async function feedbackData(since) {
+  const r = await fetch('api/feedback?key=' + encodeURIComponent(siteKey())
+    + (since == null ? '' : '&since=' + since));
+  if (r.status === 403) return null;
+  if (!r.ok) throw new Error('feedback ' + r.status);
+  return r.json();
+}
+
+function feedbackCard(x, kind) {
+  return el('div', { class: 'card' },
+    el('div', { class: 'bname' }, agoText(x.ts)),
+    el('div', { class: 'chips', style: 'margin:6px 0 0' },
+      kind ? el('span', { class: 'chip' }, kind) : null,
+      str(x.version) ? el('span', { class: 'chip' }, 'v' + str(x.version)) : null,
+      str(x.contact) ? el('span', { class: 'chip' }, str(x.contact)) : null,
+      str(x.install) ? el('span', { class: 'chip' }, str(x.install).slice(0, 8)) : null),
+    el('p', { style: 'white-space:pre-wrap' }, str(x.message)));
+}
+
+async function feedbackView() {
+  const d = await feedbackData();
+  if (!d) return keyDenied();
+  const fb = arr(d.feedback), errs = arr(d.errors);
+  if (fb.length) localStorage.setItem('pod.fbseen', String(fb[0].id)); // visiting marks read
+  badge(0);
+  view(
+    el('p', null, el('a', { href: '#/' }, '← Ladder')),
+    el('h1', null, 'Feedback inbox'),
+    el('p', { class: 'sub' }, `${fb.length} messages · ${errs.length} recent errors`),
+    fb.length ? el('div', { class: 'stack' }, fb.map(x => feedbackCard(x)))
+      : el('p', { class: 'status' }, 'No feedback yet.'),
+    errs.length ? [el('h2', null, 'Recent app errors'),
+      el('div', { class: 'stack' }, errs.map(x => feedbackCard(x, 'error')))] : null);
+}
+
+// Unread pill, bottom-right of every page — only appears when a key is stored.
+function badge(n) {
+  const b = document.getElementById('fbadge');
+  if (!n) return b && b.remove();
+  (b || document.body.appendChild(el('a', { id: 'fbadge', href: '#/feedback' })))
+    .textContent = `${n} new feedback`;
+}
+async function checkFeedback() {
+  if (!siteKey() || location.hash === '#/feedback') return;
+  try {
+    const d = await feedbackData(+localStorage.getItem('pod.fbseen') || 0);
+    if (d) badge(d.unread);
+  } catch {}
+}
+
 function itemCard(it) {
   const tier = str(it.tier).replace(/^Tier\s*/i, ''); // ping/scrape send "Tier 58"
   return el('div', { class: 'card item' },
@@ -735,15 +790,18 @@ async function route() {
   // Capture ?key=… from the hash once, remember it, strip it from the URL.
   const km = location.hash.match(/^(.*?)\?key=([^&]+)$/);
   if (km) { localStorage.setItem('pod.key', decodeURIComponent(km[2])); location.replace(location.pathname + km[1]); return; }
-  if (location.hash === '#/watchlist') { try { await watchlist(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); renderFoot(); return; }
+  const solo = { '#/watchlist': watchlist, '#/feedback': feedbackView }[location.hash];
+  if (solo) { try { await solo(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); renderFoot(); checkFeedback(); return; }
   const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
   try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
   catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); }
   window.scrollTo(0, 0);
   renderFoot();
+  checkFeedback();
 }
 addEventListener('hashchange', route);
 route();
+setInterval(checkFeedback, 120e3);
 </script>
 </body>
 </html>

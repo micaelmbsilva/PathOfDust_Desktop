@@ -217,6 +217,25 @@ app.get('/api/watchlist', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'watchlist.json'));
 });
 
+// Private inbox: user feedback + recent app errors, newest first. Same SITE_KEY
+// gate as the watchlist — these carry install ids and contact handles.
+app.get('/api/feedback', h(async (req, res) => {
+  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!pool) return res.sendStatus(503);
+  res.set('Cache-Control', 'no-store');
+  // ?since=<id> — badge poll: just the unread count, no messages over the wire.
+  if (req.query.since != null) {
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM feedback WHERE id > $1`,
+      [+req.query.since || 0]);
+    return res.json({ unread: rows[0].n });
+  }
+  const [feedback, errors] = await Promise.all([
+    pool.query(`SELECT id, ts, install, version, message, contact FROM feedback ORDER BY id DESC LIMIT 200`),
+    pool.query(`SELECT id, ts, install, version, message FROM logs WHERE level = 'error' ORDER BY id DESC LIMIT 100`),
+  ]);
+  res.json({ feedback: feedback.rows, errors: errors.rows });
+}));
+
 // Freshness watermark for the site footer: deploy identity + when data last moved.
 const STARTED = new Date().toISOString();
 let lastScrapeAt = null;
