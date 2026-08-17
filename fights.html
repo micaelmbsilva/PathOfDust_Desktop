@@ -38,7 +38,7 @@
     <span class="chip muted" id="source"></span>
   </div>
   <div id="err"></div>
-  <div id="list"><p class="muted">Loading…</p></div>
+  <div id="list"><p class="muted">Loading… the game rebuilds this page from every logged fight, so it takes a few seconds.</p></div>
 
 <script>
   const $ = (id) => document.getElementById(id);
@@ -47,6 +47,11 @@
   const list = (arr, empty) => arr.length
     ? `<ul>${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
     : `<p class="muted">${empty}</p>`;
+  // Loot outcomes arrive as Rust's Debug formatting — "AutoDisenchanted { dust:
+  // 1665 }" — because the page prints the enum with {:?}. Read it as English.
+  const prettyLoot = (s) => String(s).replace(
+    /([A-Z][A-Za-z]*)\s*\{\s*([a-z_]+):\s*(\d+)\s*\}/g,
+    (_, name, field, n) => `${name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()} +${(+n).toLocaleString()} ${field}`);
 
   async function load() {
     $('err').textContent = '';
@@ -66,7 +71,7 @@
           <div class="when">${esc(f.meta)}</div></summary>
         ${f.boss.length ? `<h3>Boss Stats</h3>${list(f.boss, '')}` : ''}
         <h3>Battle Report</h3>${list(f.report, 'Nothing recorded.')}
-        <h3>Loot</h3>${list(f.loot, 'None.')}
+        <h3>Loot</h3>${list(f.loot.map(prettyLoot), 'None.')}
         <h3>Broken Gear</h3>${list(f.broken, 'None.')}
         <h3>Skills Cast</h3>${list(f.skills, 'None logged.')}
         ${f.buffs.length ? `<h3>Buff / Debuff Stack Activity</h3><div class="scroll"><table>
