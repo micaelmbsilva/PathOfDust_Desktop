@@ -184,10 +184,13 @@
         .sort((a, b) => valOf(b, sortKey, secs) - valOf(a, sortKey, secs));
       const total = rows.reduce((n, p) => n + (p.damageDealt || 0), 0);
       const mine = rows.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
+      // The summary reports only the FIRST death (firstToDie) — no per-player
+      // death flag exists, so a member who went down later can't be marked.
+      const died = (name) => f.firstToDie && (name || '').toLowerCase() === f.firstToDie.toLowerCase();
       return `<details class="fight" data-fid="${esc(f.startedAtUnixMs || i)}">
         <summary><span class="${f.won ? 'won' : 'lost'}">${f.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(f.stage)}${f.kind === 'boss' ? ' 💀 Boss' : ''}</span>
           <div class="when">${esc(when(f.startedAtUnixMs))} · ${esc(f.participants)} in the party${
-            mine ? ` · you dealt ${fmtN(mine.damageDealt || 0)}${total ? ` (${((mine.damageDealt || 0) / total * 100).toFixed(1)}%)` : ''}` : ' · you sat this one out'}</div></summary>
+            mine ? ` · you dealt ${fmtN(mine.damageDealt || 0)}${total ? ` (${((mine.damageDealt || 0) / total * 100).toFixed(1)}%)` : ''}${died(myName) ? ' · 💀 you went down first' : ''}` : ' · you sat this one out'}</div></summary>
         <h3>Party${role === 'all' ? '' : ` — ${PodFeed.ROLE_ICON[role]} ${role}`} (${rows.length})</h3>
         <div class="scroll"><table>
           <thead><tr><th>#</th><th>Player</th><th>Class</th>${COLS.map(c =>
@@ -195,7 +198,7 @@
           <tbody>${rows.map((p, n) => {
             const r = rolesOf(p.displayName);
             return `<tr${(p.displayName || '').toLowerCase() === myName.toLowerCase() ? ' class="mine"' : ''}>
-            <td>${n + 1}</td><td>${esc(p.displayName)}</td>
+            <td>${n + 1}</td><td>${esc(p.displayName)}${died(p.displayName) ? ' <span title="First to go down this fight">💀</span>' : ''}</td>
             <td>${esc(classOf(p.displayName))} ${(r || []).map(x => PodFeed.ROLE_ICON[x]).join('')}</td>
             ${COLS.map(c => `<td class="num">${fmtN(valOf(p, c.key, secs))}</td>`).join('')}</tr>`;
           }).join('')}</tbody>
