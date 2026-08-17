@@ -2,7 +2,7 @@
 // window. Standalone .exe (bundled Chromium). Multi-user: no tokens are shipped —
 // each user logs in once via the site's Twitch OAuth, and that one login drives
 // everything (site session for stats/bag/passives/actions, and Twitch chat).
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -190,6 +190,10 @@ async function start() {
   global.__autoUpdate = true; // this (installer) shell self-updates; the bridge reports it so the
                               // hot-updated UI can warn old portable shells, which never set this
   global.__version = app.getVersion(); // the app's semver — the single user-facing version
+  // Disk fight-logs: the bridge owns writing/pruning; the shell only provides
+  // the location and a safe way to show it (no shell-string interpolation).
+  global.__fightLogsDir = path.join(app.getPath('userData'), 'fight-logs');
+  global.__openPath = (p) => shell.openPath(p);
   const bridge = await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);

@@ -2,9 +2,9 @@
 // (which can't touch the httpOnly cookie) can read our stats and fire actions.
 // No deps. Run: node server.mjs   ->   http://localhost:8787
 import { createServer } from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises';
 import { exec } from 'node:child_process';
-import { extname } from 'node:path';
+import { extname, join } from 'node:path';
 import { post, getAuthed, loginRedirect } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL, PING_KEY } from './config.mjs';
 
@@ -55,7 +55,7 @@ async function ping() {
 const PORT = 8787;
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 72;
+const BRIDGE_REV = 73;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png' };
@@ -311,9 +311,19 @@ async function passives() {
   return { points, respecLabel, canSave, canReset, dirty, stage, connectors: svg, nodes };
 }
 
+let logChain = Promise.resolve(); // serializes fight-log write+prune
+
 const srv = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://localhost:${PORT}`);
+    // Loopback binding doesn't stop cross-origin "simple" POSTs from a browser
+    // tab (text/plain form spam, DNS rebinding). Browsers always send Origin on
+    // cross-origin POSTs — reject anything that isn't our own pages. Absent
+    // Origin (same-origin nav, curl, the shell) stays allowed.
+    const org = req.headers.origin;
+    if (req.method === 'POST' && org && !/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(org)) {
+      res.writeHead(403); return res.end('forbidden');
+    }
     res.setHeader('Cache-Control', 'no-store'); // never cache app files — always serve the current (updated) version
     if (url.pathname === '/config.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
@@ -330,7 +340,8 @@ const srv = createServer(async (req, res) => {
       // Old shells without global.__version fall back to the bare revision.
       const maj = +((globalThis.__version || '').split('.')[0]);
       const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${webRev}` : String(webRev);
-      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV });
+      return json(res, { version, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV,
+        fightLogs: !!globalThis.__fightLogsDir }); // shell capability — old main.cjs never sets the dir
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {
@@ -349,6 +360,38 @@ const srv = createServer(async (req, res) => {
       const { message, contact } = JSON.parse(await body(req) || '{}');
       await telemetry('/feedback', { message, contact });
       return json(res, { ok: !!TELEMETRY_URL });
+    }
+    if (url.pathname === '/api/log-fight' && req.method === 'POST') {
+      // Compact per-fight report from the page → one JSON file on disk, kept to
+      // the newest 100. Shell provides the dir (packaged app only; dev = no-op).
+      const dir = globalThis.__fightLogsDir;
+      if (!dir) return json(res, { ok: false });
+      const rep = JSON.parse(await body(req) || 'null');
+      if (!rep || typeof rep !== 'object') return json(res, { ok: false });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const suffix = Math.random().toString(36).slice(2, 6); // same-second fights don't collide
+      const name = `${stamp}-${String(rep.stage ?? 'x').replace(/[^\w-]/g, '')}-${String(rep.kind || 'fight').replace(/[^\w-]/g, '')}-${suffix}.json`;
+      // serialize write+prune — concurrent fights can't race the retention pass.
+      // The queue tail swallows errors (so one failure can't poison the chain)
+      // but the response awaits the unswallowed op and reports honestly.
+      const op = logChain.then(async () => {
+        await mkdir(dir, { recursive: true });
+        await writeFile(join(dir, name), JSON.stringify(rep));
+        // prune only files WE generated (ISO-stamp prefix) — never a user's own
+        const mine = (await readdir(dir)).filter(f => /^\d{4}-\d{2}-\d{2}T[\w-]*\.json$/.test(f)).sort();
+        for (const f of mine.slice(0, Math.max(0, mine.length - 100))) await unlink(join(dir, f)).catch(() => {});
+      });
+      logChain = op.catch((e) => console.error('log-fight:', e.message));
+      try { await op; return json(res, { ok: true }); } catch { return json(res, { ok: false }); }
+    }
+    if (url.pathname === '/api/open-logs' && req.method === 'POST') {
+      // Show the fight-logs folder in the OS file manager via the shell's
+      // shell.openPath — no string-interpolated exec (quoting pitfalls).
+      const dir = globalThis.__fightLogsDir;
+      if (!dir || typeof globalThis.__openPath !== 'function') return json(res, { ok: false });
+      try { await mkdir(dir, { recursive: true }); } catch { return json(res, { ok: false }); }
+      const err = await globalThis.__openPath(dir); // shell.openPath resolves '' on success, error string otherwise
+      return json(res, { ok: !err });
     }
     if (url.pathname === '/api/broadcast' && req.method === 'POST') {
       // Operator banner → backend /broadcast (empty message clears it). The page
@@ -433,6 +476,7 @@ const srv = createServer(async (req, res) => {
     res.end(data);
   } catch (e) {
     if (e.expired) { res.writeHead(401, { 'Content-Type': 'application/json' }); return res.end('{"expired":true}'); }
+    if (e.status === 413) { try { res.writeHead(413); return res.end('body too large'); } catch { return; } }
     res.writeHead(e.code === 'ENOENT' ? 404 : 500);
     res.end(String(e.message || e));
   }
@@ -441,11 +485,24 @@ const srv = createServer(async (req, res) => {
 // instead of polling the port.
 export const ready = new Promise((resolve, reject) => {
   srv.once('error', reject);
-  srv.listen(PORT, () => { console.log(`bridge on http://localhost:${PORT}`); resolve(); });
+  // loopback only — the bridge holds the user's session and (new) fs side effects
+  srv.listen(PORT, '127.0.0.1', () => { console.log(`bridge on http://localhost:${PORT}`); resolve(); });
 });
 
 const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
-const body = (req) => new Promise((r) => { let b = ''; req.on('data', c => b += c); req.on('end', () => r(b)); });
+// 2MB byte cap — fight reports are the biggest client, and they're compact by
+// design. Overflow rejects (typed 413, handled by the route catch-all) so route
+// logic never runs on a truncated body; connection errors resolve empty.
+const body = (req) => new Promise((resolve, reject) => {
+  let b = '', n = 0;
+  req.on('data', c => {
+    n += c.length; // Buffer bytes, not decoded chars
+    if (n > 2e6) { const e = new Error('body too large'); e.status = 413; req.destroy(); return reject(e); }
+    b += c;
+  });
+  req.on('end', () => resolve(b));
+  req.on('error', () => resolve(''));
+});
 
 // usage heartbeat: once ~after login, then every 30 min
 setTimeout(ping, 20000);
