@@ -30,7 +30,13 @@ async function init() {
     version TEXT, archetype TEXT, level INT, data JSONB)`);
   await pool.query(`ALTER TABLE installs ADD COLUMN IF NOT EXISTS data JSONB`);
   await pool.query(`ALTER TABLE installs ADD COLUMN IF NOT EXISTS name TEXT`);
-  await pool.query(`UPDATE installs SET name = data->>'name' WHERE name IS NULL AND data ? 'name'`); // backfill from prior pings so old dupes collapse too
+  // Backfill from prior pings so old dupes collapse too — but never resurrect a
+  // misparsed welcome banner (the app can send it as a name before a character
+  // exists; the nulled name below would otherwise come back every boot).
+  await pool.query(`UPDATE installs SET name = data->>'name'
+    WHERE name IS NULL AND data ? 'name' AND data->>'name' !~* '^welcome\\M'`);
+  // App pings can carry the banner as a name — null it, keep the install row.
+  await pool.query(`UPDATE installs SET name = NULL WHERE name ~* '^welcome\\M'`);
   // The public site keys on name — enforce uniqueness (pre-backfill rows and racing
   // pings can leave dupes): keep the freshest row per name, then lock it in.
   await pool.query(`DELETE FROM installs a USING installs b
@@ -68,7 +74,11 @@ app.post('/ping', h(async (req, res) => {
   const { install, version, archetype, level, ...data } = req.body || {};
   if (!install) return res.sendStatus(400);
   const id = String(install).slice(0, 64);
-  const name = data.name ? String(data.name).slice(0, 128) : null;
+  // The app can misparse the game's welcome banner as a character name before a
+  // character exists — keep the install row but drop the bogus name (ladder is
+  // name-keyed, so a null name also keeps the row off the public site).
+  const rawName = data.name ? String(data.name).slice(0, 128) : null;
+  const name = rawName && !/^welcome\b/i.test(rawName) ? rawName : null;
   const lvl = Number.isFinite(+level) ? +level : null;
   // One row per player: replace any prior row matching this install id OR name
   // (reinstalls get a fresh id but the same name), preserving the earliest
@@ -358,8 +368,9 @@ async function scrapeRoster() {
   if (!pool) return;
   try {
     // Re-run the garbage cleanup each cycle: a rolling deploy's old container can
-    // re-insert a banner row after the new container's init already deleted it.
+    // re-insert a banner row after the new container's init already cleaned it.
     await pool.query(`DELETE FROM installs WHERE id LIKE 'web:%' AND archetype IS NULL AND level IS NULL`);
+    await pool.query(`UPDATE installs SET name = NULL WHERE name ~* '^welcome\\M'`);
     const listing = await getPage('/characters');
     const slugs = [...new Set([...listing.matchAll(/href="\/characters\/([^"/]+)"/g)].map(m => m[1]))];
     if (!slugs.length) { console.error('roster scrape: no roster links — GAME_COOKIE missing or expired?'); return; }
