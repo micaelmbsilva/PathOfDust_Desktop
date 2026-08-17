@@ -770,7 +770,10 @@ async function advisor(name) {
     const q = rates.find(x => str(x.affix).includes(a.match));
     if (q) empirical[a.match] = +q.per_tier;
   }
-  const maxTier = Math.max(1, ...arr(b.equipped).concat(bag).map(it => +str(it && it.tier).replace(/\D/g, '') || 0));
+  // Craft-plan tier target: the AVERAGE tier of what the player already owns
+  // (equipped + bag) — an achievable next step, not the single best outlier.
+  const tiers = arr(b.equipped).concat(bag).map(it => +str(it && it.tier).replace(/\D/g, '') || 0).filter(Boolean);
+  const avgTier = Math.max(1, Math.round(tiers.reduce((s, t) => s + t, 0) / (tiers.length || 1)));
 
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
   function render() {
@@ -809,20 +812,24 @@ async function advisor(name) {
 
     // Derived craft plan: per slot, the 4 crafted mods (+ one Sacred wish)
     // with the biggest marginal score gain at this player's best gear tier.
-    const targets = best ? core.rollTargets(best.cls, lvl, maxTier, model, best.loadout.buckets, empirical) : null;
+    const targets = best ? core.rollTargets(best.cls, lvl, avgTier, model, best.loadout.buckets, empirical) : null;
     const fmtAvg = (p) => `+${fmt(p.avg * 100)}%`; // plan targets the % variants only
 
-    // Per-item crafting advice against the derived plan
+    // Per-item crafting advice against the derived plan. Krangled items are
+    // LOCKED out of every craft action (CraftError::ItemLocked) — never
+    // suggest rerolling/polishing/reforging one.
     const craftRows = arr(best ? best.loadout.items : []).map(it => {
       const slot = str(it.slot).toLowerCase();
       const tier = +str(it.tier).replace(/\D/g, '') || 0;
       const plan = targets && targets.plan[slot] ? targets.plan[slot] : [];
       const junk = arr(it.mods).filter(m => m && m.t && !plan.some(p => str(m.t).toLowerCase().includes(p.match))).map(m => str(m.t));
-      const tips = [
-        tier < maxTier && `Reforge toward t${maxTier} (t${tier} now)`,
-        junk.length && `re-roll off-build mods: ${junk.join(', ')}`,
-        it.krangled && 'krangled: only its best 4 mods count under this ruleset',
-        !/perfect/i.test(str(it.quality)) && 'Polish to Perfect',
+      const tips = it.krangled ? [
+        `krangled (locked — no further crafting): only its best 4 mods count under this ruleset${junk.length ? '; off-build mods (' + junk.join(', ') + ') can only be fixed by replacing the item' : ''}`,
+      ] : [
+        tier < avgTier && `Reforge toward t${avgTier} (t${tier} now; +1–4 tiers per use, 30×tier dust)`,
+        junk.length && `swap off-build mods (${junk.join(', ')}): veiled Chancing rerolls every mod type with a pick per slot, or Annulment (veiled = choose which leaves) then re-Exalt`,
+        arr(it.mods).length < 4 && `fill to 4 mods (${arr(it.mods).length} now): Transmute→Augment→Regal→Exalt, veiled (+500 dust) to pick from 3 rolls`,
+        !/perfect/i.test(str(it.quality)) && 'Polish (sand) — raises rolls toward max and quality to Perfect',
         !it.sacred && 'upgrade to a Sacred base at stage 300+',
       ].filter(Boolean);
       return tips.length ? el('li', null, el('b', null, str(it.slot) || 'item'), ` (${str(it.name)}): ${tips.join(' · ')}`) : null;
@@ -864,8 +871,8 @@ async function advisor(name) {
             el('div', { class: 'chips' }, toGet.map(t => el('span', { class: 'chip' }, t)))] : el('p', { style: 'margin:0' }, 'Tree already matches this build.'),
           toDrop.length ? [el('p', { class: 'sub', style: 'margin:12px 0 6px' }, 'Respec out (off-build):'),
             el('div', { class: 'chips' }, toDrop.map(t => el('span', { class: 'chip' }, t)))] : null),
-        el('h2', null, `Craft plan at t${maxTier} (4 mods + Sacred, no uniques)`),
-        el('p', { class: 'sub' }, `Per slot: the 4 crafted mods with the biggest marginal gain for ${best.cls} at your level and best gear tier (average rolls; source-derived rates cross-checked against live data). One Sacred wish across the set — a Sacred's 5th mod ignores slot restrictions and may duplicate a crafted mod.`),
+        el('h2', null, `Craft plan at t${avgTier} (4 mods + Sacred, no uniques)`),
+        el('p', { class: 'sub' }, `Per slot: the 4 crafted mods with the biggest marginal gain for ${best.cls} at your level and your average owned gear tier (average rolls; source-derived rates cross-checked against live data). One Sacred wish across the set — a Sacred's 5th mod ignores slot restrictions and may duplicate a crafted mod. Veiled crafts (+500 dust) roll 3 candidates and let you pick.`),
         el('table', null,
           el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Craft these 4'), el('th', null, 'Sacred wish'))),
           el('tbody', null, Object.entries(targets.plan).map(([slot, picks]) => el('tr', null,
