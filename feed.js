@@ -64,44 +64,59 @@
   //   kind: 'buff'  — your own build working
   //         'debuff'— something the enemy put on you
   //         'charge'— a pool or counter of yours, neither good nor bad
+  // Each entry: label, kind, origin, what it does, and which skills grant it.
+  //
+  // `origin` is the part that cannot be guessed from the name. A shield is not
+  // evidence your own build is working: grant_shield is called both as
+  // (self, self) by Arcane Shield / Frenzy / Vengeful Blood and as
+  // (healer, target) by Divine Favor / Overflowing Grace / Seed of Life, so a
+  // shield on you may well be a Cleric keeping you alive. Likewise Fire, Cold
+  // and Chaos's on-heal buffs are ally-targeted while Divine's lands on the
+  // healer themselves — the opposite way round to the other three.
+  //   origin: 'self'  — only your own kit can produce it
+  //           'party' — an ally can grant it (several are self-castable too)
+  //           'enemy' — put on you by whatever you are fighting
+  //           'own'   — your own pool or counter
   const BUFFS = {
-    // yours
-    speed_stacks: ['Attack Speed Stacks', 'buff', 'Momentum / Fleetfoot / Bloodlust / Relentless Pursuit / Flow State — the shared per-hit speed bundle'],
-    flowing_stacks: ['Flowing Strikes', 'buff', "Monk — stacks as you keep hitting"],
-    fel_rush_speed_bonus: ['Fel Rush', 'buff', 'Warlock — bonus attack speed'],
-    blood_frenzy_speed_bonus: ['Blood Frenzy', 'buff', 'Slayer — bonus attack speed'],
-    endless_thirst_cap_bonus: ['Endless Thirst', 'buff', 'Slayer — raised life-leech cap (1 = uncapped at rank 3)'],
-    shield_hp: ['Shield', 'buff', 'Absorb pool from Overflowing Grace / Divine Favor / Martyrdom / Arcane Shield'],
-    temp_heal_power_bonus: ['Healing Power', 'buff', 'Temporary bonus to healing you do'],
-    temp_damage_reduction_bonus: ['Damage Reduction', 'buff', 'Temporary bonus damage reduction'],
-    fire_dr_buff_stacks: ['Fire — Damage Reduction', 'buff', 'Elemental proc: bonus damage reduction'],
-    cold_evasion_buff_stacks: ['Cold — Evasion', 'buff', 'Elemental proc: bonus evasion'],
-    chaos_block_buff_stacks: ['Chaos — Block', 'buff', 'Elemental proc: bonus block'],
-    divine_heal_power_buff_stacks: ['Divine — Healing Power', 'buff', 'Elemental proc: bonus healing power'],
-    elemental_overflow_dmg_bonus: ['Elemental Overflow', 'buff', 'Bonus damage from overflowing elemental stacks'],
-    // theirs
-    wound_stacks: ['Open Wound', 'debuff', "Slayer's bleed stacking on you"],
-    marked: ['Marked', 'debuff', 'Singled out on first hit — lasts the rest of the fight'],
-    curse_dmg_taken_bonus: ['Curse of Weakness', 'debuff', 'You take extra damage — lasts the rest of the fight'],
-    temp_damage_dealt_debuff: ['Damage Dealt Reduced', 'debuff', 'Your outgoing damage is cut'],
-    temp_evasion_debuff: ['Evasion Reduced', 'debuff', 'You dodge less'],
-    lingering_dot_count: ['Damage Over Time', 'debuff', 'Independent damage-over-time effects ticking on you'],
-    fire_dr_debuff_stacks: ['Fire — DR Lowered', 'debuff', 'Elemental proc: your damage reduction is cut'],
-    cold_evasion_debuff_stacks: ['Cold — Evasion Lowered', 'debuff', 'Elemental proc: your evasion is cut'],
-    chaos_block_debuff_stacks: ['Chaos — Block Lowered', 'debuff', 'Elemental proc: your block is cut'],
-    lightning_dmg_taken_stacks: ['Lightning — Damage Taken', 'debuff', 'Elemental proc: you take extra damage'],
-    divine_heal_reduction_stacks: ['Divine — Healing Cut', 'debuff', 'Elemental proc: healing on you is reduced'],
-    // pools and counters
-    bloodpact_uses_this_fight: ['Bloodpact Used', 'charge', 'Times Bloodpact has fired this fight'],
-    guardian_spirit_charges_remaining: ['Guardian Spirit', 'charge', 'Charges left'],
-    assassinate_charges_remaining: ['Assassinate', 'charge', 'Charges left'],
-    undying_will_charges_remaining: ['Undying Will', 'charge', 'Charges left'],
+    // only your own kit
+    speed_stacks: ['Attack Speed Stacks', 'buff', 'self', 'Stacking attack speed, built up by landing hits.', 'Momentum / Fleetfoot / Bloodlust / Relentless Pursuit / Flow State'],
+    flowing_stacks: ['Flowing Strikes', 'buff', 'self', 'Stacks as you keep attacking without pause.', 'Monk — Flowing Strikes'],
+    fel_rush_speed_bonus: ['Fel Rush', 'buff', 'self', 'Bonus attack speed.', 'Warlock — Fel Rush'],
+    blood_frenzy_speed_bonus: ['Blood Frenzy', 'buff', 'self', 'Bonus attack speed.', 'Slayer — Blood Frenzy'],
+    endless_thirst_cap_bonus: ['Endless Thirst', 'buff', 'self', 'Raises your life-leech ceiling. A value of 1 means the cap is off entirely (rank 3).', 'Slayer — Endless Thirst'],
+    elemental_overflow_dmg_bonus: ['Elemental Overflow', 'buff', 'self', 'Elemental stacks past their cap, converted into bonus damage.', 'Warrior — Unbreakable / Druid — Shifting Form'],
+    divine_heal_power_buff_stacks: ['Divine — Healing Power', 'buff', 'self', 'Divine damage invested while you heal buffs your own healing. Uncapped. Unlike the other three elements, this one lands on the healer rather than the target.', 'Divine elemental procs on your own heals'],
+    // an ally can be the source
+    shield_hp: ['Shield', 'buff', 'party', 'A pool that absorbs damage before your health does. May have been cast on you by an ally, or generated by your own skills.', 'Allies: Divine Favor / Overflowing Grace / Seed of Life · Yours: Arcane Shield / Frenzy / Vengeful Blood / Eternal Hunger / Overflow Vessel'],
+    temp_heal_power_bonus: ['Healing Power', 'buff', 'party', 'Temporary boost to the healing you do.', 'Allies: Rising Tide / Healing Touch · Yours: Eternal Light'],
+    temp_damage_reduction_bonus: ['Damage Reduction', 'buff', 'party', 'Temporary reduction to the damage you take.', 'Allies: Harmonize / Unbreakable Bond · Serenity'],
+    fire_dr_buff_stacks: ['Fire — Damage Reduction', 'buff', 'party', 'Bonus damage reduction, granted when an ally heals you with Fire damage invested.', "An ally's Fire elemental procs"],
+    cold_evasion_buff_stacks: ['Cold — Evasion', 'buff', 'party', 'Bonus evasion, granted when an ally heals you with Cold damage invested.', "An ally's Cold elemental procs"],
+    chaos_block_buff_stacks: ['Chaos — Block', 'buff', 'party', 'Bonus block chance, granted when an ally heals you with Chaos damage invested.', "An ally's Chaos elemental procs"],
+    // put on you by the enemy
+    wound_stacks: ['Open Wound', 'debuff', 'enemy', "A stacking bleed on you — this is the defender's side of the effect.", 'Open Wound'],
+    marked: ['Marked', 'debuff', 'enemy', 'You were singled out on the first hit. Persists for the rest of the fight, with no expiry.', 'Mark'],
+    curse_dmg_taken_bonus: ['Curse of Weakness', 'debuff', 'enemy', 'You take extra damage. Persists for the rest of the fight.', 'Curse of Weakness'],
+    temp_damage_dealt_debuff: ['Damage Dealt Reduced', 'debuff', 'enemy', 'Your outgoing damage is cut.', 'Purify / Scorched Earth'],
+    temp_evasion_debuff: ['Evasion Reduced', 'debuff', 'enemy', 'You dodge less often.', 'Frost Nova'],
+    lingering_dot_count: ['Damage Over Time', 'debuff', 'enemy', 'How many independent damage-over-time effects are ticking on you right now.', 'Lingering Effect'],
+    fire_dr_debuff_stacks: ['Fire — DR Lowered', 'debuff', 'enemy', 'Your damage reduction is cut.', 'Fire elemental procs'],
+    cold_evasion_debuff_stacks: ['Cold — Evasion Lowered', 'debuff', 'enemy', 'Your evasion is cut.', 'Cold elemental procs'],
+    chaos_block_debuff_stacks: ['Chaos — Block Lowered', 'debuff', 'enemy', 'Your block chance is cut.', 'Chaos elemental procs'],
+    lightning_dmg_taken_stacks: ['Lightning — Damage Taken', 'debuff', 'enemy', 'You take extra damage.', 'Lightning elemental procs'],
+    divine_heal_reduction_stacks: ['Divine — Healing Cut', 'debuff', 'enemy', 'Healing landing on you is reduced.', 'Divine elemental procs'],
+    // your own pools and counters
+    bloodpact_uses_this_fight: ['Bloodpact Used', 'charge', 'own', 'How many times Bloodpact has fired this fight. It runs on a cooldown, so this counts up rather than down.', 'Bloodpact'],
+    guardian_spirit_charges_remaining: ['Guardian Spirit', 'charge', 'own', 'Charges left this fight.', 'Guardian Spirit'],
+    assassinate_charges_remaining: ['Assassinate', 'charge', 'own', 'Charges left this fight.', 'Assassinate'],
+    undying_will_charges_remaining: ['Undying Will', 'charge', 'own', 'Charges left this fight.', 'Undying Will'],
   };
   const prettyKey = (k) => String(k).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
-  // Unknown keys degrade to a readable name and no claim about which they are:
-  // a new mechanic must not be labelled a buff just because we haven't met it.
-  const buff = (k) => { const b = BUFFS[k]; return b ? { key: k, label: b[0], kind: b[1], desc: b[2] }
-    : { key: k, label: prettyKey(k), kind: 'unknown', desc: '' }; };
+  // Unknown keys degrade to a readable name and no claim about what they are:
+  // a new mechanic must not be called a buff just because we have not met it.
+  const buff = (k) => { const b = BUFFS[k];
+    return b ? { key: k, label: b[0], kind: b[1], origin: b[2], desc: b[3], from: b[4] }
+      : { key: k, label: prettyKey(k), kind: 'unknown', origin: 'unknown', desc: '', from: '' }; };
   const KIND_ICON = { buff: '🟢', debuff: '🔴', charge: '🔵', unknown: '⚪' };
 
   // Role comes from the class's kit, never inferred from a fight's numbers —
