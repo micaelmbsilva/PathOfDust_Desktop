@@ -729,9 +729,10 @@ async function advisor(name) {
   // Investigation findings steer the pick: an OP interaction this player's gear
   // already supports counts for more than one they would have to build toward.
   const watch = watchR.ok ? arr((await watchR.json()).interactions) : [];
-  const [r, { builds, passives }, ratesR, gearR] = await Promise.all([
+  const [r, { builds, passives }, ratesR, gearR, core, model] = await Promise.all([
     fetch('api/build/' + encodeURIComponent(name)), staticData(), fetch('api/affix-rates?key=' + key),
-    fetch('api/advisor-gear/' + encodeURIComponent(name) + '?key=' + key)]);
+    fetch('api/advisor-gear/' + encodeURIComponent(name) + '?key=' + key),
+    import('./advisor-core.mjs'), fetch('game-model.json').then(q => q.json())]);
   if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
   const b = await r.json();
   const bag = gearR.ok ? arr((await gearR.json()).bag) : [];
@@ -747,7 +748,6 @@ async function advisor(name) {
   const entries = worn.map(t => ({ t, w: 1 }))
     .concat(bag.flatMap(it => arr(it.mods).map(m => ({ t: str(m && m.t).toLowerCase(), w: 0.5 }))));
   const hit = (t, kws) => kws.some(kw => t.includes(kw)) && !(kws[0] === 'dmg dealt' && t.includes('crit dmg'));
-  const modValsOf = (kws) => worn.filter(t => hit(t, kws)).reduce((s, t) => s + num(t.match(/[\d.]+/)?.[0]), 0);
   // A match's weight = its rolled value in "t100 average mod" units (a t100 avg
   // roll ≈ 1.0) × the worn/bag factor. Affixes with no rate data fall back to 0.5.
   // Capped stats (roll.sat, in %) stop scoring past saturation — the tree's
@@ -760,74 +760,69 @@ async function advisor(name) {
     // no rate data: 0.5 per match, scaled down past saturation
     return es.reduce((s, e) => s + e.w * 0.5, 0) * (raw > v ? v / raw : 1); };
 
+  const lvl = num(b.level) || 1;
+  // Empirical per-tier map for the model (covers a live balance-toml override);
+  // "max hp" is skipped — the rates table mixes its flat and % variants.
+  const empirical = {};
+  for (const a of model.affixes) {
+    if (a.match === 'max hp') continue;
+    const q = rates.find(x => str(x.affix).includes(a.match));
+    if (q) empirical[a.match] = +q.per_tier;
+  }
+  const maxTier = Math.max(1, ...arr(b.equipped).concat(bag).map(it => +str(it && it.tier).replace(/\D/g, '') || 0));
+
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
   function render() {
+    // Source-grounded scoring: evaluate each class's closed-form power
+    // (game-model.json cites the PathofDust formulas) over the best loadout
+    // pickable from this player's equipped+bag gear at their actual level,
+    // under the 4-mods+Sacred / no-uniques ruleset. Normalized best=100;
+    // the watchlist bonus (max +3 per high-impact interaction) breaks ties
+    // toward classes with a known-strong line this gear already supports.
     const ranked = Object.entries(builds.classes)
       .filter(([cls]) => !role || rolesOf(cls, passives).includes(role))
       .map(([cls, cb]) => {
         const build = arr(cb.builds)[0];
-        let score = 0; const hits = [];
-        arr(build && build.rolls).forEach((roll, i) => {
-          const kws = ROLL_KW[roll.s] || [str(roll.s).toLowerCase()];
-          const n = matchWeight(kws, +roll.sat || 0);
-          if (n) { score += n * (arr(build.rolls).length - i) * (roll.top ? 2 : 1); hits.push(`${roll.s} ×${(Math.round(n * 10) / 10)}`); }
-        });
-        // Watchlist bonus, capped per interaction: it marks that this class has a
-        // known-strong line the gear supports, not another stat to stack.
+        const loadout = core.bestLoadout(arr(b.equipped), bag, cls, lvl, model);
+        const cs = core.classScore(cls, loadout.buckets, lvl, model);
         const ops = watch.filter(i => arr(i.classes).map(str).includes(cls));
+        let bonus = 0;
         ops.forEach(i => {
           const w = arr(i.rolls).reduce((s, r) => s + matchWeight(ROLL_KW[r] || [str(r).toLowerCase()], 0), 0);
-          score += (OP_W[str(i.impact)] || 0.5) * (arr(i.rolls).length ? Math.min(1, w) : 0.5);
+          bonus += (OP_W[str(i.impact)] || 0.5) * (arr(i.rolls).length ? Math.min(1, w) : 0.25);
         });
-        score = Math.round(score * 10) / 10;
-        return { cls, build, score, hits, ops };
-      }).filter(x => x.build).sort((a, z) => z.score - a.score);
+        return { cls, build, raw: cs.score, cs, loadout, bonus, ops };
+      }).filter(x => x.build);
+    const maxRaw = Math.max(1, ...ranked.map(x => x.raw));
+    ranked.forEach(x => { x.score = Math.round((100 * x.raw / maxRaw + x.bonus) * 10) / 10; });
+    ranked.sort((a, z) => z.score - a.score);
     const best = ranked[0];
 
-    // Passive respec plan vs the pick's tree order
+    // Passive respec plan vs the pick's tree order, cut to the point budget
+    const budget = 1 + Math.floor(lvl / 4);
     const alloc = new Map(arr(b.passives && b.passives.nodes).filter(n => rankNum(n.rank) > 0)
       .map(n => [str(n.name), rankNum(n.rank)]));
-    const target = new Map(arr(best && best.build.order).map(o => [str(o.n), +o.r]));
+    const target = new Map(core.trimOrder(arr(best && best.build.order), budget).map(o => [str(o.n), +o.r]));
     const toGet = [...target].filter(([n, tr]) => (alloc.get(n) || 0) < tr).map(([n, tr]) => `${n} ${alloc.get(n) || 0}→${tr}`);
     const toDrop = [...alloc].filter(([n]) => !target.has(n)).map(([n, tr]) => `${n} ${tr}`);
 
-    // t100 projection: 5 slots × 4 base mods (one of each top-4 priority per slot),
-    // average rolls from live data, no crit-bonus mods, + maxed Sacred implicit
-    // (~2× an average roll) on the biggest-impact stat. Attack speed is NOT a
-    // rollable affix — it's the gloves' primary stat (≈1.3%/tier; t100 Perfect
-    // = 130%), so it projects off gloves alone. Sheet columns approximate the
-    // player-sheet stat as now + gear delta.
-    const T = 100, SLOTS = 5;
-    const SHEET = { 'Block': 'Block', 'Evasion': 'Evasion', 'Crit Chance': 'Crit Chance',
-      'Increased Crit Dmg Dealt': 'Increased Crit Dmg Dealt', 'Increased Dmg Dealt': 'Increased Dmg Dealt',
-      'Splash': 'Splash', 'Healing Power': 'Healing Power', 'Intervene': 'Intervene',
-      'Lingering Effect': 'Lingering Effect', 'Reduced Dmg Taken': 'Reduced Dmg Taken' };
-    const stats = (b.stats && typeof b.stats === 'object') ? b.stats : {};
-    const projRows = arr(best && best.build.rolls).slice(0, 4).map((roll) => {
-      if (roll.s === 'Attack Speed') {
-        const glove = arr(b.equipped).find(it => /glove/i.test(str(it.slot)));
-        return { s: 'Attack Speed (gloves primary)', top: roll.top,
-          cur: glove ? num(str(glove.primary).match(/[\d.]+/)?.[0]) : 0, proj: 1.3 * T, sheetNow: null };
-      }
-      const kws = ROLL_KW[roll.s] || [str(roll.s).toLowerCase()];
-      const rate = rateOf(kws);
-      const cur = modValsOf(kws);
-      const proj = rate ? SLOTS * rate * T + (roll.top ? 2 * rate * T : 0) : null;
-      const sheetNow = SHEET[roll.s] != null && stats[SHEET[roll.s]] != null ? num(stats[SHEET[roll.s]]) : null;
-      return { s: roll.s, top: roll.top, cur, proj, sheetNow, sat: +roll.sat || null };
-    });
+    // Derived craft plan: per slot, the 4 crafted mods (+ one Sacred wish)
+    // with the biggest marginal score gain at this player's best gear tier.
+    const targets = best ? core.rollTargets(best.cls, lvl, maxTier, model, best.loadout.buckets, empirical) : null;
+    const fmtAvg = (p) => `+${fmt(p.avg * 100)}%`; // plan targets the % variants only
 
-    // Per-item crafting advice against the pick's priorities
-    const wanted = (t) => arr(best && best.build.rolls).some(roll =>
-      (ROLL_KW[roll.s] || [str(roll.s).toLowerCase()]).some(kw => str(t).toLowerCase().includes(kw)));
-    const craftRows = arr(b.equipped).map(it => {
+    // Per-item crafting advice against the derived plan
+    const craftRows = arr(best ? best.loadout.items : []).map(it => {
+      const slot = str(it.slot).toLowerCase();
       const tier = +str(it.tier).replace(/\D/g, '') || 0;
-      const junk = arr(it.mods).filter(m => !wanted(m && m.t)).map(m => str(m && m.t));
+      const plan = targets && targets.plan[slot] ? targets.plan[slot] : [];
+      const junk = arr(it.mods).filter(m => m && m.t && !plan.some(p => str(m.t).toLowerCase().includes(p.match))).map(m => str(m.t));
       const tips = [
-        tier < 85 && `Reforge toward t100 (t${tier} now)`,
+        tier < maxTier && `Reforge toward t${maxTier} (t${tier} now)`,
         junk.length && `re-roll off-build mods: ${junk.join(', ')}`,
+        it.krangled && 'krangled: only its best 4 mods count under this ruleset',
         !/perfect/i.test(str(it.quality)) && 'Polish to Perfect',
-        !it.sacred && 'upgrade to a Sacred base at stage 200+',
+        !it.sacred && 'upgrade to a Sacred base at stage 300+',
       ].filter(Boolean);
       return tips.length ? el('li', null, el('b', null, str(it.slot) || 'item'), ` (${str(it.name)}): ${tips.join(' · ')}`) : null;
     }).filter(Boolean);
@@ -843,9 +838,12 @@ async function advisor(name) {
       el('div', { class: 'chips', style: 'margin:0 0 14px' },
         'Role: ', roleChip(null, 'Auto'), roleChip('dps', '🗡️ DPS'), roleChip('tank', '🛡️ Tank'), roleChip('healer', '🩹 Healer')),
       !best ? el('p', { class: 'status' }, 'No builds for this role.') : el('div', { class: 'card' },
-        el('div', { class: 'bname' }, best.score ? `Play ${best.cls} — ${str(best.build.name)}` : `${best.cls} — ${str(best.build.name)} (best fit for this role)`),
-        el('div', { class: 'btag' }, `score ${best.score}${best.hits.length ? ' · gear matches: ' + best.hits.join(' · ') : ' · no matching mods on current gear yet'}`),
+        el('div', { class: 'bname' }, `Play ${best.cls} — ${str(best.build.name)}`),
+        el('div', { class: 'btag' }, `score ${best.score} · ≈${fmt(best.cs.dps)} dps · ≈${fmt(best.cs.ehp)} ehp · ${fmt(best.cs.interval)}ms cadence`
+          + (best.loadout.buckets.unparsed ? ` · ${best.loadout.buckets.unparsed} unrecognized mod(s) ignored` : '')),
         el('p', null, str(best.build.why)),
+        arr(best.loadout.swaps).length ? el('p', null, 'Equip from bag: ', arr(best.loadout.swaps).map(s =>
+          `${str(s.use.name)} (${str(s.use.tier)}) over ${s.over ? str(s.over.name) : 'empty ' + s.slot}`).join(' · ')) : null,
         el('p', null, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} build + tree order →`))),
       best && arr(best.ops).length ? [
         el('h2', null, 'Known-strong interactions for this pick'),
@@ -865,20 +863,14 @@ async function advisor(name) {
             el('div', { class: 'chips' }, toGet.map(t => el('span', { class: 'chip' }, t)))] : el('p', { style: 'margin:0' }, 'Tree already matches this build.'),
           toDrop.length ? [el('p', { class: 'sub', style: 'margin:12px 0 6px' }, 'Respec out (off-build):'),
             el('div', { class: 'chips' }, toDrop.map(t => el('span', { class: 'chip' }, t)))] : null),
-        el('h2', null, 'Your stats at the t100 target'),
-        el('p', { class: 'sub' }, 'Assumes 5 slots × 4 average-rolled t100 mods (one of each priority per slot, no crit-bonus mods) + a maxed Sacred implicit on the biggest-impact stat; attack speed comes from the gloves’ primary. "Sheet" columns approximate your character sheet as now + the gear delta (tree/archetype multipliers not re-simulated). Rates come from all scraped gear.'),
+        el('h2', null, `Craft plan at t${maxTier} (4 mods + Sacred, no uniques)`),
+        el('p', { class: 'sub' }, `Per slot: the 4 crafted mods with the biggest marginal gain for ${best.cls} at your level and best gear tier (average rolls; source-derived rates cross-checked against live data). One Sacred wish across the set — a Sacred's 5th mod ignores slot restrictions and may duplicate a crafted mod.`),
         el('table', null,
-          el('thead', null, el('tr', null, el('th', null, 'Stat'), el('th', { class: 'r' }, 'Sheet now'), el('th', { class: 'r' }, 'Sheet at t100'), el('th', { class: 'r' }, 'Gear now'), el('th', { class: 'r' }, 'Gear at t100'))),
-          el('tbody', null, projRows.map(p => {
-            const delta = p.proj != null ? Math.max(0, p.proj - p.cur) : null;
-            return el('tr', null,
-              el('td', null, str(p.s), p.top ? el('span', { class: 'badge top' }, 'sacred here') : null),
-              el('td', { class: 'r' }, p.sheetNow != null ? fmt(p.sheetNow) + '%' : '—'),
-              el('td', { class: 'r' }, p.sheetNow != null && delta != null ? '≈' + fmt(p.sheetNow + delta) + '%' : '—'),
-              el('td', { class: 'r' }, p.cur ? fmt(p.cur) + '%' : '—'),
-              el('td', { class: 'r' }, p.proj != null ? fmt(p.proj) + '%' : 'no data yet',
-                p.sat && p.proj != null && p.proj > p.sat ? el('span', { class: 'sub' }, ` (useful to ~${p.sat}%)`) : null));
-          }))),
+          el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Craft these 4'), el('th', null, 'Sacred wish'))),
+          el('tbody', null, Object.entries(targets.plan).map(([slot, picks]) => el('tr', null,
+            el('td', null, slot),
+            el('td', null, picks.map(p => `${p.match} ${fmtAvg(p)}`).join(' · ')),
+            el('td', null, targets.sacred ? `${targets.sacred.match} ${fmtAvg(targets.sacred)}` : '—'))))),
         craftRows.length ? [el('h2', null, 'Crafting worklist'),
           el('ul', { class: 'rolls' }, craftRows)] : null,
       ] : null);

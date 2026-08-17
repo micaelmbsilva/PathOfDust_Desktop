@@ -50,7 +50,7 @@
       },
       {
        "s": "Attack Speed",
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (More swings through the converted damage)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (More swings through the converted damage)"
       },
       {
        "s": "Reduced Dmg Taken",
@@ -105,7 +105,7 @@
       {
        "s": "Attack Speed",
        "top": true,
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (Every hit is a Frenzy roll — attack speed multiplies the whole engine)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (Every hit is a Frenzy roll — attack speed multiplies the whole engine)"
       },
       {
        "s": "Increased Dmg Dealt",
@@ -172,7 +172,7 @@
       },
       {
        "s": "Attack Speed",
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (More hits, more crits, more Twin Strikes)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (More hits, more crits, more Twin Strikes)"
       },
       {
        "s": "Increased Dmg Dealt",
@@ -227,7 +227,7 @@
       },
       {
        "s": "Attack Speed",
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (Builds and holds Flowing Strikes stacks)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (Builds and holds Flowing Strikes stacks)"
       },
       {
        "s": "Increased Crit Dmg Dealt",
@@ -352,7 +352,7 @@
       },
       {
        "s": "Attack Speed",
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (More volleys)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (More volleys)"
       }
      ]
     }
@@ -406,7 +406,7 @@
       },
       {
        "s": "Attack Speed",
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (More base casts to start chains; enables Temporal Rift flex past 100%)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (More base casts to start chains; enables Temporal Rift flex past 100%)"
       },
       {
        "s": "Splash",
@@ -456,7 +456,7 @@
       {
        "s": "Attack Speed",
        "top": true,
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (Root synergy now, Unstable Power conversion past 100% later — never wasted)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (Root synergy now, Unstable Power conversion past 100% later — never wasted)"
       },
       {
        "s": "Increased Dmg Dealt",
@@ -636,7 +636,7 @@
       },
       {
        "s": "Attack Speed",
-       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (~1.3%/tier). Chase higher-tier gloves instead of rolling for it. (Faster wound stacking, more FlickerStrike value)"
+       "why": "NOT a rollable mod — attack speed exists only as the gloves' primary stat (0.9%/tier, source default). Chase higher-tier gloves instead of rolling for it. (Faster wound stacking, more FlickerStrike value)"
       },
       {
        "s": "Increased Crit Dmg Dealt",
