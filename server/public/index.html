@@ -370,15 +370,22 @@ async function ladder() {
 // Hidden routes are keyed: append ?key=<SITE_KEY> once (e.g. #/watchlist?key=…),
 // it's remembered locally and stripped from the URL. Server enforces it for the
 // watchlist data; the advisor shares the same gate.
+// Two keys: the site key opens the operator pages, the owner key opens the
+// investigation on top of that (?owner=… once, same capture as ?key=…).
 const siteKey = () => localStorage.getItem('pod.key') || '';
+const ownerKey = () => localStorage.getItem('pod.owner') || '';
+// The owner key rides in a header, not the query string — it is the privileged
+// one, and query strings end up in proxy and access logs.
+const ownerFetch = (path, opts) => fetch(path, { ...opts, headers: { 'x-pod-owner': ownerKey() } });
 const keyDenied = () => view(el('p', { class: 'status' }, 'This page needs a key — open it once with ?key=… appended.'));
+const ownerDenied = () => view(el('p', { class: 'status' }, 'Owner-only. Open once with ?owner=… appended.'));
 
 // The keyed pages are one admin panel: route() prepends this bar to each of
 // them, so they read as tabs rather than as unrelated hidden URLs.
 const ADMIN_TABS = [['#/admin', 'Overview'], ['#/feedback', 'Feedback'],
-  ['#/watchlist', 'Watchlist'], ['#/intel', 'Investigation']];
+  ['#/watchlist', 'Watchlist'], ['#/intel', 'Investigation', true]];
 const adminNav = () => el('div', { class: 'chips adminnav' },
-  ADMIN_TABS.map(([href, label]) => el('a',
+  ADMIN_TABS.filter(([, , owner]) => !owner || ownerKey()).map(([href, label]) => el('a',
     { class: 'chip' + (location.hash === href ? ' on' : ''), href }, label)),
   el('a', { class: 'chip', href: '#/' }, '← Ladder'));
 
@@ -473,7 +480,8 @@ async function checkFeedback() {
 // Claude Code (the pod-investigate skill reads api/dossier and posts back to
 // api/findings), so nothing here spends API credit. Keyed, no nav links to it.
 async function intelData() {
-  const r = await fetch('api/intel?key=' + encodeURIComponent(siteKey()));
+  if (!ownerKey()) return null;
+  const r = await ownerFetch('api/intel');
   if (r.status === 403) return null;
   if (!r.ok) throw new Error('intel ' + r.status);
   return r.json();
@@ -481,7 +489,7 @@ async function intelData() {
 
 async function intel() {
   const d = await intelData();
-  if (!d) return keyDenied();
+  if (!d) return ownerDenied();
   const wrap = el('div', null);
   const paint = (data) => {
     const latest = data.latest;
@@ -489,7 +497,7 @@ async function intel() {
       data.scraping ? 'Pulling…' : 'Pull fresh game data');
     btn.onclick = async () => {
       btn.disabled = true;
-      await fetch('api/rescrape?key=' + encodeURIComponent(siteKey()), { method: 'POST' });
+      await ownerFetch('api/rescrape', { method: 'POST' });
       poll();
     };
     // Wrapped in one element: replaceChildren stringifies arrays and nulls,
@@ -561,10 +569,13 @@ async function intel() {
 async function admin() {
   const key = encodeURIComponent(siteKey());
   const seen = +localStorage.getItem('pod.fbseen') || 0;
+  const owner = ownerKey();
   const [allR, unreadR, intelR, watchR] = await Promise.all([
     fetch('api/feedback?key=' + key + '&since=0'),
     fetch('api/feedback?key=' + key + '&since=' + seen),
-    fetch('api/intel?key=' + key),
+    // Investigation is owner-only: without that key the panel simply doesn't
+    // mention it, rather than showing a tile that always says "unavailable".
+    owner ? ownerFetch('api/intel') : Promise.resolve({ ok: false, status: 403 }),
     fetch('api/watchlist?key=' + key)]);
   if (allR.status === 403) return keyDenied();
   // null means the endpoint failed — say so rather than showing a confident zero.
@@ -600,11 +611,11 @@ async function admin() {
       tile('#/watchlist', 'Watchlist', items ? String(items.length) : '—',
         !items ? 'unavailable'
           : byImpact.length ? byImpact.map(([k, n]) => `${n} ${k}`).join(' · ') : 'hand-curated file'),
-      tile('#/intel', 'Investigation', latest ? agoShort(latest.ts) : '—',
+      !owner ? null : tile('#/intel', 'Investigation', latest ? agoShort(latest.ts) : '—',
         !intel ? 'unavailable'
           : latest ? `${plural(arr(latest.interactions).length, 'interaction')} · ${plural(arr(latest.patterns).length, 'pattern')}`
           : 'no investigation run yet'),
-      tile('#/intel', 'Game data',
+      !owner ? null : tile('#/intel', 'Game data',
         !intel ? '—' : intel.scraping ? 'pulling…' : intel.lastScrape ? agoShort(intel.lastScrape) : '—',
         !intel ? 'unavailable'
           : !intel.sources ? 'source status unknown'
@@ -615,7 +626,7 @@ async function admin() {
       el('div', { class: 'lvrow' }, who, go),
       el('p', { class: 'sub', style: 'margin:0' },
         'Scores every class against that player\'s actual gear, including the watchlist findings that name it.')),
-    latest && str(latest.summary) ? [el('h2', null, 'Latest investigation'),
+    owner && latest && str(latest.summary) ? [el('h2', null, 'Latest investigation'),
       el('div', { class: 'card' }, el('p', { style: 'margin:0' }, str(latest.summary)),
         el('p', { class: 'sub', style: 'margin:8px 0 0' }, `${agoText(latest.ts)} · ${str(latest.model)}`))] : null);
 }
@@ -986,9 +997,20 @@ async function classView(archetype) {
 }
 
 async function route() {
-  // Capture ?key=… from the hash once, remember it, strip it from the URL.
-  const km = location.hash.match(/^(.*?)\?key=([^&]+)$/);
-  if (km) { localStorage.setItem('pod.key', decodeURIComponent(km[2])); location.replace(location.pathname + km[1]); return; }
+  // Capture ?key=… / ?owner=… from the hash once, remember them, strip from the URL.
+  // Parsed by hand rather than with URLSearchParams: that applies form-encoding
+  // rules and would turn a '+' inside a key into a space.
+  const km = location.hash.match(/^(.*?)\?(.+)$/);
+  if (km) {
+    const param = (n) => {
+      const m = km[2].match(new RegExp('(?:^|&)' + n + '=([^&]*)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    };
+    const key = param('key'), owner = param('owner');
+    if (key) localStorage.setItem('pod.key', key);
+    if (owner) localStorage.setItem('pod.owner', owner);
+    if (key || owner) { location.replace(location.pathname + km[1]); return; }
+  }
   const solo = { '#/admin': admin, '#/watchlist': watchlist, '#/feedback': feedbackView, '#/intel': intel }[location.hash];
   if (solo) {
     // view() adds the nav; a thrown page never called it, so add it here too.

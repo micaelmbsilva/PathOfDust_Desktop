@@ -14,7 +14,7 @@ const bigJson = express.json({ limit: '1mb' });
 app.use((req, res, next) => (req.path === '/api/findings' ? bigJson : smallJson)(req, res, next));
 app.use((req, res, next) => { // open receiver — the app posts from anywhere
   res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, x-pod-owner');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -344,11 +344,19 @@ async function latestInvestigation() {
   } catch { return null; } // table may not exist yet on a cold DB
 }
 
+// The investigation is owner-only, behind its own key: SITE_KEY opens the
+// operator pages that can be shared (watchlist, advisor, feedback inbox), while
+// OWNER_KEY opens this. Fails closed — an unset variable denies everyone.
+// The key travels in a header, never the query string: query strings land in
+// proxy and access logs, and this one is the privileged key. (The site key's
+// ?key= is grandfathered; its pages are the shareable ones.)
+const ownerOk = (req) => !!process.env.OWNER_KEY && req.get('x-pod-owner') === process.env.OWNER_KEY;
+
 // The dossier goes out, findings come back. Nothing here calls an LLM — the
 // analysis runs in whatever Claude the operator already pays for (see the
 // pod-investigate skill), which keeps this server free of API keys and spend.
 app.get('/api/dossier', h(async (req, res) => {
-  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   const { body } = await buildDossier();
   res.set('Cache-Control', 'no-store').type('application/json').send(body);
@@ -358,7 +366,7 @@ app.get('/api/dossier', h(async (req, res) => {
 // takes a couple of minutes, far longer than a request should hold open.
 let scraping = false;
 app.post('/api/rescrape', (req, res) => {
-  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   if (scraping) return res.status(409).json({ scraping, lastScrape: lastScrapeAt });
   scraping = true;
   Promise.all([scrapeRoster(), scrapeWiki(), scrapePatchNotes()])
@@ -403,7 +411,7 @@ function badFindings(d) {
 }
 
 app.post('/api/findings', h(async (req, res) => {
-  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   const bad = badFindings(req.body);
   if (bad) return res.status(400).json({ error: bad });
@@ -428,7 +436,7 @@ app.post('/api/findings', h(async (req, res) => {
 
 // What the #/intel page reads: newest findings, patch notes, scrape freshness.
 app.get('/api/intel', h(async (req, res) => {
-  if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   const found = await latestInvestigation();
   res.set('Cache-Control', 'no-store');
   res.json({
