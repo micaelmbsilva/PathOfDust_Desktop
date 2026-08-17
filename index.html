@@ -193,7 +193,6 @@
   .partial { font-size: 0.74rem; color: #ffd479; background: rgba(255,212,121,0.1);
     border: 1px solid rgba(255,212,121,0.35); border-radius: 6px;
     padding: 4px 8px; margin: 2px 0 8px; cursor: help; }
-  .partial.ok { color: #7fdba3; background: rgba(127,219,163,0.08); border-color: rgba(127,219,163,0.3); }
   .btabs { display: flex; gap: 6px; margin: 6px 0; }
   .btabs button { border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.15); color: #eae6f5; }
@@ -339,7 +338,7 @@
 
 <div class="apanel" id="fightspanel" style="top:90px;left:160px;width:900px;height:700px">
   <div class="cbar" id="fightsbar">
-    <span class="ctitle">📜 Fight History</span>
+    <span class="ctitle">⚔️ Fight History</span>
     <span class="cbtns">
       <button id="fightsPop" title="pop out to its own window">⧉</button>
       <button id="fightsCollapse" title="collapse">▾</button>
@@ -376,15 +375,6 @@
   <div class="abody" id="fightBody" style="display:flex;flex-direction:column;gap:6px">
     <p class="muted">No fight yet — data arrives when the next boss battle starts.</p>
   </div>
-</div>
-
-<div class="apanel" id="battlespanel" style="top:80px;left:340px;width:460px">
-  <div class="cbar" id="battlesbar">
-    <span class="ctitle">⚔️ Combat History</span>
-    <span class="cbtns"><button id="battlesCollapse" title="collapse">▾</button>
-      <button title="close" onclick="toggleModal('battles', false)">✕</button></span>
-  </div>
-  <div class="abody" id="battlesBody"><p class="muted">No battles recorded yet — reports appear after each boss fight.</p></div>
 </div>
 
 <div class="apanel open" id="stats">
@@ -744,7 +734,7 @@
   const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
     lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
-    histCap: 40, histAgeH: 0, logToDisk: true, feedCat: 'all' };
+    logToDisk: true, feedCat: 'all' };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
   const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
   (function migrateSettings() { // one-time: rev-78 preset selects -> per-kind checkboxes
@@ -761,23 +751,12 @@
 
   // Battle history read + retention in one place (age filter then cap; list is
   // newest-first). Writes back only when something was pruned.
-  const HIST_CAPS = [10, 20, 40, 100], HIST_AGES = [0, 24, 72, 168, 720];
-  function battleLog() {
-    const s = S();
-    const cap = HIST_CAPS.includes(+s.histCap) ? +s.histCap : 40;   // allowlist — manual edits can't break it
-    const ageH = HIST_AGES.includes(+s.histAgeH) ? +s.histAgeH : 0; // 0 = never
-    let log = LS.get('battleLog', []);
-    if (!Array.isArray(log)) log = [];
-    const pruned = log.filter(r => !ageH || Date.now() - r.at < ageH * 3600e3).slice(0, cap);
-    if (pruned.length !== log.length) LS.set('battleLog', pruned);
-    return pruned;
-  }
 
   // ---- Party modal + battle reports (all data from the game WS) ----
   let lastRoster = null; // latest `state` message
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   // Panels open at close reopen next launch (positions already persist via lay.*)
-  const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'battles', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
+  const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
   let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
   const persistPanels = () => LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
     document.getElementById(w + 'panel')?.classList.contains('open')));
@@ -790,7 +769,7 @@
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
-      ({ party: renderParty, battles: renderBattles, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox,
+      ({ party: renderParty, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox,
          characters: framePanel('characters', '/character.html'), fights: framePanel('fights', '/fights.html') })[which]();
       // clamp into the viewport — a position saved on a big window must still
       // be reachable on a small (mobile-ish) one
@@ -827,7 +806,6 @@
   wirePanel('settingspanel', 'settingsbar', 'settingsCollapse', 'lay.settings');
   wirePanel('partypanel', 'partybar', 'partyCollapse', 'lay.party');
   wirePanel('fightpanel', 'fightbar', 'fightCollapse', 'lay.fight');
-  wirePanel('battlespanel', 'battlesbar', 'battlesCollapse', 'lay.battles');
   wirePanel('buffspanel', 'buffsbar', 'buffsCollapse', 'lay.buffs');
   wirePanel('inboxpanel', 'inboxbar', 'inboxCollapse', 'lay.inbox');
   wirePanel('characterspanel', 'charactersbar', 'charactersCollapse', 'lay.characters');
@@ -863,8 +841,7 @@
     chat: { label: '💬 Chat', act: () => toggleChat(), isActive: panelOpen('chat') },
     party: { label: '👥 Party', title: "Who's fighting right now — DPS/Heal/Tank, status", act: () => toggleModal('party'), isActive: panelOpen('party') },
     buffs: { label: '✨ Buffs &amp; Debuffs', title: 'Active buffs/debuffs — channel-point events and your in-fight buffs', act: () => toggleModal('buffs'), isActive: panelOpen('buffs') },
-    fight: { label: '🗡️ Live Fight', title: 'Live leaderboard + your combat log for the fight in progress', act: () => toggleModal('fight'), isActive: panelOpen('fight') },
-    battles: { label: '⚔️ Combat History', title: 'Your saved battle reports, fight logs, and per-fight leaderboards', act: () => toggleModal('battles'), isActive: panelOpen('battles') },
+    fight: { label: '🗡️ Live Fight', title: 'Your own blow-by-blow for the fight in progress', act: () => toggleModal('fight'), isActive: panelOpen('fight') },
     stream: { label: '📺 Stream', title: 'Watch the stream in a small panel', act: () => toggleStream(), isActive: panelOpen('stream') },
     highlight: { label: '✨ Highlight Me', title: 'Dim other players, highlight your character', act: () => toggleHighlight(), isActive: () => localStorage.getItem('highlight') === '1' },
     autolock: { label: '🔒 Auto-Lock ✨', title: 'Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop', act: () => toggleAutoLock(), isActive: () => autoLockOn() },
@@ -876,7 +853,7 @@
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
     inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
-    fights: { label: '📜 Fight History', title: "Recent fights — the site's own breakdown where it's available, otherwise the ones this app recorded", act: () => toggleModal('fights'), isActive: panelOpen('fights') },
+    fights: { label: '⚔️ Fight History', title: "Every recent fight, straight from the game's own records — exact totals, no estimates", act: () => toggleModal('fights'), isActive: panelOpen('fights') },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the
   // backend's PING_KEY (sent by the bridge) is the actual auth.
@@ -884,7 +861,7 @@
   const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
-    { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'battles'] } },
+    { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight'] } },
     { i: 'stream' }, { i: 'highlight' }, { i: 'autolock' },
     { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'refresh', 'update', 'feedback'] } },
   ];
@@ -1127,29 +1104,14 @@
   // null = class unknown (roster scrape unavailable) — caller falls back to the
   // observed-behavior role. A Split Personality 2nd class isn't visible here.
   const kitRolesOf = (c) => { const k = classOf(c); return k ? (CLASS_ROLES[k] || ['dps']) : null; };
-  function classifyParty() {
-    const rep = battleLog()[0]; // via retention — an expired report must not drive roles
-    const cls = {};
-    if (rep && rep.board?.length) {
-      const n = rep.board.length;
-      const tot = (k) => rep.board.reduce((s, p) => s + p[k], 0) || 1;
-      const totH = tot('h'), totT = tot('t');
-      // Heal: does >1.5x a fair share of the party's healing. Tank: soaks >2x a
-      // fair share of the damage taken. Everyone else is DPS. Heal wins ties —
-      // dedicated healers get hit too.
-      for (const p of rep.board) {
-        cls[p.n.toLowerCase()] = p.h / totH > 1.5 / n ? 'heal' : p.t / totT > 2 / n ? 'tank' : 'dps';
-      }
-    }
-    return cls;
-  }
   // Composition pips are filters: click DPS/Heal/Tank/Retreated to show only
   // those members, click again (or Active) to clear.
   let partyFilter = null;
   function renderParty() {
     if (!lastRoster) return; // placeholder stays
-    const cls = classifyParty();
-    const of = (c) => cls[c.displayName.toLowerCase()] || (c.role === 'support' ? 'heal' : 'dps');
+    // Class kit first; the WS role field is the fallback when the roster
+    // scrape hasn't landed. Nothing here is inferred from fight numbers.
+    const of = (c) => (c.role === 'support' ? 'heal' : 'dps');
     // retreated players sort last and don't count toward the composition
     const cs = [...lastRoster.characters].sort((a, b) => (a.retreated - b.retreated) || b.level - a.level);
     const counts = { dps: 0, heal: 0, tank: 0 };
@@ -1204,11 +1166,9 @@
   // ponytail: caps hardcoded to mirror the server's constants — if it retunes
   // them we get false negatives (silence), which is the safe direction.
   const OVERLAY_CAP = { player: 500, boss: 1000 };
-  const partialNote = (t) => !t ? '' : t.exact
-    ? `<div class="partial ok" data-tip="The game caps the live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. The totals and leaderboard here come from the game's own summary instead, built from the complete log.">` +
-      `📊 Totals below are exact — only the personal event log was trimmed, so it may skip some of your hits.</div>`
-    : `<div class="partial" data-tip="The game caps the live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth, and drops the rest. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. The website's own Fight History page still has the complete log.">` +
-      `⚠️ Partial data — the game trimmed this fight's live feed, so these totals are under-counts.</div>`;
+  const partialNote = (t) => !t ? '' :
+    `<div class="partial" data-tip="The game caps its live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth, and drops the rest. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. Fight History reads the game's own records instead, so its numbers are unaffected.">` +
+    `⚠️ Busy fight — some of your events were trimmed from the live feed. Fight History has the exact totals.</div>`;
   const actorOf = (ev) => ev.attacker || ev.healer || ev.unit || '';
   function thinningOf(d) {
     const boss = new Set((d.units || []).filter(u => u.isBoss || /^__enemy/.test(u.id)).map(u => u.id));
@@ -1227,71 +1187,32 @@
     return pSec || bSec ? { player: pSec, boss: bSec, secs: perSec.size } : null;
   }
 
-  function buildReport(d) {
-    const players = {}; // id -> displayName (bosses/adds excluded)
-    for (const u of d.units || []) if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName;
-    const agg = {}; // id -> {d,h,t}
-    const A = (id) => agg[id] || (agg[id] = { d: 0, h: 0, t: 0 });
-    const myId = Object.keys(players).find(id => players[id].toLowerCase() === myName.toLowerCase());
-    const me = { dmg: 0, taken: 0, heal: 0, healRecv: 0, hits: 0, crits: 0, evaded: 0 };
-    const deaths = [];
-    for (const ev of d.events || []) {
-      if (ev.kind === 'attack') {
-        if (players[ev.attacker]) {
-          if (!ev.evaded) A(ev.attacker).d += ev.damage || 0;
-          if (ev.attacker === myId) { me.hits++; if (ev.isCrit) me.crits++; if (ev.evaded) me.evaded++; else me.dmg += ev.damage || 0; }
-        }
-        if (players[ev.target] && !ev.evaded) {
-          A(ev.target).t += ev.damage || 0;
-          if (ev.target === myId) me.taken += ev.damage || 0;
-        }
-      } else if (ev.kind === 'heal' || ev.kind === 'shield') {
-        if (players[ev.healer]) { A(ev.healer).h += ev.amount || 0; if (ev.healer === myId) me.heal += ev.amount || 0; }
-        if (ev.target === myId) me.healRecv += ev.amount || 0;
-      } else if (ev.kind === 'defeat' && players[ev.unit]) deaths.push(players[ev.unit]);
-    }
-    // The game now ships per-player aggregates on the broadcast (2026-08-18),
-    // computed from the FULL event log before thin_events_for_overlay runs — so
-    // where the loop above can only see the trimmed feed, these are exact.
-    // Prefer them and keep the loop as the fallback for older servers.
-    // healRecv and the death list have no summary equivalent, so those stay
-    // feed-derived either way.
-    const sp = d.summary && d.summary.players;
-    if (sp && sp.length) {
-      for (const p of sp) {
-        agg[p.id] = { d: p.damageDealt || 0, h: p.healingDone || 0, t: p.damageTaken || 0 };
-        if (!players[p.id]) players[p.id] = p.displayName;
-      }
-      const mine = sp.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
-      if (mine) Object.assign(me, { dmg: mine.damageDealt || 0, taken: mine.damageTaken || 0,
-        heal: mine.healingDone || 0, hits: mine.hits || 0, crits: mine.crits || 0, evaded: mine.evaded || 0 });
-    }
-    const totalDmg = Object.values(agg).reduce((n, a) => n + a.d, 0);
-    me.share = totalDmg ? me.dmg / totalDmg : 0;
-    const lootText = (o) => o && o.autoDisenchanted ? `auto-disenchanted → +${(o.autoDisenchanted.dust || 0).toLocaleString()} dust` : 'kept';
+  // A fight's numbers come from the game's own summary (exact, built before the
+  // overlay thinning) — we no longer aggregate events ourselves, so there is
+  // nothing here that could disagree with the server. The only thing we add is
+  // your personal event feed, which the summary has no equivalent for.
+  function fightRecord(d) {
+    const sp = (d.summary && d.summary.players) || [];
+    const mine = sp.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
     return {
-      at: Date.now(), stage: d.stage, kind: d.kind, won: !!d.won, durMs: d.displayDurationMs || 0,
-      partySize: (d.participants || []).length, me, deaths,
-      myLoot: (d.loot || []).filter(l => l.displayName.toLowerCase() === myName.toLowerCase())
-        .map(l => ({ item: l.itemName, slot: l.slot, outcome: lootText(l.outcome) })),
-      board: Object.entries(agg).map(([id, a]) => ({ n: players[id], ...a })),
-      // `exact` = the totals above came from the server's own summary, so only
-      // the personal event log below is short. Without it, everything is short.
-      thinned: (() => { const t = thinningOf(d); return t && { ...t, exact: !!(sp && sp.length) }; })(),
+      at: Date.now(), stage: d.stage, kind: d.kind, won: !!d.won,
+      durMs: d.displayDurationMs || 0, partySize: (d.participants || []).length,
+      me: mine || null,
+      players: sp,
+      loot: (d.loot || []).filter(l => (l.displayName || '').toLowerCase() === myName.toLowerCase())
+        .map(l => ({ item: l.itemName, slot: l.slot, tier: l.tier })),
+      feed: fight && fight.feed ? fight.feed.slice(-400) : [], // personal log, capped
+      // Live-feed trimming only ever affects `feed`; every number above is the
+      // server's own. Recorded so a reader of the file knows which is which.
+      feedTrimmed: !!thinningOf(d),
     };
   }
+  // Opt-in disk archive (userData/fight-logs, bridge keeps newest 100). This is
+  // now the only place a personal fight log persists — Fight History reads the
+  // API, which has exact totals but no per-player events.
   function saveBattle(rep) {
-    // Disk archive (userData/fight-logs, bridge keeps newest 100) — independent
-    // of the localStorage history and its retention; Clear Combat History
-    // deliberately leaves the disk files alone.
     if (S().logToDisk) fetch('/api/log-fight', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(rep) }).catch(() => {});
-    const log = battleLog();
-    log.unshift(rep);
-    LS.set('battleLog', log);
-    battleLog(); // re-apply retention (cap) to what we just stored
-    rerenderIfOpen('battles', renderBattles);
-    rerenderIfOpen('settings', renderSettings); // keep the Clear-history count fresh
   }
 
   const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
@@ -1299,93 +1220,6 @@
   const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''} ago`; };
   // Metric-tabbed leaderboard table, shared by Combat History and Live Fight
   // (attr differs so each panel's tab clicks re-render only itself).
-  function lbTable(board, secs, attr) {
-    const metric = localStorage.getItem('lbMetric') || 'd';
-    const cols = { d: 'DPS', h: 'Heal', t: 'Tank' };
-    const keys = metric === 'all' ? ['d', 'h', 't'] : [metric];
-    const rows = [...board].sort((a, b) => b[keys[0]] - a[keys[0]]);
-    return `<div class="btabs">${['d', 'h', 't', 'all'].map(k =>
-        `<button class="${metric === k ? 'on' : ''}" ${attr}="${k}">${cols[k] || 'All'}</button>`).join('')}</div>
-      <table class="lb"><tr><th>#</th><th style="text-align:left">Player</th>${keys.map(k => `<th>${cols[k]}</th>`).join('')}${metric === 'd' ? '<th>/s</th>' : ''}</tr>
-      ${rows.map((r, i) => `<tr class="${r.n.toLowerCase() === myName.toLowerCase() ? 'mme' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(r.n)}</td>` +
-        keys.map(k => `<td>${fmtN(r[k])}</td>`).join('') + (metric === 'd' ? `<td>${fmtN(r.d / secs)}</td>` : '') + '</tr>').join('')}</table>`;
-  }
-  function renderBattles() {
-    const log = battleLog();
-    if (!log.length) { // explicit empty state — after a Clear, stale cards must not linger
-      document.getElementById('battlesBody').innerHTML = '<p class="muted">No battles recorded yet — reports appear after each boss fight.</p>';
-      return;
-    }
-    const lb = (rep) => lbTable(rep.board, Math.max(1, (rep.durMs || 0) / 1000), 'data-lb');
-    // Say it plainly rather than showing short numbers as if they were the truth.
-    document.getElementById('battlesBody').innerHTML = log.map((rep, i) => {
-      const m = rep.me, secs = Math.max(1, (rep.durMs || 0) / 1000);
-      // no hits, damage, or healing either way — downed/retreated/just joined
-      const idle = !m.hits && !m.dmg && !m.taken && !m.heal && !m.healRecv;
-      const logSection = !rep.feed
-        ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No log for this fight — recorded before the update.</div>'
-        : !rep.feed.length
-          ? '<div class="muted" style="font-size:0.78rem;margin:4px 0">📜 No personal combat events this fight.</div>'
-          : `<details class="flog"><summary>📜 My Fight Log (${rep.feed.length}) <button data-poplog="${i}" title="Open in its own window">⧉</button></summary>${feedChips()}<div class="ffeed pod-feed">${
-              feedLines(rep.feed) || '<p class="muted">Nothing in this category.</p>'}</div></details>`;
-      return `<div class="bent" data-i="${i}"><div class="bh">
-        <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
-        <span>Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''}</span>
-        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`}${rep.thinned && !rep.thinned.exact ? ' <span class="pmark" data-tip="Under-count — the game trimmed this fight\'s live feed. Open the entry for detail.">⚠️</span>' : ''} · ${ago(rep.at)}</span></div>
-        <div class="bbody">
-          ${partialNote(rep.thinned)}
-          ${idle ? '<p class="muted" style="margin:2px 0 8px">🪦 You sat this one out — downed, retreated, or joined late.</p>' : `<div class="bstats">
-            <span><span class="l">Damage Dealt</span> <b>${fmtN(m.dmg)}</b> (${(m.share * 100).toFixed(1)}%)</span>
-            <span><span class="l">DPS</span> <b>${fmtN(m.dmg / secs)}</b></span>
-            <span><span class="l">Damage Taken</span> <b>${fmtN(m.taken)}</b></span>
-            <span><span class="l">Healing Done</span> <b>${fmtN(m.heal)}</b></span>
-            <span><span class="l">Healing Received</span> <b>${fmtN(m.healRecv)}</b></span>
-            <span data-tip="Every landed damage event you caused, including damage-over-time and splash ticks. The game can only crit on direct strikes — 12 of its 17 damage-event kinds are hardcoded non-crit — so crits as a share of this is NOT your crit rate, which is why no percentage is shown here. Your real crit chance is on the character sheet."><span class="l">Landed Hits</span> <b>${fmtN(m.hits)}</b>${m.crits ? ` · ${fmtN(m.crits)} crit` : ''}</span>
-            ${m.evaded ? `<span><span class="l">Evaded by Boss</span> <b>${m.evaded}</b></span>` : ''}
-            ${rep.deaths.length ? `<span><span class="l">Party Deaths</span> <b>${rep.deaths.length}</b>${rep.deaths.some(n => n.toLowerCase() === myName.toLowerCase()) ? ' (incl. you)' : ''}</span>` : ''}
-          </div>`}
-          ${rep.myLoot.length ? `<div class="bloot">🎁 ${rep.myLoot.map(l => `${esc(l.item)} (${esc(l.slot)}, ${esc(l.outcome)})`).join(' · ')}</div>` : ''}
-          ${logSection}
-          ${lb(rep)}
-        </div></div>`;
-    }).join('');
-    document.querySelectorAll('.bent .bh').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
-    bindFeedChips(document.getElementById('battlesBody'), () => { // keep expanded entries open across the rerender
-      const openIdxs = [...document.querySelectorAll('.bent.open')].map(el => el.dataset.i);
-      const openLogs = [...document.querySelectorAll('.bent details[open]')].map(d => d.closest('.bent')?.dataset.i);
-      renderBattles();
-      for (const i of openIdxs) document.querySelector(`.bent[data-i="${i}"]`)?.classList.add('open');
-      for (const i of openLogs) document.querySelector(`.bent[data-i="${i}"] details`)?.setAttribute('open', '');
-    });
-    // fight log in its own window — a blank popup we write the log into
-    document.querySelectorAll('[data-poplog]').forEach(b => b.onclick = (e) => {
-      e.preventDefault(); e.stopPropagation(); // don't toggle the <details>
-      const rep = log[+b.dataset.poplog]; if (!rep?.feed?.length) return;
-      const w = window.open('', 'flog', 'width=480,height=680,menubar=no,toolbar=no');
-      w.document.title = `Fight Log — Stage ${rep.stage}`;
-      // The pop-out is a blank window, so it needs feed.js loaded into it too —
-      // otherwise it has no renderer and no styles of its own.
-      w.document.body.innerHTML = `<style>
-        body{background:#0c0a16;color:#eae6f5;font:13px "Segoe UI",Arial,sans-serif;padding:12px}
-        h2{font-size:1rem;color:#c9bdf0;margin:0 0 10px}
-        .pod-feed{border-top:0;max-height:none}</style>
-        <h2>📜 Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''} — ${rep.won ? '🏆 Won' : '💀 Lost'} · ${new Date(rep.at).toLocaleTimeString()}</h2>
-        <div class="pod-feed" id="out"></div>`;
-      const s = w.document.createElement('script');
-      s.src = '/feed.js';
-      s.onload = () => { w.document.getElementById('out').innerHTML = w.PodFeed.lines(rep.feed, 'all'); };
-      w.document.head.appendChild(s);
-      w.focus();
-    });
-    document.querySelectorAll('[data-lb]').forEach(b => b.onclick = (e) => {
-      e.stopPropagation();
-      localStorage.setItem('lbMetric', b.dataset.lb);
-      const openIdxs = [...document.querySelectorAll('.bent.open')].map(el => el.dataset.i);
-      renderBattles();
-      for (const i of openIdxs) document.querySelector(`.bent[data-i="${i}"]`)?.classList.add('open');
-    });
-  }
-
   // ---- ⚙️ Settings panel ----
   function renderSettings() {
     const s = S();
@@ -1411,9 +1245,6 @@
       `<div class="fhead" style="margin-top:10px">⚡ Performance</div>` +
       row('Refresh Mode', sel('refresh', [['resp', 'Responsive'], ['bal', 'Balanced'], ['low', 'Low Data']]), 'How often stats and bag re-poll. Responsive: 3s (30s while live events flow). Balanced: half that. Low Data: quarter.') +
       row('Unload Chat When Hidden', chk('chatUnload'), 'Frees CPU/RAM while chat is closed; reopening reloads it.') +
-      `<div class="fhead" style="margin-top:10px">📜 Combat History</div>` +
-      row('Keep Battles', sel('histCap', HIST_CAPS.map(v => [v, String(v)]))) +
-      row('Auto-Delete Older Than', sel('histAgeH', [[0, 'Never'], [24, '1 Day'], [72, '3 Days'], [168, '7 Days'], [720, '30 Days']]), 'Old reports are removed when history is next used.') +
       row('Save Fight Logs to Disk', chk('logToDisk'), 'One JSON file per fight in the app\'s fight-logs folder (newest 100 kept). Independent of the history above — clearing history keeps the files.') +
       `<div class="fhead" style="margin-top:10px">📊 Diagnostics</div>
        <div id="diagBody"><p class="muted" style="font-size:0.78rem">Measuring…</p></div>
@@ -1424,14 +1255,11 @@
       `<div class="fhead" style="margin-top:10px">🧹 Maintenance</div>
       <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
         <button class="tbtn" id="openLogs" title="Show the saved fight-log files in Explorer">📂 Open Logs Folder</button>
-        <button class="tbtn" id="clearHist">🗑️ Clear Combat History (${battleLog().length})</button>
         <button class="tbtn" id="resetLay" title="Puts every panel back at its default spot and resets overlay zoom/pan — reloads the app page">📐 Reset Panels &amp; Zoom</button>
         <button class="tbtn" id="resetBar" title="Restores the top toolbar's default buttons and groups">🧭 Reset Toolbar</button>
       </div>`;
     document.querySelectorAll('#settingsBody [data-set]').forEach(el => el.onchange = () => {
       setS(el.dataset.set, el.type === 'checkbox' ? el.checked : (/^\d+$/.test(el.value) ? +el.value : el.value));
-      battleLog(); // retention may have tightened — prune now
-      rerenderIfOpen('battles', renderBattles);
       rerenderIfOpen('party', renderParty); // role classification reads the latest report
       renderSettings(); // refresh counts (keeps focus loss acceptable — selects just changed)
     });
@@ -1454,12 +1282,6 @@
       fetch('/api/open-logs', { method: 'POST' }).then(r => r.json())
         .then(r => { if (!r.ok) infoToast('Logs folder unavailable — restart the app if it just updated.'); })
         .catch(() => infoToast('Logs folder unavailable — restart the app if it just updated.'));
-    arm(document.getElementById('clearHist'), () => {
-      localStorage.removeItem('battleLog');
-      rerenderIfOpen('battles', renderBattles);
-      rerenderIfOpen('party', renderParty);
-      renderSettings();
-    });
     arm(document.getElementById('resetLay'), () => {
       Object.keys(localStorage).filter(k => k.startsWith('lay.')).forEach(k => localStorage.removeItem(k));
       location.reload();
@@ -1587,7 +1409,7 @@
       }
     }
     const dur = d.displayDurationMs || maxAt;
-    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, agg: {}, mySnaps,
+    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
       thinned: thinningOf(d) };
     if (document.getElementById('fightpanel').classList.contains('open')) startFightTimer();
@@ -1612,26 +1434,15 @@
     const cursor = Math.min(fight.maxAt, elapsed / fight.scale); // sim-time position
     const over = elapsed >= fight.dur;
     if (over && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
-    const A = (id) => fight.agg[id] || (fight.agg[id] = { d: 0, h: 0, t: 0 });
-    while (fight.idx < fight.evs.length && (fight.evs[fight.idx].atMs || 0) <= cursor) {
-      const ev = fight.evs[fight.idx++];
-      if (ev.kind === 'attack' && !ev.evaded) {
-        if (fight.players[ev.attacker]) A(ev.attacker).d += ev.damage || 0;
-        if (fight.players[ev.target]) A(ev.target).t += ev.damage || 0;
-      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && fight.players[ev.healer]) A(ev.healer).h += ev.amount || 0;
-    }
-    const board = Object.entries(fight.agg).map(([id, a]) => ({ n: fight.players[id], ...a }));
     const feedShown = fight.feed.filter(g => g.at <= cursor);
     const atBottom = (el) => !el || el.scrollHeight - el.scrollTop - el.clientHeight < 30;
     const keepScroll = atBottom(body.querySelector('.ffeed'));
     body.innerHTML =
       `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}</div>
       ${partialNote(fight.thinned)}
-      <div class="flb">${lbTable(board, Math.max(1, cursor / 1000), 'data-lbf')}</div>
       ${feedChips()}
       <div class="ffeed pod-feed">${feedLines(feedShown) || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
     bindFeedChips(body, renderFight);
-    body.querySelectorAll('[data-lbf]').forEach(b => b.onclick = () => { localStorage.setItem('lbMetric', b.dataset.lbf); renderFight(); });
     const fe = body.querySelector('.ffeed');
     if (keepScroll) fe.scrollTop = fe.scrollHeight;
   }
@@ -1748,15 +1559,11 @@
             else if (sb && Date.now() - sb.at < 30 * 60000) LS.set('sinceBoss', { n: sb.n + 1, at: Date.now() });
             else if (sb) localStorage.removeItem('sinceBoss');
           }
-          let replayOk = false;
-          try { startFight(d); replayOk = true; } catch {} // live replay — even if we're not in it
+          try { startFight(d); } catch {} // live replay — even if we're not in it
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
             armBattleToast(d);
-            try {
-              const rep = buildReport(d);
-              if (replayOk) { rep.feed = fight.feed.slice(-400); } // personal log, capped
-              saveBattle(rep);
-            } catch {}
+            // fightRecord reads startFight's feed, so it has to run after it.
+            try { saveBattle(fightRecord(d)); } catch {}
           }
         }
       } catch {}
