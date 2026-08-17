@@ -1901,7 +1901,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 82) showRestartBanner(); // 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 83) showRestartBanner(); // 83: periodic interface pull; 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
@@ -2106,5 +2106,6 @@
     mkToast('✨ Interface Updated', "You're on the latest — the app updates itself on launch.", [], { timeout: 12000 });
 </script>
 <script src="/tooltip.js"></script>
+<script src="/autoreload.js"></script>
 </body>
 </html>
