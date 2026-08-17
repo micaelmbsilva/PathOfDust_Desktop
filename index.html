@@ -210,8 +210,10 @@
   .pcell .phpf.low { background: #d05a5a; }
   .pcell .phpf.dead { background: #7a2f2f; }
   /* Notches: fixed HP-per-tick vertical marks (denser on higher-max, i.e.
-     tankier, units). Period is --tick (a %); painted on top of fill/ghost/shield. */
-  .pcell .php::after { content: ''; position: absolute; inset: 0; border-radius: 2px; pointer-events: none;
+     tankier, units). Period is --tick (a %). z-index:2 paints them over the HP
+     fill/ghost but UNDER the shield (z-index:3), so the shield reads as one clean
+     glow with no notch lines cutting through it. */
+  .pcell .php::after { content: ''; position: absolute; inset: 0; border-radius: 2px; pointer-events: none; z-index: 2;
     background: repeating-linear-gradient(90deg, transparent 0 calc(var(--tick, 25%) - 1px),
       rgba(0,0,0,0.42) calc(var(--tick, 25%) - 1px) var(--tick, 25%)); }
   /* HP bar glow, coloured by remaining HP — the same energy-shield treatment,
@@ -228,11 +230,12 @@
   @media (prefers-reduced-motion: reduce) { .pcell .php.low { animation: none; } }
   .pcell .php.dead { box-shadow: 0 0 5px 1px rgba(160,60,60,0.55); }
   /* Absorb shield (shield_hp buff) — a bluish-white overlay riding on top of the
-     HP fill, MMO energy-shield style. Its width tracks the remaining shield and
-     transitions, so it visibly shrinks as the shield is spent. Listed last so a
-     shielded bar glows blue over its HP-colour glow. */
+     HP fill, MMO energy-shield style. Same left-anchored scale as the fill (so a
+     shield of X HP is exactly as long as X HP of health) and the same width
+     transition, but z-index:3 keeps it above the notches — a clean glow, no
+     notch lines through it. */
   .pcell .php.sh { box-shadow: 0 0 5px 1px rgba(140,185,255,0.75); }
-  .pcell .pshd { position: absolute; top: 0; left: 0; height: 100%; border-radius: 2px;
+  .pcell .pshd { position: absolute; top: 0; left: 0; height: 100%; border-radius: 2px; z-index: 3;
     background: linear-gradient(90deg, rgba(190,220,255,0.9), rgba(150,195,255,0.5));
     mix-blend-mode: screen; transition: width 0.35s linear; pointer-events: none; }
   .pcell.mme .pn { color: #ffcf5a; }
