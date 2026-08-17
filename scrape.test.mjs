@@ -5,6 +5,7 @@
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
 import { implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf } from './server.mjs';
+import { netKey } from './actions.mjs';
 
 // The site's order inside a .gear-slot: name, quality, primary, sacred, unique.
 const sacredAndUnique = `
@@ -145,6 +146,17 @@ assert.ok(!ch.equipped[0].repair, "another player's gear is never actionable");
 assert.equal(ch.bag.length, 1, 'bag items are not mistaken for equipped');
 assert.deepEqual(ch.bag[0].durability, { pct: 35, indestructible: false });
 assert.deepEqual(characterOf('<div class="card"><h1>Not Found</h1></div>', 'nope'), { notFound: true });
+
+// --- Traffic counter keys. Per-player pages must collapse into one bucket, or
+// browsing the roster buries every other row under a hundred single-hit entries.
+assert.equal(netKey('/'), '/');
+assert.equal(netKey('inventory'), '/inventory', 'leading slash is optional at the call site');
+assert.equal(netKey('/inventory'), '/inventory');
+assert.equal(netKey('/characters'), '/characters', 'the roster list is not a per-player page');
+assert.equal(netKey('/characters/lokati_gaming'), '/characters/*');
+assert.equal(netKey('/characters/someone_else'), '/characters/*', 'two players, one bucket');
+assert.equal(netKey('/characters/lokati_gaming/passives'), '/characters/*/passives');
+assert.equal(netKey('/fights?limit=50'), '/fights', 'query strings are stripped');
 
 console.log('ok');
 process.exit(0); // importing server.mjs opens the bridge listener

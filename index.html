@@ -1270,6 +1270,12 @@
       row('Keep Battles', sel('histCap', HIST_CAPS.map(v => [v, String(v)]))) +
       row('Auto-Delete Older Than', sel('histAgeH', [[0, 'Never'], [24, '1 Day'], [72, '3 Days'], [168, '7 Days'], [720, '30 Days']]), 'Old reports are removed when history is next used.') +
       row('Save Fight Logs to Disk', chk('logToDisk'), 'One JSON file per fight in the app\'s fight-logs folder (newest 100 kept). Independent of the history above — clearing history keeps the files.') +
+      `<div class="fhead" style="margin-top:10px">📊 Diagnostics</div>
+       <div id="diagBody"><p class="muted" style="font-size:0.78rem">Measuring…</p></div>
+       <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+         <button class="tbtn" id="copyDiag" title="Copy these numbers as text">📋 Copy Diagnostics</button>
+         <button class="tbtn" id="resetDiag" title="Start counting again from zero">↺ Reset Counters</button>
+       </div>` +
       `<div class="fhead" style="margin-top:10px">🧹 Maintenance</div>
       <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
         <button class="tbtn" id="openLogs" title="Show the saved fight-log files in Explorer">📂 Open Logs Folder</button>
@@ -1318,6 +1324,61 @@
       toolbarLayout = loadToolbar(); // re-derive from defaults BEFORE rendering
       renderToolbar();
     });
+    renderDiag();
+    document.getElementById('copyDiag').onclick = async (e) => {
+      try { await navigator.clipboard.writeText(diagText()); const b = e.target, o = b.textContent;
+        b.textContent = '✅ Copied'; setTimeout(() => b.textContent = o, 1500); }
+      catch { infoToast('Clipboard blocked.'); }
+    };
+    document.getElementById('resetDiag').onclick = () => {
+      wsStats = { ...WS0, since: Date.now(), byType: {} };
+      netSaveAt = 0; LS.set('netStats', wsStats);
+      lastNet = null; renderDiag();
+    };
+  }
+
+  // ---- diagnostics readout ----
+  // Two independent counters: the overlay WebSocket (counted in this page, see
+  // countWs) and the game-site page fetches (counted in the bridge, /api/netstats).
+  let lastNet = null;
+  const MB = (n) => (n / 1048576).toFixed(n < 1048576 ? 2 : 1) + ' MB';
+  const dur = (ms) => { const h = ms / 3600e3; return h < 1 ? `${Math.max(1, Math.round(ms / 60e3))}m` : `${h.toFixed(1)}h`; };
+  function diagLines() {
+    const w = wsStats, ms = Math.max(1, Date.now() - w.since), hrs = ms / 3600e3;
+    const site = lastNet ? Object.entries(lastNet.paths || {}).sort((a, b) => b[1].size - a[1].size) : null;
+    const siteTotal = site ? site.reduce((n, [, v]) => n + v.size, 0) : 0;
+    const out = [
+      ['Measured Over', dur(ms)],
+      ['Overlay Feed', `${MB(w.size)} · ${w.msgs} msgs`],
+      // Extrapolating an hourly rate from the first couple of minutes produces
+      // a wild number that reads as fact — wait for a usable window.
+      ['Feed Rate', ms < 300e3 ? 'needs ~5 min' : `${MB(w.size / hrs)}/hr`],
+      ['Fights Seen', String(w.fights)],
+      ['Events / Fight', w.fights ? `${Math.round(w.events / w.fights).toLocaleString()} avg · ${w.maxEvents.toLocaleString()} max` : '—'],
+      ['Payload / Fight', w.fights ? `${MB((w.byType.encounter || { size: 0 }).size / w.fights)} avg · ${MB(w.maxSize)} biggest` : '—'],
+      ...Object.entries(w.byType).sort((a, b) => b[1].size - a[1].size)
+        .map(([t, v]) => [`  ↳ ${t}`, `${MB(v.size)} · ${v.n}`]),
+    ];
+    if (site) {
+      out.push(['Site Fetches', `${MB(siteTotal)} since bridge start`]);
+      for (const [p, v] of site.slice(0, 6)) out.push([`  ↳ ${p}`, `${MB(v.size)} · ${v.n}`]);
+    }
+    return out;
+  }
+  function renderDiag() {
+    const el = document.getElementById('diagBody');
+    if (!el) return;
+    el.innerHTML = diagLines().map(([l, v]) =>
+      `<div class="srow"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span></div>`).join('') +
+      '<p class="muted" style="font-size:0.7rem;margin:6px 0 0">Payload sizes before compression — what the app receives, not what crossed the wire. Note whether Rampage was running when you report these.</p>';
+    if (lastNet) return;
+    fetch('/api/netstats').then(r => r.json()).then(n => { lastNet = n; renderDiag(); }).catch(() => {});
+  }
+  const diagText = () => {
+    const w = wsStats;
+    return `Path of Dust desktop — traffic (v${appVersion || '?'})\n` +
+      diagLines().map(([l, v]) => `${l.replace(/^ {2}↳ /, '  ')}: ${v}`).join('\n') +
+      `\nraw ws: ${JSON.stringify({ ...w, byType: undefined })}`;
   }
 
   // ---- Current Fight: live replay. The WS broadcasts the whole fight (events
@@ -1508,6 +1569,37 @@
   // Event-driven refresh: the server pushes to /ws whenever something happens
   // (fights, drops). Refresh stats+bag on push (debounced) so changes show
   // near-instantly without polling harder. Falls back to the idle poll above.
+  // ---- traffic counters (measurement only, nothing reads these to decide) ----
+  // The overlay socket has no per-viewer filtering: every client gets the whole
+  // encounter — all units, the full event log — and we discard most of it after
+  // the fact. Nobody has ever measured how much that is, so count it.
+  // Sizes are String.length (UTF-16 code units), close enough to bytes for this
+  // ASCII-ish JSON, and they measure PAYLOAD, not wire: JS can't see compressed
+  // frame sizes, so this is the upper bound compression would act on.
+  const WS0 = { since: Date.now(), msgs: 0, size: 0, fights: 0, events: 0, maxEvents: 0, maxSize: 0, byType: {} };
+  let wsStats = { ...WS0, byType: {} };
+  try { const s = LS.get('netStats', null); if (s && s.since) wsStats = { ...WS0, ...s, byType: s.byType || {} }; } catch {}
+  let netSaveAt = 0;
+  const saveNetStats = () => { // throttled — a hot-pull reload mustn't lose hours of counting
+    if (Date.now() - netSaveAt < 30000) return;
+    netSaveAt = Date.now(); LS.set('netStats', wsStats);
+  };
+  function countWs(raw, d) {
+    const n = (raw || '').length;
+    wsStats.msgs++; wsStats.size += n;
+    const t = d && d.type ? d.type : 'unknown';
+    const b = (wsStats.byType[t] ||= { n: 0, size: 0 });
+    b.n++; b.size += n;
+    if (wsStats.maxSize < n) wsStats.maxSize = n;
+    if (t === 'encounter') {
+      const ev = (d.events || []).length;
+      wsStats.fights++; wsStats.events += ev;
+      if (wsStats.maxEvents < ev) wsStats.maxEvents = ev;
+      console.info(`[pod] encounter: ${ev} events, ${(n / 1048576).toFixed(2)} MB payload, ${(d.units || []).length} units, stage ${d.stage}`);
+    }
+    saveNetStats();
+  }
+
   function watchEvents() {
     let ws, t = null;
     try { ws = new WebSocket('wss://adventure.lokati.net/ws'); } catch { return; }
@@ -1517,6 +1609,7 @@
       // readout (checkBattleDust) for the refresh below.
       try {
         const d = JSON.parse(e.data);
+        try { countWs(e.data, d); } catch {} // instrumentation must never break the feed
         if (d.type === 'state') {
           lastRoster = d;
           if (document.getElementById('partypanel').classList.contains('open')) renderParty();
@@ -1715,7 +1808,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 75) showRestartBanner(); // 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 76) showRestartBanner(); // 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
