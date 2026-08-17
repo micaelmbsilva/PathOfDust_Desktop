@@ -176,8 +176,13 @@
   .btabs button { border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.15); color: #eae6f5; }
   .btabs button.on { background: rgba(120,90,255,0.45); }
-  table.lb { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  table.lb th, table.lb td { text-align: right; padding: 2px 6px; border-bottom: 1px solid rgba(160,140,255,0.08); }
+  /* fixed layout: the Player column stays put when metric tabs change the
+     number of value columns */
+  table.lb { width: 100%; border-collapse: collapse; font-size: 0.8rem; table-layout: fixed; }
+  table.lb th:first-child { width: 2.2em; }
+  table.lb th:nth-child(2) { width: 42%; }
+  table.lb th, table.lb td { text-align: right; padding: 2px 6px; border-bottom: 1px solid rgba(160,140,255,0.08);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   table.lb th { color: #8a7fb0; font-weight: 600; }
   table.lb td:first-child, table.lb th:first-child { text-align: left; }
   table.lb tr.mme td { color: #ffcf5a; }
@@ -481,8 +486,11 @@
       const mmssLeft = (ms) => { const s = Math.max(0, Math.round((ms - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
       const retreatRow = (r.countdowns || []).filter(c => !/Reforge/i.test(c.title))
         .map(c => `<div class="srow retreat"><span class="l">🏳️ ${c.title}</span><span class="v">${mmssLeft(c.resetMs)}</span></div>`).join('');
-      // Next-battle ETA (estimated from recent battle cadence; ticked by its 1s interval)
-      const nextRow = `<div class="srow" id="nextBattle" style="display:none" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time"><span class="l">⚔️ Next Battle</span><span class="v"></span></div>`;
+      // Next-battle ETA (estimated from recent battle cadence; ticked by its 1s
+      // interval). Rendered with its live value — a hidden default would blink
+      // out on every stats refresh until the next tick.
+      const eta0 = nextBattleEta();
+      const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time"><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') : ''}</span></div>`;
       document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
