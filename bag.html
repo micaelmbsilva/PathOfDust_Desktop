@@ -87,6 +87,7 @@
   </div>
   <div id="err"></div>
 
+  <div id="nameItem"></div>
   <div id="veilChoice"></div>
 
   <h2>Crafting</h2>
@@ -306,6 +307,34 @@
         pendChoices.map((c, i) => `<button data-veilpick="${i}">${c.label}</button>`).join('') +
         `</div></div>`;
     } else { $('veilChoice').innerHTML = ''; pendChoices = null; }
+
+    // Krangling earns the right to name the item, and the site asks once per
+    // item. Submitting an empty name is how you decline — that records the
+    // choice so it stops asking, which is why Skip posts rather than just
+    // hiding the card.
+    const ni = inv.nameItem;
+    $('nameItem').innerHTML = !ni ? '' :
+      `<div class="veilbox"><h2>🏷️ Name Your Krangled Item</h2>
+        <p class="muted">You Krangled ${ni.name ? `a <b>${esc(ni.name)}</b>` : 'an item'} — give it a custom name if you like.
+          It shows as ${ni.name ? esc(ni.name) : 'the item'} “Your Name” everywhere. Skip and you won't be asked again for this item.</p>
+        <div class="acts">
+          <input type="text" id="niName" maxlength="${ni.maxLen}" placeholder="e.g. Excalibur"
+                 style="flex:1;min-width:180px;background:#1c1830;color:#eae6f5;border:1px solid rgba(160,140,255,0.3);border-radius:6px;padding:6px 8px;font:inherit">
+          <button id="niSave">Save Name</button>
+          <button id="niSkip" title="Won't be asked again for this item">Skip</button>
+        </div></div>`;
+    if (ni) {
+      const send = async (nickname) => {
+        await api('name-item', { item_id: ni.id, nickname });
+        toast(nickname ? `🏷️ Named <b>${esc(nickname)}</b>` : 'Skipped naming');
+        refresh();
+      };
+      const inp = $('niName');
+      $('niSave').onclick = () => send(inp.value.trim());
+      $('niSkip').onclick = () => send('');
+      inp.onkeydown = (e) => { if (e.key === 'Enter') $('niSave').click(); };
+      inp.focus();
+    }
 
     lastBag = inv.bag;
     renderBag();
