@@ -163,7 +163,12 @@
     $('source').textContent = `The game's own per-fight summary — exact totals, last ${fights.length}.`;
     const when = (ms) => ms ? new Date(ms).toLocaleString() : 'time unknown';
     const sortKey = getSort(), role = getRole();
-    const open = [...$('list').children].map(d => d.open); // survive a re-render
+    // Which fights were expanded — keyed by fight identity (startedAtUnixMs), not
+    // child index, so a filter/sort re-render can't shift the open card by one
+    // (the filter bar is child 0). A new-fight follow ignores this and opens only
+    // the newest, collapsing the rest.
+    const wasOpen = new Set([...$('list').querySelectorAll('details.fight[data-fid]')]
+      .filter(d => d.open).map(d => d.dataset.fid));
     $('list').innerHTML = filterBar() + fights.map((f, i) => {
       const secs = Math.max(1, (f.displayDurationMs || 0) / 1000);
       const rows = [...(f.players || [])]
@@ -173,7 +178,7 @@
         .sort((a, b) => valOf(b, sortKey, secs) - valOf(a, sortKey, secs));
       const total = rows.reduce((n, p) => n + (p.damageDealt || 0), 0);
       const mine = rows.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
-      return `<details class="fight"${i ? '' : ' open'}>
+      return `<details class="fight" data-fid="${esc(f.startedAtUnixMs || i)}">
         <summary><span class="${f.won ? 'won' : 'lost'}">${f.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(f.stage)}${f.kind === 'boss' ? ' 💀 Boss' : ''}</span>
           <div class="when">${esc(when(f.startedAtUnixMs))} · ${esc(f.participants)} in the party${
             mine ? ` · you dealt ${fmtN(mine.damageDealt || 0)}${total ? ` (${((mine.damageDealt || 0) / total * 100).toFixed(1)}%)` : ''}` : ' · you sat this one out'}</div></summary>
@@ -196,10 +201,16 @@
         <h3>Broken Gear</h3>${list((f.broken || []).map(b => `${b.displayName} — ${b.itemName}`), 'None.')}
       </details>`;
     }).join('');
-    // Re-render keeps whichever fights you had expanded; the filter bar is the
-    // first child now, so the details offset by one.
-    const cards = [...$('list').children].filter(el => el.tagName === 'DETAILS');
-    cards.forEach((d, n) => { if (open[n] !== undefined) d.open = open[n]; });
+    // Reapply expansion by fight id. On a new-fight follow, open only the newest
+    // (first card) and collapse everything else; otherwise keep whatever was
+    // open, and on the very first load fall back to newest-open.
+    const cards = [...$('list').querySelectorAll('details.fight[data-fid]')];
+    const freshFollow = pendingFreshFollow; pendingFreshFollow = false;
+    cards.forEach((d, n) => {
+      d.open = freshFollow ? n === 0
+        : wasOpen.size ? wasOpen.has(d.dataset.fid)
+        : n === 0;
+    });
     $('list').querySelectorAll('[data-role]').forEach(el => el.onclick = () => {
       localStorage.setItem('fhRole', el.dataset.role); renderSummary(fights);
     });
@@ -217,6 +228,9 @@
   const FOLLOW = 'fightsFollow';
   const following = () => localStorage.getItem(FOLLOW) !== '0';
   let missed = 0;
+  // Set for the one render that a new-fight broadcast triggers, so it opens only
+  // the newest fight instead of preserving what was expanded.
+  let pendingFreshFollow = false;
 
   function renderFollow() {
     const b = $('follow');
@@ -236,9 +250,9 @@
   if (typeof BroadcastChannel === 'function') {
     new BroadcastChannel('pod').onmessage = (e) => {
       if (!e.data || e.data.type !== 'encounter') return;
-      // Jump back to the top so the newest fight — which renders expanded — is
-      // what you're looking at, rather than wherever you had scrolled to.
-      if (following()) load().then(() => scrollTo({ top: 0, behavior: 'smooth' }));
+      // Jump back to the top and open only the newest fight — collapse whatever
+      // was expanded, so the page shows the fight that just happened.
+      if (following()) { pendingFreshFollow = true; load().then(() => scrollTo({ top: 0, behavior: 'smooth' })); }
       else { missed++; renderFollow(); }
     };
   }
