@@ -154,6 +154,17 @@ function winKey(url) {
 function initWindowPersistence(win, state) {
   const saveMain = () => { if (!win.isDestroyed()) { state.main = { ...(state.main || {}), ...win.getBounds() }; writeWinState(state); } };
   win.on('moved', saveMain); win.on('resized', saveMain);
+  // App shutdown closes every child window, and those close events used to be
+  // indistinguishable from the user closing a window — each one stamped
+  // open:false, so a restart never had anything to reopen. Once the main
+  // window (or the app) starts closing, child closes stop counting as
+  // "user closed this".
+  let closing = false;
+  // If a close gets canceled the main window survives — reset so later child
+  // closes count as user actions again.
+  const markClosing = () => { closing = true; setTimeout(() => { if (!win.isDestroyed()) closing = false; }, 1000); };
+  win.on('close', markClosing);
+  app.on('before-quit', markClosing);
   // Apply saved bounds to each child as it opens (keyed by its URL).
   win.webContents.setWindowOpenHandler(({ url }) => {
     const s = state[winKey(url)] || {};
@@ -166,7 +177,7 @@ function initWindowPersistence(win, state) {
     writeWinState(state);
     const save = () => { if (!child.isDestroyed()) { state[key] = { ...state[key], ...child.getBounds() }; writeWinState(state); } };
     child.on('moved', save); child.on('resized', save);
-    child.on('close', () => { if (state[key]) { state[key].open = false; writeWinState(state); } });
+    child.on('close', () => { if (!closing && state[key]) { state[key].open = false; writeWinState(state); } });
   });
   // Reopen whatever was open last session once the main page can host window.open
   // (its handler above then applies the saved bounds). ponytail: no off-screen

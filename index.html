@@ -150,11 +150,13 @@
   .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 3px 9px; font-size: 0.78rem; }
   /* MMO raid-frame grid: compact member cells, status-tinted */
-  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; }
+  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 6px; }
   .pcell { border: 1px solid rgba(160,140,255,0.22); border-radius: 8px; padding: 4px 7px;
     font-size: 0.74rem; background: rgba(255,255,255,0.03); min-width: 0; }
   .pcell .pn { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pcell .ps { color: #8a7fb0; font-size: 0.68rem; white-space: nowrap; }
+  .pcell .pc { color: #c9bdf0; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcell .pc .pr { font-size: 0.6rem; margin-left: 3px; opacity: 0.85; }
+  .pcell .ps { color: #8a7fb0; font-size: 0.68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pcell.down { border-color: #a04a4a; background: rgba(200,70,70,0.14); }
   .pcell.down .ps { color: #ff9d9d; }
   .pcell.ret { opacity: 0.45; filter: grayscale(0.6); }
@@ -427,6 +429,7 @@
       f.src = `https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`;
     if (!open && S().chatUnload) f.src = 'about:blank'; // free CPU/RAM while hidden (setting)
     p.classList.toggle('open', open);
+    persistPanels();
     setActive('chat', open);
   }
   // stream picture-in-picture — lazy iframe (only loads while open, saves CPU)
@@ -437,6 +440,7 @@
     else f.removeAttribute('src'), f.src = 'about:blank'; // stop playback when hidden
     p.classList.toggle('open', open);
     setActive('stream', open);
+    persistPanels();
   }
   wirePanel('streampanel', 'streambar', 'streamCollapse', 'lay.stream');
   wirePanel('chatpanel', 'chatbar', 'chatCollapse', 'lay.chat');
@@ -491,7 +495,10 @@
       const r = await fetch('/api/me').then(r => r.json());
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
-      if (r.name && r.name !== myName) { myName = r.name; applyHighlight(); renderToolbar(); pollFeedback(); } // enable highlight + operator items once we know the name
+      if (r.name && r.name !== myName) { // enable highlight + operator items once we know the name
+        myName = r.name; applyHighlight(); renderToolbar(); pollFeedback();
+        if (inboxWasOpen && !itemHidden('inbox')) { inboxWasOpen = false; toggleModal('inbox', true); }
+      }
       // just the archetype — dust/sand already appear in the rows below
       document.getElementById('hsub').textContent = r.nav.replace(/^Lv \d+ /, '').split('·')[0].trim();
       const arRow = `<div class="srow repair ${r.autoRepair ? 'on' : 'off'}" id="arRow"` +
@@ -658,10 +665,16 @@
   // ---- Party modal + battle reports (all data from the game WS) ----
   let lastRoster = null; // latest `state` message
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  // Panels open at close reopen next launch (positions already persist via lay.*)
+  const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'battles', 'settings', 'inbox', 'chat', 'stream'];
+  let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
+  const persistPanels = () => LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
+    document.getElementById(w + 'panel')?.classList.contains('open')));
   function toggleModal(which, show) {
     const p = document.getElementById(which + 'panel');
     const open = show === undefined ? !p.classList.contains('open') : show;
     p.classList.toggle('open', open);
+    persistPanels();
     setActive(which, open);
     if (which === 'fight') { if (open) startFightTimer(); else { clearInterval(fightTimer); fightTimer = null; } }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
@@ -1023,7 +1036,8 @@
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
       `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}">
         <div class="pn">${CLASS_ICON[of(c)]} ${esc(c.displayName)}</div>
-        <div class="ps">${classOf(c) ? `<b>${esc(classOf(c))}</b>${(kitRolesOf(c) || []).length > 1 ? ` <span class="muted">(${(kitRolesOf(c) || []).map(r => r.toUpperCase()).join('·')})</span>` : ''} · ` : ''}Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
+        ${classOf(c) ? `<div class="pc" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></div>` : ''}
+        <div class="ps">Lv ${c.level} · ${c.wins}W/${c.losses}L${c.downedUntilMs ? ' · ⬇️' : c.retreated ? ' · 🏳️' : ''}</div>
       </div>`).join('') +
       (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
     document.querySelectorAll('#partyBody [data-pf]').forEach(el => el.onclick = () => {
@@ -1631,7 +1645,7 @@
   wirePanel('stats', 'statsbar', 'toggle', 'lay.stats'); // stats shares the panel shell (no close button — always open)
 
   // ---- version + auto-update feedback ----
-  let caps = {}; // /api/version payload — shell/bridge capability flags
+  let caps = {}; // /api/version payload — shell/bridge capability flags (before restorePanels: renderSettings reads it)
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
     appVersion = v.version;
     document.getElementById('ver').textContent = 'v' + v.version;
@@ -1643,6 +1657,24 @@
     if (!v.bridgeRev || v.bridgeRev < 73) showRestartBanner(); // 73: chancing wizard, expiry detection, /api/broadcast, fight logs
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
+
+  // Reopen the panels that were open when the app last closed (positions come
+  // from lay.*). Only acts once a saved list exists, and also closes panels the
+  // user had closed, so markup defaults don't resurrect them. The operator-only
+  // inbox is skipped here — it restores once /api/me confirms the name.
+  (function restorePanels() {
+    const saved = LS.get('openPanels', null);
+    if (!Array.isArray(saved)) return;
+    inboxWasOpen = saved.includes('inbox'); // captured BEFORE persistPanels overwrites the list
+    for (const w of RESTORABLE_PANELS) {
+      if (w === 'inbox') continue;
+      const want = saved.includes(w);
+      if (want === !!document.getElementById(w + 'panel')?.classList.contains('open')) continue;
+      if (w === 'chat') toggleChat(want);
+      else if (w === 'stream') toggleStream(want);
+      else toggleModal(w, want);
+    }
+  })();
 
   // Full-width system banner across the top; one per id. Used for restart
   // notices, the legacy-shell warning, and operator broadcasts.
