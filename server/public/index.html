@@ -465,26 +465,30 @@ const rankNum = (r) => +(String(r == null ? '' : r).match(/^\d+/) || [0])[0];
 async function advisor(name) {
   const key = encodeURIComponent(siteKey());
   if ((await fetch('api/watchlist?key=' + key)).status === 403) return keyDenied();
-  const [r, { builds, passives }, ratesR] = await Promise.all([
-    fetch('api/build/' + encodeURIComponent(name)), staticData(), fetch('api/affix-rates?key=' + key)]);
+  const [r, { builds, passives }, ratesR, gearR] = await Promise.all([
+    fetch('api/build/' + encodeURIComponent(name)), staticData(), fetch('api/affix-rates?key=' + key),
+    fetch('api/advisor-gear/' + encodeURIComponent(name) + '?key=' + key)]);
   if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
   const b = await r.json();
+  const bag = gearR.ok ? arr((await gearR.json()).bag) : [];
   const rates = ratesR.ok ? arr((await ratesR.json()).rates) : [];
   const rateOf = (kws) => { // exact affix name first, substring fallback
     for (const kw of kws) { const x = rates.find(q => str(q.affix) === kw); if (x) return +x.per_tier; }
     for (const kw of kws) { const x = rates.find(q => str(q.affix).includes(kw)); if (x) return +x.per_tier; }
     return 0;
   };
-  const mods = arr(b.equipped).flatMap(it => arr(it.mods).map(m => str(m && m.t).toLowerCase()))
+  // Worn mods weigh 1.0; bag mods 0.5 — owned potential, but not equipped.
+  const worn = arr(b.equipped).flatMap(it => arr(it.mods).map(m => str(m && m.t).toLowerCase()))
     .concat(arr(b.equipped).map(it => str(it.implicit).toLowerCase()).filter(Boolean));
-  const matchOf = (kws) => mods.filter(t => kws.some(kw => t.includes(kw))
-    && !(kws[0] === 'dmg dealt' && t.includes('crit dmg')));
-  const modValsOf = (kws) => matchOf(kws).reduce((s, t) => s + num(t.match(/[\d.]+/)?.[0]), 0);
+  const entries = worn.map(t => ({ t, w: 1 }))
+    .concat(bag.flatMap(it => arr(it.mods).map(m => ({ t: str(m && m.t).toLowerCase(), w: 0.5 }))));
+  const hit = (t, kws) => kws.some(kw => t.includes(kw)) && !(kws[0] === 'dmg dealt' && t.includes('crit dmg'));
+  const modValsOf = (kws) => worn.filter(t => hit(t, kws)).reduce((s, t) => s + num(t.match(/[\d.]+/)?.[0]), 0);
   // A match's weight = its rolled value in "t100 average mod" units (a t100 avg
-  // roll ≈ 1.0), so a +200% mod counts for far more than a +10% one. Affixes
-  // with no live rate data fall back to 0.5 per line.
+  // roll ≈ 1.0) × the worn/bag factor. Affixes with no rate data fall back to 0.5.
   const matchWeight = (kws) => { const rate = rateOf(kws);
-    return matchOf(kws).reduce((s, t) => s + (rate ? num(t.match(/[\d.]+/)?.[0]) / (rate * 100) : 0.5), 0); };
+    return entries.filter(e => hit(e.t, kws))
+      .reduce((s, e) => s + e.w * (rate ? num(e.t.match(/[\d.]+/)?.[0]) / (rate * 100) : 0.5), 0); };
 
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
   function render() {
@@ -635,9 +639,26 @@ function gameTree(layout, builds, archetype) {
 
 function treeSection(archetype, passives, builds, layout) {
   if (layout && arr(layout.nodes).length) {
+    // The scraped page only shows modifiers its owner has revealed (spec 4/4) —
+    // list the rest from the wiki below the canvas rather than faking positions.
+    const have = new Set(arr(layout.nodes).map(n => str(n.name)));
+    const t = passives && passives[archetype];
+    const cb = builds && builds.classes && builds.classes[archetype];
+    const picks = new Map(arr(cb && cb.builds[0] && cb.builds[0].order).map(o => [str(o.n), +o.r]));
+    const hidden = [];
+    for (const s of arr(t && t.skills)) for (const sp of arr(s.specializations)) {
+      const miss = arr(sp.modifiers).filter(m => !have.has(str(m.name)));
+      if (miss.length) hidden.push(el('div', null, el('b', null, str(sp.name)), ': ',
+        el('span', { class: 'chips', style: 'display:inline-flex' }, miss.map(m =>
+          el('span', { class: 'chip' + (picks.has(str(m.name)) ? ' on' : ''), title: str(m.text) },
+            str(m.name), ' ', str(m.max), picks.has(str(m.name)) ? ' · take ' + picks.get(str(m.name)) : '')))));
+    }
     return [el('h2', null, 'Passive tree'),
       el('p', { class: 'sub' }, 'The game\'s own tree layout — filled dots are the suggested build (gold = the specializing 4th point), dashed nodes are inactive. Hover a node for its effect.'),
-      gameTree(layout, builds, archetype)];
+      gameTree(layout, builds, archetype),
+      hidden.length ? [el('p', { class: 'sub', style: 'margin-top:12px' },
+        'Modifiers absent from this saved layout (from the wiki — hover for effects, highlighted = in the suggested build):'),
+        el('div', { class: 'stack', style: 'gap:4px' }, hidden)] : null];
   }
   const t = passives && passives[archetype];
   if (!t) return null;
