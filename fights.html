@@ -48,6 +48,8 @@
   const list = (arr, empty) => arr.length
     ? `<ul>${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
     : `<p class="muted">${empty}</p>`;
+  const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
+    : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
   // Loot outcomes arrive as Rust's Debug formatting — "AutoDisenchanted { dust:
   // 1665 }" — because the page prints the enum with {:?}. Read it as English.
   const prettyLoot = (s) => String(s).replace(
@@ -65,7 +67,18 @@
     // trims it, and this pane exists to be exact.
     if (d.gated) { $('list').innerHTML = `<p class="muted">The game isn't serving fight history to this account.</p>`; return; }
     if (!d.fights.length) { $('list').innerHTML = '<p class="muted">No fights recorded yet.</p>'; return; }
-    if (d.source === 'summary') return renderSummary(d.fights);
+    // A render fault used to leave this pane simply blank, with the reason only
+    // visible in a devtools console nobody has open. Say it on the page.
+    if (d.source === 'summary') {
+      try { return renderSummary(d.fights); }
+      catch (e) {
+        $('err').textContent = `Couldn't render fight history: ${e.message}`;
+        $('list').innerHTML = '';
+        fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ level: 'error', message: 'fights render: ' + e.message }) }).catch(() => {});
+        return;
+      }
+    }
     $('source').textContent = "The site's own breakdown — the last 10 encounters.";
     // First fight open, the rest collapsed — ten full breakdowns is a lot of page.
     $('list').innerHTML = d.fights.map((f, i) => `
@@ -111,12 +124,14 @@
             mine ? ` · you dealt ${fmtN(mine.damageDealt || 0)}${total ? ` (${((mine.damageDealt || 0) / total * 100).toFixed(1)}%)` : ''}` : ' · you sat this one out'}</div></summary>
         <h3>Party</h3>
         <div class="scroll"><table>
-          <tr><th>#</th><th>Player</th><th>Damage</th><th>DPS</th><th>Taken</th><th>Healing</th><th>Hits</th><th>Crit</th></tr>
+          <tr><th>#</th><th>Player</th><th>Damage</th><th>DPS</th><th>Taken</th><th>Healing</th>
+            <th title="Landed damage events, including damage-over-time and splash ticks. Most of those can never crit, so crits as a share of this is not a crit rate — which is why none is shown.">Hits</th>
+            <th>Crits</th></tr>
           ${rows.map((p, n) => `<tr${(p.displayName || '').toLowerCase() === myName.toLowerCase() ? ' class="mine"' : ''}>
             <td>${n + 1}</td><td>${esc(p.displayName)}</td>
             <td>${fmtN(p.damageDealt || 0)}</td><td>${fmtN((p.damageDealt || 0) / secs)}</td>
             <td>${fmtN(p.damageTaken || 0)}</td><td>${fmtN(p.healingDone || 0)}</td>
-            <td>${p.hits || 0}</td><td>${p.hits ? Math.round((p.crits || 0) / p.hits * 100) : 0}%</td></tr>`).join('')}
+            <td>${fmtN(p.hits || 0)}</td><td>${fmtN(p.crits || 0)}</td></tr>`).join('')}
         </table></div>
         ${f.firstToDie ? `<h3>First Down</h3><p>💀 ${esc(f.firstToDie)}</p>` : ''}
         <h3>Loot</h3>${list((f.loot || []).map(l =>
