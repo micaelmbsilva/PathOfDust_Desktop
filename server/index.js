@@ -132,24 +132,26 @@ app.post('/feedback', h(async (req, res) => {
 }));
 
 // Operator broadcast: one current message, shown as a banner by every running
-// app (they poll GET /broadcast every minute). POST with x-pod-key (PING_KEY)
-// sets it; empty/absent message clears it. Fail closed: no PING_KEY env, no posting.
+// app (they poll GET /broadcast every minute). POST is gated on OWNER_KEY (the
+// operator secret via x-pod-owner, ownerOk) — NOT the client-shipped PING_KEY,
+// which is public and let anyone push a banner to every user (H3). Empty/absent
+// message clears it. Fail closed: no OWNER_KEY env, no posting.
 // ponytail: in-memory — a Railway redeploy clears the message; re-post if needed.
 let broadcast = null;
 app.post('/broadcast', (req, res) => {
-  if (!process.env.PING_KEY || req.get('x-pod-key') !== process.env.PING_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   const message = (req.body || {}).message;
   broadcast = message ? { id: Date.now().toString(36), message: String(message).slice(0, 500), ts: new Date().toISOString() } : null;
   res.json(broadcast || { cleared: true });
 });
 app.get('/broadcast', (_req, res) => { res.set('Cache-Control', 'no-store'); res.json(broadcast || {}); });
 
-// Feedback feed for the in-app operator inbox — same shared-key trust as
-// posting /broadcast (the key ships in the app; the data is messages users
-// chose to send, plus their optional contact line). Newest first, id-ordered
-// so clients can diff "new since last seen".
+// Feedback feed for the in-app operator inbox — the data is messages users sent
+// plus their optional contact line, so it's gated on OWNER_KEY (the operator
+// secret) not the public PING_KEY, which would have let anyone read contacts
+// (H3). Newest first, id-ordered so clients can diff "new since last seen".
 app.get('/feedback-recent', h(async (req, res) => {
-  if (!process.env.PING_KEY || req.get('x-pod-key') !== process.env.PING_KEY) return res.sendStatus(403);
+  if (!ownerOk(req)) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   res.set('Cache-Control', 'no-store');
   res.json((await pool.query(

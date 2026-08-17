@@ -431,7 +431,7 @@
   const loadSections = () => { try { const s = JSON.parse(localStorage.getItem(SEC)); return Array.isArray(s) && s.length ? s : null; } catch { return null; } };
   const saveSections = (s) => localStorage.setItem(SEC, JSON.stringify(s));
   let sections = loadSections() || JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
-  let dragging = null;
+  let dragging = null, didDragCraft = false; // didDragCraft swallows the click a drag leaves behind
 
   function renderSections(actions) {
     const byAction = Object.fromEntries(actions.map(a => [a.action, a]));
@@ -478,8 +478,8 @@
     $('secReset').onclick = () => { sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS)); commit(); };
 
     $('craftSections').querySelectorAll('[data-craft]').forEach(btn => {
-      btn.ondragstart = (e) => { dragging = btn.dataset.craft; btn.style.opacity = '0.4'; e.dataTransfer.effectAllowed = 'move'; };
-      btn.ondragend = () => { dragging = null; btn.style.opacity = ''; };
+      btn.ondragstart = (e) => { dragging = btn.dataset.craft; didDragCraft = true; btn.style.opacity = '0.4'; e.dataTransfer.effectAllowed = 'move'; };
+      btn.ondragend = () => { dragging = null; btn.style.opacity = ''; setTimeout(() => { didDragCraft = false; }, 0); };
     });
     $('craftSections').querySelectorAll('.csec-body').forEach(body => {
       body.ondragover = (e) => { e.preventDefault(); body.classList.add('over'); };
@@ -624,6 +624,7 @@
       return;
     }
     if (d.craft !== undefined) {
+      if (didDragCraft) { didDragCraft = false; return; } // a reorder drag ends in a click — don't craft
       const action = d.craft;
       const fields = { action, item_a: $('itemA').value };
       if (action === 'recombine' && $('itemB').value) fields.item_b = $('itemB').value;

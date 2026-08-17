@@ -14,7 +14,7 @@
 (function () {
   const POLL_MS = 60000;
   const IDLE_MS = 15000;   // don't yank the page out from under an active user
-  let known = null;
+  let known = null, retryTimer = null;
   let reloading = false;
 
   // No-store is set on everything the bridge serves, so a plain reload refetches
@@ -37,7 +37,9 @@
     if (known === null) { known = v.ui; return; }
     if (v.ui === known) return;
     if (idle()) return reload();
-    setTimeout(check, 5000); // busy right now — ask again shortly
+    // busy right now — ask again shortly, but only ONE pending retry so the
+    // 60s interval + visibilitychange can't pile up parallel chains.
+    if (!retryTimer) retryTimer = setTimeout(() => { retryTimer = null; check(); }, 5000);
   }
 
   check();
