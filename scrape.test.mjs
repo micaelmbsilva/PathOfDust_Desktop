@@ -4,8 +4,15 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf } from './server.mjs';
+import { implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed } from './server.mjs';
 import { netKey } from './actions.mjs';
+
+// Owner dossier: exact normalized login only. UI hiding is convenience; this
+// pure predicate backs the bridge route and guards the template filename too.
+assert.equal(ownerBuildsAllowed('lokati_gaming'), true);
+assert.equal(ownerBuildsAllowed(' Lokati_Gaming '), true);
+assert.equal(ownerBuildsAllowed('kibukah'), false);
+assert.equal(ownerBuildsAllowed(''), false);
 
 // The site's order inside a .gear-slot: name, quality, primary, sacred, unique.
 const sacredAndUnique = `
