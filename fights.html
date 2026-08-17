@@ -35,7 +35,7 @@
   <div class="bar">
     <h1>📜 Fight History</h1>
     <button class="chip" id="reload" title="Refresh">🔄</button>
-    <span class="chip muted">The site's own server-side breakdown — the last 10 encounters.</span>
+    <span class="chip muted" id="source"></span>
   </div>
   <div id="err"></div>
   <div id="list"><p class="muted">Loading…</p></div>
@@ -54,13 +54,11 @@
     try { d = await fetch('/api/fights', { cache: 'no-store' }).then(r => r.json()); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
     if (d.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
-    if (d.gated) {
-      // The game hardcodes a single allowed login for this page and 404s the
-      // rest — say so plainly rather than showing an empty list.
-      $('list').innerHTML = '<p class="muted">The game only serves this page to the streamer\'s account, so there\'s nothing to show here.</p>';
-      return;
-    }
-    if (!d.fights.length) { $('list').innerHTML = '<p class="muted">No fights logged yet.</p>'; return; }
+    // The game hardcodes a single allowed login for /fights and 404s everyone
+    // else, so for almost every player this page has no server data at all.
+    // Fall back to what the app recorded itself off the live fight feed.
+    if (d.gated || !d.fights.length) return renderLocal(d.gated);
+    $('source').textContent = "The site's own breakdown — the last 10 encounters.";
     // First fight open, the rest collapsed — ten full breakdowns is a lot of page.
     $('list').innerHTML = d.fights.map((f, i) => `
       <details class="fight"${i ? '' : ' open'}>
@@ -77,6 +75,57 @@
         </table></div>` : ''}
       </details>`).join('');
   }
+  // ---- fallback: the fights this app recorded itself ----
+  // Same localStorage the Combat History panel reads (same origin), deliberately
+  // rendered thin — outcome, your line, loot. The full view (fight logs, party
+  // leaderboards, filters) already exists in that panel, so this links to it
+  // instead of growing a second copy.
+  const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
+    : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+  const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''} ago`; };
+  // The main window hosts this page (panel iframe) or opened it (pop-out).
+  const host = () => { try { return window.parent !== window ? window.parent : window.opener; } catch { return null; } };
+
+  function renderLocal(gated) {
+    $('source').textContent = gated
+      ? "The game only serves its own breakdown to the streamer — showing the fights this app recorded instead."
+      : "The game has no fights logged — showing the ones this app recorded.";
+    let log = [];
+    try { log = JSON.parse(localStorage.getItem('battleLog')) || []; } catch {}
+    const actions = `<div class="bar" style="margin-top:10px">
+      ${host() ? '<button class="chip" id="openHist">Open Combat History →</button>' : ''}
+      <button class="chip" id="openLogs">📂 Open Logs Folder</button></div>`;
+    if (!Array.isArray(log) || !log.length) {
+      $('list').innerHTML = '<p class="muted">Nothing recorded yet — the app logs each fight while it\'s running, so reports appear after the next battle.</p>' + actions;
+    } else {
+      $('list').innerHTML = log.map(rep => {
+        const m = rep.me || {}, secs = Math.max(1, (rep.durMs || 0) / 1000);
+        const idle = !m.hits && !m.dmg && !m.taken && !m.heal && !m.healRecv;
+        return `<details class="fight">
+          <summary><span class="${rep.won ? 'won' : 'lost'}">${rep.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(rep.stage)}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''}</span>
+            <div class="when">${Math.round(secs)}s · ${rep.partySize || 0} in the party · ${ago(rep.at)}</div></summary>
+          ${idle ? '<p class="muted">🪦 You sat this one out — downed, retreated, or joined late.</p>' : `
+          <h3>You</h3><ul>
+            <li>Damage dealt: ${fmtN(m.dmg)} (${((m.share || 0) * 100).toFixed(1)}% of the party) · ${fmtN(m.dmg / secs)}/s</li>
+            <li>Damage taken: ${fmtN(m.taken)}</li>
+            <li>Healing done: ${fmtN(m.heal)} · received: ${fmtN(m.healRecv)}</li>
+            <li>Crit rate: ${m.hits ? Math.round(m.crits / m.hits * 100) : 0}% of ${m.hits || 0} hits${m.evaded ? ` · evaded ${m.evaded}×` : ''}</li>
+          </ul>`}
+          ${(rep.deaths || []).length ? `<h3>Party Deaths</h3>${list(rep.deaths, '')}` : ''}
+          <h3>Your Loot</h3>${list((rep.myLoot || []).map(l => `${l.item} (${l.slot}, ${l.outcome})`), 'None.')}
+        </details>`;
+      }).join('') + actions;
+    }
+    const oh = $('openHist');
+    // Same-origin, so the host window's own toggle is callable directly.
+    if (oh) oh.onclick = () => { try { host().toggleModal('battles', true); host().focus(); } catch {} };
+    // The bridge only has a logs folder when the packaged shell handed it one.
+    $('openLogs').onclick = async () => {
+      const r = await fetch('/api/open-logs', { method: 'POST' }).then(x => x.json()).catch(() => ({}));
+      if (!r.ok) $('err').textContent = 'No fight-logs folder yet — turn on "Save Fight Logs to Disk" in Settings.';
+    };
+  }
+
   $('reload').onclick = load;
   document.title = `${GAME_NAME} — Fight History`;
   load();
