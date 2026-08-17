@@ -104,6 +104,14 @@
     : { key: k, label: prettyKey(k), kind: 'unknown', desc: '' }; };
   const KIND_ICON = { buff: '🟢', debuff: '🔴', charge: '🔵', unknown: '⚪' };
 
+  // Role comes from the class's kit, never inferred from a fight's numbers —
+  // a healer who out-damages the party is still a healer. Dual-role classes
+  // count in both. Shared so the Party panel and Fight History can't drift.
+  const ROLE_ICON = { dps: '🗡️', heal: '🩹', tank: '🛡️' };
+  const CLASS_ROLES = { Warrior: ['tank', 'dps'], Paladin: ['heal', 'tank'], Druid: ['heal', 'tank'],
+    Monk: ['dps', 'tank'], Cleric: ['heal'] };
+  const rolesOf = (cls) => cls ? (CLASS_ROLES[cls] || ['dps']) : null; // null = class unknown
+
   const CATS = { dmg: ['hit', 'taken', 'myevaded', 'dodged', 'death'],
     heals: ['healed', 'healout', 'shielded', 'shieldout'], buffs: ['buffgain', 'bufflost'] };
   const CHIPS = [['all', 'All'], ['dmg', '⚔️ Damage'], ['heals', '💚 Heals'], ['buffs', '✨ Buffs']];
@@ -130,5 +138,5 @@
   const bindChips = (root, onPick) => root.querySelectorAll('[data-fcat]').forEach(el =>
     el.onclick = () => onPick(el.dataset.fcat));
 
-  window.PodFeed = { lines, chips, bindChips, fmtT, fmtN, buff, KIND_ICON };
+  window.PodFeed = { lines, chips, bindChips, fmtT, fmtN, buff, KIND_ICON, ROLE_ICON, CLASS_ROLES, rolesOf };
 })();

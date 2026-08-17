@@ -1142,12 +1142,11 @@
   // support): each player gets the metric they rank best at in the latest saved
   // battle (damage dealt / healing / damage taken). No battle data yet -> the
   // WS role is the fallback (support = Heal, rest = DPS).
-  const CLASS_ICON = { dps: '🗡️', heal: '🩹', tank: '🛡️' };
+  const CLASS_ICON = PodFeed.ROLE_ICON; // shared with Fight History (feed.js)
   // Class → role kit, mirroring the ladder site's redefinition (server/public/
   // index.html ROLES). Dual-role classes count toward BOTH composition pips —
   // the counts read as "role coverage", not headcount. Unknown class = dps.
-  const CLASS_ROLES = { Warrior: ['tank', 'dps'], Paladin: ['heal', 'tank'], Druid: ['heal', 'tank'],
-    Monk: ['dps', 'tank'], Cleric: ['heal'] };
+  const CLASS_ROLES = PodFeed.CLASS_ROLES;
   let rosterCls = {}; // name(lower) -> { cls, level }, scraped from /characters via the bridge
   async function loadRosterClasses() {
     try {
@@ -1163,7 +1162,7 @@
   const loginOf = (c) => (rosterCls[c.displayName.toLowerCase()] || {}).login || '';
   // null = class unknown (roster scrape unavailable) — caller falls back to the
   // observed-behavior role. A Split Personality 2nd class isn't visible here.
-  const kitRolesOf = (c) => { const k = classOf(c); return k ? (CLASS_ROLES[k] || ['dps']) : null; };
+  const kitRolesOf = (c) => PodFeed.rolesOf(classOf(c));
   // Composition pips are filters: click DPS/Heal/Tank/Retreated to show only
   // those members, click again (or Active) to clear.
   let partyFilter = null;

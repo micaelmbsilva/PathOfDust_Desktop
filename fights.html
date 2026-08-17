@@ -24,10 +24,24 @@
   .won { color: #7fdba3; } .lost { color: #ff8080; }
   ul { margin: 0; padding-left: 20px; font-size: 0.85rem; line-height: 1.5; }
   .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; font-size: 0.8rem; }
-  th, td { text-align: left; padding: 3px 10px 3px 0; white-space: nowrap; }
-  th { color: #8a7fb0; font-weight: 600; }
+  table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+  th, td { text-align: left; padding: 4px 10px; white-space: nowrap;
+    border-bottom: 1px solid rgba(160,140,255,0.10); }
+  th { color: #8a7fb0; font-weight: 600; position: sticky; top: 0; background: #14101f;
+    cursor: pointer; user-select: none; border-bottom-color: rgba(160,140,255,0.3); }
+  th:hover { color: #cdc2ee; }
+  th.sorted { color: #b98bff; }
+  /* zebra striping does the heavy lifting for scanning a 36-row party */
+  tbody tr:nth-child(even) { background: rgba(0,0,0,0.28); }
+  tbody tr:hover { background: rgba(120,90,255,0.16); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.mine td { color: #ffd76b; font-weight: 700; }
+  tr.mine { background: rgba(255,215,107,0.10) !important; }
+  .rolechips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+  .rolechips .chip.pf { cursor: pointer; font-size: 0.78rem; padding: 3px 10px; }
+  .rolechips .chip.pf:hover { border-color: rgba(160,140,255,0.6); }
+  .rolechips .chip.pf.on { border-color: #7c5cff; color: #b98bff; }
+  .rolechips .chip.muted { cursor: help; }
   .muted { color: #8a7fb0; }
   #err { color: #ff8080; }
 </style>
@@ -43,6 +57,7 @@
   <div id="err"></div>
   <div id="list"><p class="muted">Loading… the game rebuilds this page from every logged fight, so it takes a few seconds.</p></div>
 
+<script src="/feed.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -50,8 +65,7 @@
   const list = (arr, empty) => arr.length
     ? `<ul>${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
     : `<p class="muted">${empty}</p>`;
-  const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
-    : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+  const fmtN = PodFeed.fmtN;
   // Loot outcomes arrive as Rust's Debug formatting — "AutoDisenchanted { dust:
   // 1665 }" — because the page prints the enum with {:?}. Read it as English.
   const prettyLoot = (s) => String(s).replace(
@@ -111,36 +125,87 @@
   let myName = '';
   fetch('/api/me').then(r => r.json()).then(m => { if (m.name && m.name !== myName) { myName = m.name; load(); } }).catch(() => {});
 
+  // Class per player, so the role filter reflects the actual kit rather than
+  // being inferred from a fight's numbers. Cached bridge-side; a miss just
+  // leaves that row unfiltered rather than guessing at it.
+  let roster = {};
+  fetch('/api/roster-classes').then(r => r.json())
+    .then(r => { if (r && !r.expired) { roster = r; if (Object.keys(roster).length) renderAll(); } }).catch(() => {});
+  const classOf = (n) => (roster[String(n || '').toLowerCase()] || {}).cls || '';
+  const rolesOf = (n) => PodFeed.rolesOf(classOf(n));
+
+  // Sort and role filter, both persisted — they are a reading preference, not
+  // per-fight state, so they apply to every fight card at once.
+  const COLS = [
+    { key: 'damageDealt', label: 'Damage', num: true },
+    { key: 'dps', label: 'DPS', num: true },
+    { key: 'damageTaken', label: 'Taken', num: true },
+    { key: 'healingDone', label: 'Healing', num: true },
+  ];
+  const getSort = () => localStorage.getItem('fhSort') || 'damageDealt';
+  const getRole = () => localStorage.getItem('fhRole') || 'all';
+  const valOf = (p, key, secs) => key === 'dps' ? (p.damageDealt || 0) / secs : (p[key] || 0);
+
+  function filterBar() {
+    const role = getRole();
+    const chip = (v, l) => `<span class="chip pf${role === v ? ' on' : ''}" data-role="${v}">${l}</span>`;
+    return `<div class="rolechips">${chip('all', 'Everyone')}` +
+      `${chip('dps', `${PodFeed.ROLE_ICON.dps} DPS`)}${chip('heal', `${PodFeed.ROLE_ICON.heal} Heal`)}` +
+      `${chip('tank', `${PodFeed.ROLE_ICON.tank} Tank`)}` +
+      `<span class="chip muted" title="Roles come from each character's class kit, read off the roster — dual-role classes (Warrior, Paladin, Druid, Monk) appear under both. Anyone whose class hasn't loaded yet is always shown. Click a column heading to sort; the choice sticks across fights and restarts.">?</span></div>`;
+  }
+  let lastFights = null;
+  const renderAll = () => { if (lastFights) renderSummary(lastFights); };
+
 
   function renderSummary(fights) {
+    lastFights = fights;
     $('source').textContent = `The game's own per-fight summary — exact totals, last ${fights.length}.`;
     const when = (ms) => ms ? new Date(ms).toLocaleString() : 'time unknown';
-    $('list').innerHTML = fights.map((f, i) => {
+    const sortKey = getSort(), role = getRole();
+    const open = [...$('list').children].map(d => d.open); // survive a re-render
+    $('list').innerHTML = filterBar() + fights.map((f, i) => {
       const secs = Math.max(1, (f.displayDurationMs || 0) / 1000);
-      const rows = [...(f.players || [])].sort((a, b) => (b.damageDealt || 0) - (a.damageDealt || 0));
+      const rows = [...(f.players || [])]
+        // Unknown class stays visible: hiding a row because the roster hasn't
+        // loaded would quietly under-report the party.
+        .filter(p => { const r = rolesOf(p.displayName); return role === 'all' || !r || r.includes(role); })
+        .sort((a, b) => valOf(b, sortKey, secs) - valOf(a, sortKey, secs));
       const total = rows.reduce((n, p) => n + (p.damageDealt || 0), 0);
       const mine = rows.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
       return `<details class="fight"${i ? '' : ' open'}>
         <summary><span class="${f.won ? 'won' : 'lost'}">${f.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(f.stage)}${f.kind === 'boss' ? ' 💀 Boss' : ''}</span>
           <div class="when">${esc(when(f.startedAtUnixMs))} · ${esc(f.participants)} in the party${
             mine ? ` · you dealt ${fmtN(mine.damageDealt || 0)}${total ? ` (${((mine.damageDealt || 0) / total * 100).toFixed(1)}%)` : ''}` : ' · you sat this one out'}</div></summary>
-        <h3>Party</h3>
+        <h3>Party${role === 'all' ? '' : ` — ${PodFeed.ROLE_ICON[role]} ${role}`} (${rows.length})</h3>
         <div class="scroll"><table>
-          <tr><th>#</th><th>Player</th><th>Damage</th><th>DPS</th><th>Taken</th><th>Healing</th>
-            <th title="Landed damage events, including damage-over-time and splash ticks. Most of those can never crit, so crits as a share of this is not a crit rate — which is why none is shown.">Hits</th>
-            <th>Crits</th></tr>
-          ${rows.map((p, n) => `<tr${(p.displayName || '').toLowerCase() === myName.toLowerCase() ? ' class="mine"' : ''}>
+          <thead><tr><th>#</th><th>Player</th><th>Class</th>${COLS.map(c =>
+            `<th class="num${c.key === sortKey ? ' sorted' : ''}" data-sort="${c.key}" title="Sort by ${c.label}">${c.label}${c.key === sortKey ? ' ▾' : ''}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map((p, n) => {
+            const r = rolesOf(p.displayName);
+            return `<tr${(p.displayName || '').toLowerCase() === myName.toLowerCase() ? ' class="mine"' : ''}>
             <td>${n + 1}</td><td>${esc(p.displayName)}</td>
-            <td>${fmtN(p.damageDealt || 0)}</td><td>${fmtN((p.damageDealt || 0) / secs)}</td>
-            <td>${fmtN(p.damageTaken || 0)}</td><td>${fmtN(p.healingDone || 0)}</td>
-            <td>${fmtN(p.hits || 0)}</td><td>${fmtN(p.crits || 0)}</td></tr>`).join('')}
+            <td>${esc(classOf(p.displayName))} ${(r || []).map(x => PodFeed.ROLE_ICON[x]).join('')}</td>
+            ${COLS.map(c => `<td class="num">${fmtN(valOf(p, c.key, secs))}</td>`).join('')}</tr>`;
+          }).join('')}</tbody>
         </table></div>
+        <p class="muted" style="font-size:0.7rem;margin:4px 0 0">Healing includes absorbed shielding — the game totals them together and doesn't report them apart.</p>
         ${f.firstToDie ? `<h3>First Down</h3><p>💀 ${esc(f.firstToDie)}</p>` : ''}
         <h3>Loot</h3>${list((f.loot || []).map(l =>
           `${l.displayName} — ${l.itemName} T${l.tier} (${l.slot}${l.outcome ? ', ' + outcomeText(l.outcome) : ''})`), 'None.')}
         <h3>Broken Gear</h3>${list((f.broken || []).map(b => `${b.displayName} — ${b.itemName}`), 'None.')}
       </details>`;
     }).join('');
+    // Re-render keeps whichever fights you had expanded; the filter bar is the
+    // first child now, so the details offset by one.
+    const cards = [...$('list').children].filter(el => el.tagName === 'DETAILS');
+    cards.forEach((d, n) => { if (open[n] !== undefined) d.open = open[n]; });
+    $('list').querySelectorAll('[data-role]').forEach(el => el.onclick = () => {
+      localStorage.setItem('fhRole', el.dataset.role); renderSummary(fights);
+    });
+    $('list').querySelectorAll('[data-sort]').forEach(el => el.onclick = () => {
+      localStorage.setItem('fhSort', el.dataset.sort); renderSummary(fights);
+    });
   }
 
 
