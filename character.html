@@ -163,9 +163,14 @@
     current = login;
     $('err').textContent = '';
     $('roster').style.display = 'none';
-    const c = await get('/api/character?login=' + encodeURIComponent(login));
+    let c;
+    // A bridge 500 or a dropped connection after the roster was hidden used to
+    // throw an unhandled rejection, leaving a hidden roster, a stale sheet and an
+    // empty #err. Land the user back on the roster with a reason instead.
+    try { c = await get('/api/character?login=' + encodeURIComponent(login)); }
+    catch { $('err').textContent = "Couldn't load that character — try again."; back(); return; }
     if (c.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
-    if (c.notFound) { $('err').textContent = 'No such character.'; back(); return; }
+    if (c.notFound || !c.name) { $('err').textContent = 'No such character.'; back(); return; }
     document.title = `${GAME_NAME} — ${c.name}`;
     $('sheet').innerHTML = `
       <div class="who">

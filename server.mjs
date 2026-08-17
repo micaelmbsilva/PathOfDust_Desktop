@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 90;
+const BRIDGE_REV = 91;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -266,7 +266,10 @@ export async function roster() { // exported for scrape smoke-tests
   try { ({ text } = await getAuthed('/characters')); }
   catch (e) { if (e.expired) throw e; return rosterCache.list; }
   const list = rosterOf(text);
-  if (list.length) rosterCache = { at: Date.now(), list };
+  // Stamp the time even on an empty parse (markup changed) so a broken scrape
+  // doesn't re-fetch /characters on every single request with no throttle —
+  // keep serving the last good list until the 30-min window lapses.
+  rosterCache = { at: Date.now(), list: list.length ? list : rosterCache.list };
   return rosterCache.list;
 }
 export function rosterOf(text) { // exported for scrape smoke-tests
@@ -800,14 +803,17 @@ const srv = createServer(async (req, res) => {
       return json(res, { ok: !err });
     }
     if (url.pathname === '/api/broadcast' && req.method === 'POST') {
-      // Operator banner → backend /broadcast (empty message clears it). The page
-      // gates the button by character name; the backend's PING_KEY is the real auth.
-      let message;
-      try { ({ message } = JSON.parse(await body(req) || '{}')); } catch { return json(res, { ok: false }); }
-      if (!TELEMETRY_URL || (message != null && typeof message !== 'string')) return json(res, { ok: false });
+      // Operator banner → backend /broadcast (empty message clears it). Auth is
+      // the operator key (x-pod-owner), held only on the operator's machine —
+      // NOT the client-shipped PING_KEY. Without it this bridge isn't an operator
+      // and can't broadcast, so we don't even call the backend.
+      const key = globalThis.__operatorKey;
+      if (!TELEMETRY_URL || !key) return json(res, { ok: false, notOperator: true });
+      const { message } = await jbody(req);
+      if (message != null && typeof message !== 'string') return json(res, { ok: false });
       try {
         const r = await fetch(`${TELEMETRY_URL}/broadcast`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-pod-key': PING_KEY },
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-pod-owner': key },
           body: JSON.stringify({ message: (message || '').slice(0, 500) }),
           signal: AbortSignal.timeout(10000),
         });
@@ -820,11 +826,13 @@ const srv = createServer(async (req, res) => {
       return json(res, { ok: true });
     }
     if (url.pathname === '/api/feedback-list') {
-      // Operator inbox: proxy the backend's feedback feed (key stays bridge-side).
-      if (!TELEMETRY_URL) return json(res, []);
+      // Operator inbox: proxy the backend's feed. Gated on the operator key, not
+      // the public PING_KEY — otherwise anyone could read users' feedback contacts.
+      const key = globalThis.__operatorKey;
+      if (!TELEMETRY_URL || !key) return json(res, []);
       try {
         const r = await fetch(`${TELEMETRY_URL}/feedback-recent`,
-          { headers: { 'x-pod-key': PING_KEY }, signal: AbortSignal.timeout(10000) });
+          { headers: { 'x-pod-owner': key }, signal: AbortSignal.timeout(10000) });
         return json(res, r.ok ? await r.json() : []);
       } catch { return json(res, []); }
     }

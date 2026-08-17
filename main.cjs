@@ -216,6 +216,14 @@ async function start() {
   // everything as text, so images live here and only here (see the bridge's
   // static fallback).
   global.__bundledDir = __dirname;
+  // Operator secret for /broadcast and /feedback-recent — the real auth for
+  // those, never shipped in the client (H3). Only the operator has it: set env
+  // POD_OWNER_KEY, or drop the key into userData/operator-key. Absent for
+  // everyone else, so their bridge can't push banners or read feedback contacts.
+  try {
+    global.__operatorKey = (process.env.POD_OWNER_KEY
+      || fs.readFileSync(path.join(app.getPath('userData'), 'operator-key'), 'utf8')).trim() || null;
+  } catch { global.__operatorKey = null; }
   const bridge = await import(pathToFileURL(path.join(dir, 'server.mjs')).href); // starts bridge on :8787
   const actions = await import(pathToFileURL(path.join(dir, 'actions.mjs')).href);
   const { GAME_NAME } = await import(pathToFileURL(path.join(dir, 'config.mjs')).href);

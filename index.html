@@ -1502,21 +1502,21 @@
       // absorbed/mitigated portion of a hit (armor, shields, damage-reduction buffs)
       const mit = (ev) => Math.max(0, (ev.unmitigatedDamage || 0) - (ev.damage || 0));
       if (ev.kind === 'attack' && ev.attacker === myId) {
-        if (ev.evaded) G('e' + ev.target + b, () => ({ at: ev.atMs, kind: 'myevaded', tgt: names[ev.target], n: 0 })).n++;
-        else { const g = G('a' + ev.target + b, () => ({ at: ev.atMs, kind: 'hit', tgt: names[ev.target], n: 0, dmg: 0, crits: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); if (ev.isCrit) g.crits++; }
+        if (ev.evaded) G('e' + ev.target + ':' + b, () => ({ at: ev.atMs, kind: 'myevaded', tgt: names[ev.target], n: 0 })).n++;
+        else { const g = G('a' + ev.target + ':' + b, () => ({ at: ev.atMs, kind: 'hit', tgt: names[ev.target], n: 0, dmg: 0, crits: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); if (ev.isCrit) g.crits++; }
       } else if (ev.kind === 'attack' && ev.target === myId) {
-        if (ev.evaded) G('g' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'dodged', src: names[ev.attacker], n: 0 })).n++;
-        else { const g = G('t' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'taken', src: names[ev.attacker], n: 0, dmg: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); }
+        if (ev.evaded) G('g' + ev.attacker + ':' + b, () => ({ at: ev.atMs, kind: 'dodged', src: names[ev.attacker], n: 0 })).n++;
+        else { const g = G('t' + ev.attacker + ':' + b, () => ({ at: ev.atMs, kind: 'taken', src: names[ev.attacker], n: 0, dmg: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); }
       } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.target === myId && ev.healer !== myId) {
         // shields get their own line kind — a shield isn't a heal. Zero-amount
         // events (heal at full HP, capped shield) make noise lines ("healed you
         // 0"), so they don't get a feed group at all; totals elsewhere sum the
         // raw events and are unaffected.
         const sh = ev.kind === 'shield';
-        G((sh ? 's' : 'h') + ev.healer + b, () => ({ at: ev.atMs, kind: sh ? 'shielded' : 'healed', src: names[ev.healer], amt: 0 })).amt += ev.amount || 0;
+        G((sh ? 's' : 'h') + ev.healer + ':' + b, () => ({ at: ev.atMs, kind: sh ? 'shielded' : 'healed', src: names[ev.healer], amt: 0 })).amt += ev.amount || 0;
       } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.healer === myId && ev.target !== myId) {
         const sh = ev.kind === 'shield';
-        G((sh ? 'so' : 'o') + ev.target + b, () => ({ at: ev.atMs, kind: sh ? 'shieldout' : 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
+        G((sh ? 'so' : 'o') + ev.target + ':' + b, () => ({ at: ev.atMs, kind: sh ? 'shieldout' : 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
       } else if (ev.kind === 'defeat' && ev.unit === myId) {
         groups.set('d' + b, { at: ev.atMs, kind: 'death' });
       } else if (ev.kind === 'buffSnapshot' && ev.unit === myId) {
@@ -1781,7 +1781,7 @@
       }
       e.target.disabled = true;
       const dust = () => fetch('/api/inventory', { cache: 'no-store' })
-        .then(r => r.json()).then(i => +String(i.dust).replace(/[^\d]/g, '') || 0).catch(() => null);
+        .then(r => r.json()).then(i => /^\d+$/.test(String(i.dust)) ? +i.dust : null).catch(() => null);
       const before = await dust();
       stampCraft(); // currency action — keep it out of the battle-toast delta
       await action('disenchant', { item_id: item.id });

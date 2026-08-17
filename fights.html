@@ -158,6 +158,12 @@
   const renderAll = () => { if (lastFights) renderSummary(lastFights); };
 
 
+  // Same guard as load(): a bad payload must name the error on the page, not
+  // blank the pane and strand dead handlers with only a console nobody reads.
+  function safeRender(fights) {
+    try { renderSummary(fights); }
+    catch (e) { $('err').textContent = `Couldn't render fight history: ${e.message}`; }
+  }
   function renderSummary(fights) {
     lastFights = fights;
     $('source').textContent = `The game's own per-fight summary — exact totals, last ${fights.length}.`;
@@ -212,10 +218,10 @@
         : n === 0;
     });
     $('list').querySelectorAll('[data-role]').forEach(el => el.onclick = () => {
-      localStorage.setItem('fhRole', el.dataset.role); renderSummary(fights);
+      localStorage.setItem('fhRole', el.dataset.role); safeRender(fights);
     });
     $('list').querySelectorAll('[data-sort]').forEach(el => el.onclick = () => {
-      localStorage.setItem('fhSort', el.dataset.sort); renderSummary(fights);
+      localStorage.setItem('fhSort', el.dataset.sort); safeRender(fights);
     });
   }
 
