@@ -1,0 +1,79 @@
+{
+  "note": "Source-derived constants from PathofDust (Rust). Per-tier values are the code defaults from affix_def() (src/adventure/affix.rs:184-240); the live game server may override them via a gitignored adventure-item-balance.toml — the advisor cross-checks api/affix-rates and prefers empirical values when they disagree by >20%. Ruleset modeled: max 4 crafted mods per item + 1 Sacred, no unique affixes/shards, no krangle/reforge-crit/recombine-crit extras.",
+  "archetypeLevelMult": 0.10,
+  "archetypes": {
+    "Warrior":   { "role": "melee",  "dr": 0.15,          "src": "character.rs:101" },
+    "Berserker": { "role": "melee",  "inc": 0.25,         "src": "character.rs:104" },
+    "Rogue":     { "role": "melee",  "critChance": 0.06,  "src": "character.rs:107" },
+    "Monk":      { "role": "melee",  "evasion": 0.12,     "src": "character.rs:110" },
+    "Paladin":   { "role": "melee",  "intervene": 0.05, "healPower": 0.50, "src": "character.rs:115-127" },
+    "Ranger":    { "role": "ranged", "splash": 0.15,      "src": "character.rs:130" },
+    "Mage":      { "role": "ranged", "critMult": 0.2,     "src": "character.rs:133" },
+    "Warlock":   { "role": "ranged", "attackSpeed": 0.15, "src": "character.rs:136" },
+    "Cleric":    { "role": "heal",   "healPower": 0.50,   "src": "character.rs:139" },
+    "Druid":     { "role": "heal",   "evasion": 0.12,     "src": "character.rs:142" },
+    "Slayer":    { "role": "melee",  "leech": 0.001,      "src": "character.rs:145" }
+  },
+  "affixes": [
+    { "match": "cold damage",         "bucket": "elemCold",      "perTier": 0.0225, "slots": ["weapon", "helm"] },
+    { "match": "fire damage",         "bucket": "elemFire",      "perTier": 0.0225, "slots": ["weapon", "helm"] },
+    { "match": "lightning damage",    "bucket": "elemLightning", "perTier": 0.0225, "slots": ["weapon", "helm"] },
+    { "match": "divine damage",       "bucket": "elemDivine",    "perTier": 0.0225, "slots": ["weapon", "helm"] },
+    { "match": "chaos damage",        "bucket": "elemChaos",     "perTier": 0.0225, "slots": ["weapon", "helm"] },
+    { "match": "crit dmg dealt",      "bucket": "critMult",  "perTier": 0.05 },
+    { "match": "crit chance",         "bucket": "critChance", "perTier": 0.01 },
+    { "match": "dmg taken reduction", "bucket": "dr",        "perTier": 0.02,  "cap": 0.75 },
+    { "match": "block chance",        "bucket": "block",     "perTier": 0.02,  "cap": 0.75 },
+    { "match": "evasion",             "bucket": "evasion",   "perTier": 0.016, "cap": 0.75 },
+    { "match": "intervene",           "bucket": "intervene", "perTier": 0.01,  "cap": 0.5 },
+    { "match": "dmg dealt",           "bucket": "inc",       "perTier": 0.03 },
+    { "match": "splash",              "bucket": "splash",    "perTier": 0.03 },
+    { "match": "lingering effect",    "bucket": "linger",    "perTier": 0.00025 },
+    { "match": "life leech",          "bucket": "leech",     "perTier": 0.001, "weight": 0.1 },
+    { "match": "max hp",              "bucket": "incLife",   "perTier": 0.03,  "flatBucket": "flatLife", "flatPerTier": 5.0 }
+  ],
+  "rules": {
+    "modCap": 4,
+    "sacredExtra": 1,
+    "sacredMult": 1.38,
+    "overflowToInc": 1.0,
+    "critBase": 0.05,
+    "critMultBase": 2.0,
+    "critBonusMult": 0.5,
+    "attackIntervalFloorMs": 50,
+    "leechCapPerSec": 0.20,
+    "lingerTicks": 80,
+    "elemProcDivisor": 50,
+    "elemProcDurationMs": 4000,
+    "divineHealBuffPerStack": 0.01,
+    "healBase": 0.5,
+    "blockDamageReduction": 0.5,
+    "baseHp": [20, 5],
+    "baseAtk": [5, 2],
+    "roles": {
+      "melee":  { "mult": 2.0, "flat": 4, "intervalMs": 1400 },
+      "ranged": { "mult": 1.3, "flat": 2, "intervalMs": 900 },
+      "heal":   { "mult": 0.8, "flat": 1, "intervalMs": 1700 }
+    },
+    "glovesAsPerTier": 0.009,
+    "pointsForLevel": "1 + floor(level/4)",
+    "src": {
+      "overflow": "character.rs:2440-2449 defensive_overflow — DR/block/evasion/intervene past cap feeds combat_increased_damage's gear layer 1:1",
+      "crit": "combat.rs:3301-3372 — dmg × (1 + stacks×(cm−1)×0.5), stacks = floor(chance)+Bernoulli(frac), both uncapped",
+      "elem": "combat.rs:4626 proc chance = roll/50; same roll is flat increased damage (character.rs:2588-2593); lightning taken-source clamped −0.75 → 1.75× ceiling",
+      "divineLoop": "combat.rs:4684-4696,6999 — healer divine self-buff: floor(raw%) guaranteed stacks, uncapped, 1% heal power each, 4s",
+      "healToSpeed": "character.rs:2053-2071 — heal power excess over 100% divides action interval, 50ms floor",
+      "linger": "combat.rs:5673,4284-4297 — DoT = unmitigated_hit × linger% over 80 ticks, block/evasion/shield-bypassing, flat-DR-only",
+      "hp": "character.rs:2001-2006 — (base + bodyPower + flatLife) × (1 + arch + incLife) × (1 + tree)",
+      "leechCap": "combat.rs:2987 — 20% maxHP/s hard cap",
+      "sacred": "item.rs:259-275,1286-1292 — 5th affix outside the craft cap, any affix any slot, 1.15×1.20 = 1.38× base, may duplicate"
+    }
+  },
+  "proxies": {
+    "note": "Judgment values for ranking, not source truth — tune freely.",
+    "splashWeight": 0.5,
+    "lingerWeight": 1.5,
+    "leechSeconds": 5,
+    "elemProcValue": { "elemCold": 0.5, "elemFire": 0.5, "elemLightning": 1.5, "elemDivine": 0.3, "elemChaos": 0.5 }
+  }
+}
