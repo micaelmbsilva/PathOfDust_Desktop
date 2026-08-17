@@ -176,8 +176,13 @@
   .btabs button { border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; cursor: pointer;
     border: 1px solid rgba(160,140,255,0.35); background: rgba(120,90,255,0.15); color: #eae6f5; }
   .btabs button.on { background: rgba(120,90,255,0.45); }
-  table.lb { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  table.lb th, table.lb td { text-align: right; padding: 2px 6px; border-bottom: 1px solid rgba(160,140,255,0.08); }
+  /* fixed layout: the Player column stays put when metric tabs change the
+     number of value columns */
+  table.lb { width: 100%; border-collapse: collapse; font-size: 0.8rem; table-layout: fixed; }
+  table.lb th:first-child { width: 2.2em; }
+  table.lb th:nth-child(2) { width: 42%; }
+  table.lb th, table.lb td { text-align: right; padding: 2px 6px; border-bottom: 1px solid rgba(160,140,255,0.08);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   table.lb th { color: #8a7fb0; font-weight: 600; }
   table.lb td:first-child, table.lb th:first-child { text-align: left; }
   table.lb tr.mme td { color: #ffcf5a; }
@@ -481,8 +486,11 @@
       const mmssLeft = (ms) => { const s = Math.max(0, Math.round((ms - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
       const retreatRow = (r.countdowns || []).filter(c => !/Reforge/i.test(c.title))
         .map(c => `<div class="srow retreat"><span class="l">🏳️ ${c.title}</span><span class="v">${mmssLeft(c.resetMs)}</span></div>`).join('');
-      // Next-battle ETA (estimated from recent battle cadence; ticked by its 1s interval)
-      const nextRow = `<div class="srow" id="nextBattle" style="display:none" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time"><span class="l">⚔️ Next Battle</span><span class="v"></span></div>`;
+      // Next-battle ETA (estimated from recent battle cadence; ticked by its 1s
+      // interval). Rendered with its live value — a hidden default would blink
+      // out on every stats refresh until the next tick.
+      const eta0 = nextBattleEta();
+      const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time"><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') : ''}</span></div>`;
       document.getElementById('rows').innerHTML = nextRow + retreatRow + arRow + wingsRow + xpRow + r.stats.map(s =>
         `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
         `<span class="l">${s.label}</span><span class="v">${s.value}</span></div>`).join('');
@@ -522,22 +530,47 @@
   const saveKnown = () => localStorage.setItem(KEY, JSON.stringify([...known]));
 
   // Battle-end toast — fires for EVERY battle we're in, win or lose. The
-  // encounter arrives at fight start with the result baked in; the dust/sand
-  // deltas land on the next inventory polls (auto-repair nets into the same
-  // beat), and the toast shows once the on-screen replay resolves.
-  let lastDust = null, lastSand = null, battleToastT = null;
-  function trackCurrency(inv) {
+  // encounter arrives at fight start with currency already committed server-side,
+  // so the FIRST inventory poll started after arming carries the battle's net
+  // delta — freeze it there (a ~1-2s window) instead of at replay end (up to
+  // 2 min), so manual crafting can't blend in. Actions stamped via lastCraftAt
+  // (shared localStorage — the Bag popup stamps too) mark a delta as mixed.
+  // Residual: a poll finishing with post-battle currency BEFORE the WS message
+  // arrives poisons the base; unfixable client-side (payload lacks reward/repair
+  // fields), hence the delta is labeled "net".
+  let lastDust = null, lastSand = null, battleToastT = null, pendingBattle = null;
+  let currencyPollSeq = 0, lastPollStart = 0; // provenance of lastDust/lastSand
+  const lastCraftAt = () => +localStorage.getItem('lastCraftAt') || 0;
+  const stampCraft = () => localStorage.setItem('lastCraftAt', Date.now());
+  function trackCurrency(inv, seq, startedAt) {
     if (/^\d+$/.test(String(inv.dust))) lastDust = +inv.dust; // exact ints only — abbreviated can't diff
     if (/^\d+$/.test(String(inv.sand))) lastSand = +inv.sand;
-  }
-  function armBattleToast(d) {
-    const base = { dust: lastDust, sand: lastSand }; // snapshot BEFORE the post-battle polls land
-    clearTimeout(battleToastT); // back-to-back fights: newest wins
-    battleToastT = setTimeout(() => {
+    lastPollStart = startedAt;
+    const pb = pendingBattle;
+    // freeze only from a request STARTED after arming — an in-flight pre-battle
+    // response must not freeze a zero/wrong delta
+    if (pb && !pb.frozen && seq > pb.afterSeq) {
       const delta = (now, was, label) => now != null && was != null && now !== was
         ? [`${now > was ? '+' : ''}${(now - was).toLocaleString()} ${label}`] : [];
-      const parts = [...delta(lastDust, base.dust, 'dust'), ...delta(lastSand, base.sand, 'sand')];
-      infoToast(`${d.won ? '🏆 Battle Won' : '💀 Battle Lost'}${parts.length ? ` — 💰 ${parts.join(' · ')}` : ''}`);
+      pb.frozen = {
+        parts: [...delta(lastDust, pb.base.dust, 'dust'), ...delta(lastSand, pb.base.sand, 'sand')],
+        dirty: lastCraftAt() > pb.baseObservedFrom, // any currency action since the base was observed
+      };
+    }
+  }
+  function armBattleToast(d) {
+    const battle = pendingBattle = {
+      won: !!d.won, base: { dust: lastDust, sand: lastSand },
+      baseObservedFrom: lastPollStart, afterSeq: currencyPollSeq, frozen: null,
+    };
+    clearTimeout(battleToastT); // back-to-back fights: newest wins
+    battleToastT = setTimeout(() => {
+      if (pendingBattle !== battle) return; // superseded by a newer fight
+      pendingBattle = null;
+      const f = battle.frozen; // no qualified poll landed -> plain result, no stale recompute
+      const money = f && f.parts.length
+        ? ` — 💰 net ${f.dirty ? '~' : ''}${f.parts.join(' · ')}${f.dirty ? ' (mixed with crafting)' : ''}` : '';
+      infoToast(`${battle.won ? '🏆 Battle Won' : '💀 Battle Lost'}${money}`);
     }, Math.min((d.displayDurationMs || 0) + 2500, 120000)); // charge + replay + resolve
   }
 
@@ -919,15 +952,16 @@
     if (keepScroll) fe.scrollTop = fe.scrollHeight;
   }
 
-  let bagBusy = false;
+  let bagBusy = false, bagPollAgain = false;
   async function pollBag() {
-    if (bagBusy) return;
+    if (bagBusy) { bagPollAgain = true; return; } // coalesce: rerun once after the in-flight pass
     bagBusy = true; // held through the whole pass — the loop awaits, and an overlapping poll must not race `known`
     try {
+      const seq = ++currencyPollSeq, startedAt = Date.now(); // provenance for the battle-toast freeze guard
       let inv;
       try { inv = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); }
       catch { return; } // bridge offline — try again next tick
-      trackCurrency(inv);
+      trackCurrency(inv, seq, startedAt);
       const bag = { items: inv.bag || [] };
       const ids = new Set(bag.items.map(i => i.id));
       if (!seeded) { known = ids; seeded = true; saveKnown(); return; } // silent seed
@@ -945,7 +979,10 @@
       // forget ids no longer in the bag so they'd re-notify if they come back
       known = new Set([...known].filter(id => ids.has(id)));
       saveKnown();
-    } finally { bagBusy = false; }
+    } finally {
+      bagBusy = false;
+      if (bagPollAgain) { bagPollAgain = false; pollBag(); } // a call was dropped mid-pass (e.g. post-encounter refresh)
+    }
   }
   pollBag();
 
@@ -1038,6 +1075,7 @@
       const dust = () => fetch('/api/inventory', { cache: 'no-store' })
         .then(r => r.json()).then(i => +String(i.dust).replace(/[^\d]/g, '') || 0).catch(() => null);
       const before = await dust();
+      stampCraft(); // currency action — keep it out of the battle-toast delta
       await action('disenchant', { item_id: item.id });
       if (before != null) { const after = await dust(); if (after > before) infoToast(`💰 +${(after - before).toLocaleString()} dust from ${item.name}`); }
       close();
@@ -1096,6 +1134,7 @@
       // flash, so we detect the upgraded item by which slot's tier went up.
       const snap = () => fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
       const before = await snap();
+      stampCraft(); // 1k-dust spend — keep it out of the battle-toast delta
       const res = await action(rf.action, {}).catch(() => null);
       if (!res || !res.ok) { reforgeToast('⚒️ Reforge Failed', 'Could not reach the game — try again.'); loadStats(); return; }
       let hit = reforgeDiff(before, await snap());
