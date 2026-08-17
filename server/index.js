@@ -203,10 +203,12 @@ app.get('/api/watchlist', (req, res) => {
 // Freshness watermark for the site footer: deploy identity + when data last moved.
 const STARTED = new Date().toISOString();
 let lastScrapeAt = null;
+let appRev = null; // the app's interface revision (version.json at repo root)
+try { appRev = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'version.json'), 'utf8')).version; } catch {}
 app.get('/api/meta', h(async (_req, res) => {
   const dbLatest = pool ? (await pool.query(`SELECT max(last_seen) AS m FROM installs`)).rows[0].m : null;
   res.json({
-    rev: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || 'dev',
+    rev: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || 'dev', appRev,
     deployed: STARTED, lastScrape: lastScrapeAt, dbLatest,
   });
 }));

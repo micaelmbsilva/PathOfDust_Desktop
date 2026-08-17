@@ -148,6 +148,7 @@
 </head>
 <body>
 <main id="app"><p class="status">Loading…</p></main>
+<footer id="foot" class="sub" style="max-width:900px;margin:0 auto;padding:0 16px 28px;border-top:1px solid var(--grid);padding-top:12px"></footer>
 <script>
 'use strict';
 const app = document.getElementById('app');
@@ -302,9 +303,18 @@ function agoText(iso) {
   return `${d.toLocaleString()} (${rel})`;
 }
 
+// Watermark footer on every page: deploy rev, app interface rev, and data freshness.
+let META = null;
+async function renderFoot() {
+  if (!META) { try { const r = await fetch('api/meta'); if (r.ok) META = await r.json(); } catch {} }
+  if (!META) return;
+  document.getElementById('foot').textContent =
+    `rev ${str(META.rev)}${META.appRev ? ' · app interface v' + str(META.appRev) : ''}` +
+    ` · site updated ${agoText(META.deployed)} · data fetched ${agoText(META.lastScrape || META.dbLatest)}`;
+}
+
 async function ladder() {
-  const [r, { builds, passives }, metaR] = await Promise.all([fetch('api/ladder'), staticData(), fetch('api/meta')]);
-  const meta = metaR.ok ? await metaR.json() : null;
+  const [r, { builds, passives }] = await Promise.all([fetch('api/ladder'), staticData()]);
   if (!r.ok) throw new Error('ladder ' + r.status);
   const { players, byClass, levels, total } = await r.json();
   view(
@@ -321,8 +331,7 @@ async function ladder() {
     el('p', { class: 'sub' }, 'Power is role-aware — raw DPS for damage classes, effective HP for tanks, effective HPS for healers. Hover a value for the math. Click headers to sort, chips to filter by class.'),
     playersTable(arr(players), passives),
     advStats(arr(players), passives),
-    meta ? el('p', { class: 'sub', style: 'margin-top:36px;border-top:1px solid var(--grid);padding-top:12px' },
-      `rev ${str(meta.rev)} · site updated ${agoText(meta.deployed)} · data fetched ${agoText(meta.lastScrape || meta.dbLatest)}`) : null);
+    null); // watermark footer is global, see renderFoot()
 }
 
 // Hidden routes are keyed: append ?key=<SITE_KEY> once (e.g. #/watchlist?key=…),
@@ -687,11 +696,12 @@ async function route() {
   // Capture ?key=… from the hash once, remember it, strip it from the URL.
   const km = location.hash.match(/^(.*?)\?key=([^&]+)$/);
   if (km) { localStorage.setItem('pod.key', decodeURIComponent(km[2])); location.replace(location.pathname + km[1]); return; }
-  if (location.hash === '#/watchlist') { try { await watchlist(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); return; }
+  if (location.hash === '#/watchlist') { try { await watchlist(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); renderFoot(); return; }
   const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
   try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
   catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); }
   window.scrollTo(0, 0);
+  renderFoot();
 }
 addEventListener('hashchange', route);
 route();
