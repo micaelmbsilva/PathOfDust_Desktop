@@ -1108,7 +1108,12 @@
     document.querySelectorAll('#partyBody [data-char]').forEach(el => el.onclick = () => showCharacter(el.dataset.char));
   }
 
-  // Fold an encounter's ~15-45k events into a small report (raw events are never kept).
+  // Fold an encounter's events into a small report (raw events are never kept).
+  // Measured 2026-08-17 at stage ~550 with 36-63 units: 154,799 and 176,823
+  // events in single fights, ~28 MB of JSON for the largest. The old "~15-45k"
+  // note here was an early guess and is off by up to an order of magnitude —
+  // count scales with party size and stage, and the whole thing is pushed to
+  // every viewer on the overlay socket.
   function buildReport(d) {
     const players = {}; // id -> displayName (bosses/adds excluded)
     for (const u of d.units || []) if (!u.isBoss && !/^__enemy/.test(u.id)) players[u.id] = u.displayName;
@@ -1808,7 +1813,7 @@
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
-    if (!v.bridgeRev || v.bridgeRev < 77) showRestartBanner(); // 77: /fights.json passthrough; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    if (!v.bridgeRev || v.bridgeRev < 78) showRestartBanner(); // 78: fights-json passthrough removed; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 
