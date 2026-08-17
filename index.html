@@ -174,6 +174,7 @@
   .bstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px;
     font-size: 0.82rem; margin-bottom: 8px; }
   .bstats .l { color: #b0a2d9; } .bstats b { font-variant-numeric: tabular-nums; }
+  .pmark { cursor: help; } /* collapsed-row marker; the full note is in .bbody */
   .partial { font-size: 0.74rem; color: #ffd479; background: rgba(255,212,121,0.1);
     border: 1px solid rgba(255,212,121,0.35); border-radius: 6px;
     padding: 4px 8px; margin: 2px 0 8px; cursor: help; }
@@ -1238,7 +1239,7 @@
       return `<div class="bent" data-i="${i}"><div class="bh">
         <span class="bwon ${rep.won ? 'w' : 'l'}">${rep.won ? '🏆 Won' : '💀 Lost'}</span>
         <span>Stage ${rep.stage}${rep.kind && rep.kind !== 'basic' ? ' 💀 Boss' : ''}</span>
-        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`}${rep.thinned ? ' · ~' : ' · '}${ago(rep.at)}</span></div>
+        <span class="bsub">${Math.round(secs)}s · ${idle ? 'sat out' : `${fmtN(m.dmg)} dmg (${(m.share * 100).toFixed(1)}%)`}${rep.thinned ? ' <span class="pmark" data-tip="Under-count — the game trimmed this fight\'s live feed. Open the entry for detail.">⚠️</span>' : ''} · ${ago(rep.at)}</span></div>
         <div class="bbody">
           ${partialNote(rep.thinned)}
           ${idle ? '<p class="muted" style="margin:2px 0 8px">🪦 You sat this one out — downed, retreated, or joined late.</p>' : `<div class="bstats">
