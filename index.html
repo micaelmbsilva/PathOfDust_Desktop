@@ -428,9 +428,16 @@
   // feature). Toggle persists; needs our character name (from /api/me).
   const OVERLAY = 'https://adventure.lokati.net/overlay';
   let myName = '';
+  // ?bgOpacity=<0-1> fades the overlay's own backdrop (2026-08-18). The game
+  // clamps it; we only ever send it when it isn't the default 1, so a plain
+  // overlay URL stays plain.
+  const bgOpacity = () => { const v = parseFloat(localStorage.getItem('bgOpacity')); return isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; };
   function applyHighlight() {
     const on = localStorage.getItem('highlight') === '1';
-    const src = on && myName ? `${OVERLAY}?highlight=${encodeURIComponent(myName)}` : OVERLAY;
+    const q = new URLSearchParams();
+    if (on && myName) q.set('highlight', myName);
+    if (bgOpacity() !== 1) q.set('bgOpacity', String(bgOpacity()));
+    const src = q.toString() ? `${OVERLAY}?${q}` : OVERLAY;
     const ov = document.getElementById('overlay');
     if (ov.getAttribute('src') !== src) ov.setAttribute('src', src); // reload only if changed
     setActive('highlight', on);
@@ -1331,6 +1338,9 @@
       row('Show Next-Battle ETA', chk('showEta'), 'Countdown estimated from recent battle cadence.') +
       row('Operator Broadcasts', chk('showBroadcasts'), 'Announcements from the app operator. Restart and update warnings always show.') +
       row('Stream Starts Muted', chk('streamMuted'), 'Unmuted autoplay may still be blocked by the player.') +
+      row('Overlay Background', `<input type="range" id="bgOp" min="0" max="100" step="5" value="${Math.round(bgOpacity() * 100)}" style="vertical-align:middle;width:110px">
+        <span id="bgOpVal" style="display:inline-block;min-width:34px;text-align:right">${Math.round(bgOpacity() * 100)}%</span>`,
+        'Fades the game overlay\'s own backdrop so more of the app shows through. The overlay reloads when you let go of the slider.') +
       `<div class="fhead" style="margin-top:10px">⚡ Performance</div>` +
       row('Refresh Mode', sel('refresh', [['resp', 'Responsive'], ['bal', 'Balanced'], ['low', 'Low Data']]), 'How often stats and bag re-poll. Responsive: 3s (30s while live events flow). Balanced: half that. Low Data: quarter.') +
       row('Unload Chat When Hidden', chk('chatUnload'), 'Frees CPU/RAM while chat is closed; reopening reloads it.') +
@@ -1392,6 +1402,11 @@
       toolbarLayout = loadToolbar(); // re-derive from defaults BEFORE rendering
       renderToolbar();
     });
+    // Live label while dragging; reload the overlay only on release, since each
+    // change re-navigates the iframe.
+    const bgOp = document.getElementById('bgOp'), bgOpVal = document.getElementById('bgOpVal');
+    bgOp.oninput = () => { bgOpVal.textContent = bgOp.value + '%'; };
+    bgOp.onchange = () => { localStorage.setItem('bgOpacity', String(bgOp.value / 100)); applyHighlight(); };
     renderDiag();
     document.getElementById('copyDiag').onclick = async (e) => {
       try { await navigator.clipboard.writeText(diagText()); const b = e.target, o = b.textContent;
@@ -1819,41 +1834,24 @@
     const db = el.querySelector('[data-act="dust"]');
     if (db) db.onclick = async () => {
       db.disabled = true;
-      // Snapshot equipped tiers, reforge, re-snapshot: the site shows no result
-      // flash, so we detect the upgraded item by which slot's tier went up.
-      const snap = () => fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
-      const before = await snap();
       stampCraft(); // 1k-dust spend — keep it out of the battle-toast delta
       const res = await action(rf.action, {}).catch(() => null);
       if (!res || !res.ok) { reforgeToast('⚒️ Reforge Failed', 'Could not reach the game — try again.'); loadStats(); return; }
-      let hit = reforgeDiff(before, await snap());
-      for (let i = 0; !hit && i < 4; i++) { // read-after-write lag — up to ~3.2s before giving up
-        await new Promise(r => setTimeout(r, 800));
-        hit = reforgeDiff(before, await snap());
+      // The site hands the result straight back on the redirect it answers with:
+      // /?reforged=1&item=…&slot=…&old_tier=…&new_tier=… (see do_reforge /
+      // render_reforge_popup). Exact item and tiers, so no snapshot diffing.
+      const q = new URLSearchParams((res.location || '').split('?')[1] || '');
+      if (q.get('reforged')) {
+        const from = +q.get('old_tier') || 0, to = +q.get('new_tier') || 0;
+        reforgeToast(`⚒️ Reforged ${q.get('item') || 'your gear'}`,
+          `Tier ${from} → Tier ${to}${to > from ? ` (+${to - from})` : ''}`, q.get('slot') || '');
+      } else {
+        reforgeToast('⚒️ Reforge', 'Nothing happened — already reforged this hour, or not enough dust.');
       }
-      if (hit) reforgeToast(`⚒️ Reforged ${hit.name}`, `${hit.from} → ${hit.to} (+${hit.d} tiers)`, hit.slot);
-      else reforgeToast('⚒️ Reforge', "No change detected — likely rejected (not enough dust?) or couldn't spot the upgraded item.");
       loadStats();
     };
     document.getElementById('dismissAll').after(el);
     updateDismissAll();
-  }
-  // Which equipped slot jumped 2–4 tiers between snapshots (reforge upgrades one
-  // equipped item by 2–4). Requires exactly one such candidate so we never guess.
-  // ponytail: keyed by slot, not item id — equipped markup carries no item id, and
-  // a concurrent gear swap could misattribute; fine for a cosmetic toast.
-  function reforgeDiff(before, after) {
-    if (!before?.equipped || !after?.equipped) return null;
-    const tnum = (t) => { const m = String(t).match(/(\d+)/); return m ? +m[1] : null; };
-    const prev = Object.fromEntries(before.equipped.map(e => [e.slot, e]));
-    const hits = [];
-    for (const e of after.equipped) {
-      const p = prev[e.slot]; if (!p) continue;
-      const a = tnum(p.tier), b = tnum(e.tier);
-      if (a == null || b == null) continue;
-      if (b - a >= 2 && b - a <= 4) hits.push({ name: e.name, slot: e.slot, from: p.tier, to: e.tier, d: b - a });
-    }
-    return hits.length === 1 ? hits[0] : null;
   }
   // Distinct class from the reminder toast: reconcileReforge reaps `.toast.reforge`
   // on cooldown, which would delete this result the instant loadStats() runs.
