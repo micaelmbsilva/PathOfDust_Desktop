@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 89;
+const BRIDGE_REV = 90;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -89,8 +89,11 @@ async function me() {
   // Parse availability + reset + (when available) the dust form's endpoint.
   let reforge = { available: false, resetMs: 0, action: null, label: null, canDust: false };
   const ci = text.indexOf('Reforge Gear');
-  if (ci > 0) {
-    const s = text.lastIndexOf('data-reset-ms', ci);
+  const s = ci > 0 ? text.lastIndexOf('data-reset-ms', ci) : -1;
+  // A miss (no data-reset-ms before the card) used to slice(-41,…) into an empty
+  // string, which failed the reforge-used test and reported "available" forever —
+  // the "Reforge Ready" toast then re-armed after every dismissal. Bail instead.
+  if (ci > 0 && s >= 0) {
     const card = text.slice(s - 40, ci + 700);
     reforge.resetMs = +(card.match(/data-reset-ms="(\d+)"/) || [])[1] || 0;
     reforge.available = !/reforge-pill[^"]*reforge-used/.test(card);
@@ -700,6 +703,15 @@ const srv = createServer(async (req, res) => {
     if (req.method === 'POST' && org && !/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(org)) {
       res.writeHead(403); return res.end('forbidden');
     }
+    // Host guard: a DNS-rebinding page resolves attacker.com to 127.0.0.1 and is
+    // then same-origin with us, so it can read the GET scrape routes (name, gear,
+    // feedback contacts) that carry no Origin header. A real local request always
+    // has Host localhost/127.0.0.1; anything else is a rebind. Absent Host is
+    // HTTP/1.0 / the shell — allowed.
+    const host = req.headers.host;
+    if (host && !/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) {
+      res.writeHead(403); return res.end('forbidden');
+    }
     res.setHeader('Cache-Control', 'no-store'); // never cache app files — always serve the current (updated) version
     if (url.pathname === '/config.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
@@ -751,7 +763,7 @@ const srv = createServer(async (req, res) => {
       return json(res, { version: globalThis.__version || '', update: globalThis.__update || {} });
     }
     if (url.pathname === '/api/feedback' && req.method === 'POST') {
-      const { message, contact } = JSON.parse(await body(req) || '{}');
+      const { message, contact } = await jbody(req);
       await telemetry('/feedback', { message, contact });
       return json(res, { ok: !!TELEMETRY_URL });
     }
@@ -760,8 +772,8 @@ const srv = createServer(async (req, res) => {
       // the newest 100. Shell provides the dir (packaged app only; dev = no-op).
       const dir = globalThis.__fightLogsDir;
       if (!dir) return json(res, { ok: false });
-      const rep = JSON.parse(await body(req) || 'null');
-      if (!rep || typeof rep !== 'object') return json(res, { ok: false });
+      const rep = await jbody(req);
+      if (!rep || typeof rep !== 'object' || !Object.keys(rep).length) return json(res, { ok: false });
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const suffix = Math.random().toString(36).slice(2, 6); // same-second fights don't collide
       const name = `${stamp}-${String(rep.stage ?? 'x').replace(/[^\w-]/g, '')}-${String(rep.kind || 'fight').replace(/[^\w-]/g, '')}-${suffix}.json`;
@@ -803,7 +815,7 @@ const srv = createServer(async (req, res) => {
       } catch { return json(res, { ok: false }); }
     }
     if (url.pathname === '/api/log' && req.method === 'POST') {
-      const { level, message } = JSON.parse(await body(req) || '{}');
+      const { level, message } = await jbody(req);
       telemetry('/log', { level, message });
       return json(res, { ok: true });
     }
@@ -861,7 +873,7 @@ const srv = createServer(async (req, res) => {
     if (url.pathname === '/api/open' && req.method === 'POST') {
       // Same, generic: allowlisted site pages only.
       const PAGES = { 'wiki': '/wiki', 'patch-notes': '/patch-notes' };
-      const p = PAGES[JSON.parse(await body(req) || '{}').page];
+      const p = PAGES[(await jbody(req)).page];
       if (!p) { res.writeHead(400); return res.end('bad page'); }
       exec(`start "" "https://adventure.lokati.net${p}"`);
       return json(res, { ok: true });
@@ -872,7 +884,7 @@ const srv = createServer(async (req, res) => {
       return json(res, { ok: true });
     }
     if (url.pathname === '/api/action' && req.method === 'POST') {
-      const { endpoint, fields } = JSON.parse(await body(req));
+      const { endpoint, fields } = await jbody(req);
       const r = await post(endpoint, fields || {});
       // Success-looking 302 to the login page = dead session; tell the UI apart
       // from a normal craft redirect so it can say "restart to re-login".
@@ -914,16 +926,23 @@ const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/j
 // 2MB byte cap — fight reports are the biggest client, and they're compact by
 // design. Overflow rejects (typed 413, handled by the route catch-all) so route
 // logic never runs on a truncated body; connection errors resolve empty.
+// Collect chunks as Buffers and decode ONCE at the end — `b += c` decoded each
+// chunk on its own, so a UTF-8 sequence split across a 64KB boundary became
+// U+FFFD (a nickname/report with a non-ASCII char near the boundary corrupted or
+// failed JSON.parse).
 const body = (req) => new Promise((resolve, reject) => {
-  let b = '', n = 0;
+  const chunks = []; let n = 0;
   req.on('data', c => {
     n += c.length; // Buffer bytes, not decoded chars
     if (n > 2e6) { const e = new Error('body too large'); e.status = 413; req.destroy(); return reject(e); }
-    b += c;
+    chunks.push(c);
   });
-  req.on('end', () => resolve(b));
+  req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
   req.on('error', () => resolve(''));
 });
+// Parse a JSON body without throwing into the route's catch-all (which answers a
+// raw 500). Returns {} on empty or malformed input.
+const jbody = async (req) => { try { return JSON.parse(await body(req) || '{}'); } catch { return {}; } };
 
 // usage heartbeat: once ~after login, then every 30 min
 setTimeout(ping, 20000);
