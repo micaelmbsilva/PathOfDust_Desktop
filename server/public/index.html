@@ -770,17 +770,20 @@ async function advisor(name) {
     const q = rates.find(x => str(x.affix).includes(a.match));
     if (q) empirical[a.match] = +q.per_tier;
   }
-  // Craftable base per slot: the highest-tier UNKRANGLED, non-unique item the
-  // player owns for that slot (equipped or bag) — a krangled item is locked out
-  // of every craft action, so plans must land on something craftable.
+  // Craftable candidates per slot: every UNKRANGLED, non-unique item the
+  // player owns for that slot (equipped or bag) — a krangled item is locked
+  // out of every craft action, so plans must land on something craftable.
+  // The best one is chosen per class inside render() (a lower-tier base with
+  // the right Sacred line can beat a higher-tier one).
   const tnum = (it) => +str(it && it.tier).replace(/\D/g, '') || 0;
   const SLOT_KEYS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
   const slotOf = (it) => SLOT_KEYS.find(k => str(it && it.slot).toLowerCase().includes(k));
-  const basesBySlot = {};
+  const sacredLineOf = (it) => str((arr(it && it.implicits).find(i => /sacred:/i.test(str(i && i.t))) || {}).t).replace(/^[^A-Za-z]+/, '');
+  const candsBySlot = {};
   for (const it of arr(b.equipped).concat(bag)) {
     const k = slotOf(it);
     if (!k || it.krangled || it.unique) continue;
-    if (!basesBySlot[k] || tnum(it) > tnum(basesBySlot[k])) basesBySlot[k] = it;
+    (candsBySlot[k] = candsBySlot[k] || []).push(it);
   }
 
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
@@ -823,12 +826,28 @@ async function advisor(name) {
     // Per-slot plan tier: the tier of the item the crafting would actually
     // happen ON — the worn item if craftable, else the best unkrangled base
     // owned for that slot (mods roll at ITEM tier, so a global average lies).
+    // "Best" base = highest class score when swapped into the loadout, which
+    // prices in its Sacred line and existing mods, not just its tier.
     const wornBySlot = {};
     for (const it of arr(best ? best.loadout.items : [])) { const k = slotOf(it); if (k) wornBySlot[k] = it; }
+    const chooseBase = (k) => {
+      const cands = candsBySlot[k] || [];
+      let pick = null, ps = -1;
+      const others = arr(best ? best.loadout.items : []).filter(it => slotOf(it) !== k);
+      for (const c of cands) {
+        const s = core.classScore(best.cls, core.sumBuckets(others.concat([c]).map(i => core.parseItem(i, model))), lvl, model).score;
+        if (s > ps) { ps = s; pick = c; }
+      }
+      return pick;
+    };
+    const craftBaseMemo = {};
     const craftBase = (k) => {
+      if (k in craftBaseMemo) return craftBaseMemo[k];
       const worn = wornBySlot[k];
-      if (worn && !worn.krangled) return { it: worn, worn: true };
-      return basesBySlot[k] ? { it: basesBySlot[k], worn: false } : null;
+      let out = null;
+      if (worn && !worn.krangled) out = { it: worn, worn: true };
+      else { const base = best ? chooseBase(k) : null; if (base) out = { it: base, worn: false }; }
+      return (craftBaseMemo[k] = out);
     };
     const planTiers = Object.fromEntries(SLOT_KEYS.map(k => {
       const cb = craftBase(k);
@@ -845,10 +864,12 @@ async function advisor(name) {
       const tier = tnum(it);
       const plan = targets && targets.plan[slot] ? targets.plan[slot] : [];
       const junk = arr(it.mods).filter(m => m && m.t && !plan.some(p => str(m.t).toLowerCase().includes(p.match))).map(m => str(m.t));
-      const base = basesBySlot[slot];
+      const cb = craftBase(slot);
+      const base = cb && !cb.worn ? cb.it : null;
+      const baseSacred = base ? sacredLineOf(base) : '';
       const tips = it.krangled ? [
         `krangled (locked — no crafting possible)${base
-          ? `: build the plan on your craftable ${str(base.slot)} base instead — ${str(base.name)} (t${tnum(base)}${base.sacred ? ', Sacred' : ''}, ${arr(base.mods).length} mods), swap in once it beats this one`
+          ? `: build the plan on ${str(base.name)} (t${tnum(base)} bag ${slot}${baseSacred ? ' · ' + baseSacred : ''}${arr(base.mods).length ? ' · has ' + arr(base.mods).map(m => str(m.t)).join(', ') : ' · no mods yet'}), swap in once it beats this one`
           : ': keep wearing it and craft the plan onto the next fresh drop for this slot'}`,
       ] : [
         junk.length && `swap off-build mods (${junk.join(', ')}): veiled Chancing rerolls every mod type with a pick per slot, or Annulment (veiled = choose which leaves) then re-Exalt`,
@@ -902,11 +923,19 @@ async function advisor(name) {
           el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Craft on'), el('th', null, 'Craft these 4'), el('th', null, 'Sacred wish'))),
           el('tbody', null, Object.entries(targets.plan).map(([slot, picks]) => {
             const cb = craftBase(slot);
+            const it = cb && cb.it;
+            const sac = it ? sacredLineOf(it) : '';
+            const have = new Set(arr(it && it.mods).map(m => (core.parseMod(str(m && m.t), model) || {}).bucket).filter(Boolean));
+            const mark = (p) => {
+              const bucket = (core.parseMod('+1% ' + p.match, model) || {}).bucket;
+              return `${p.match} ${fmtAvg(p)}${bucket && have.has(bucket) ? ' ✓have' : ''}`;
+            };
             return el('tr', null,
               el('td', null, slot),
-              el('td', null, cb ? `${cb.worn ? 'worn' : 'bag'} t${tnum(cb.it)}${cb.worn ? '' : ' ' + str(cb.it.name)}` : 'next drop'),
-              el('td', null, picks.map(p => `${p.match} ${fmtAvg(p)}`).join(' · ')),
-              el('td', null, targets.sacred ? `${targets.sacred.match} ${fmtAvg(targets.sacred)}` : '—'));
+              el('td', null, !it ? 'next drop'
+                : `${cb.worn ? 'worn' : 'bag'} t${tnum(it)}${cb.worn ? '' : ' ' + str(it.name)}${!cb.worn && arr(it.mods).length ? ' · has ' + arr(it.mods).map(m => str(m.t)).join(', ') : ''}`),
+              el('td', null, picks.map(mark).join(' · ')),
+              el('td', null, sac ? `locked in: ${sac}` : targets.sacred ? `wish: ${targets.sacred.match} ${fmtAvg(targets.sacred)}` : '—'));
           }))),
         craftRows.length ? [el('h2', null, 'Crafting worklist'),
           el('ul', { class: 'rolls' }, craftRows)] : null,

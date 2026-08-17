@@ -48,7 +48,8 @@ export function parseItem(item, model) {
       .slice(0, model.rules.modCap);
   }
   for (const i of (Array.isArray(item.implicits) ? item.implicits : [])) {
-    if (!/^sacred:/i.test(String(i && i.t || ''))) { continue; }
+    // The scraped line carries a "✦ " glyph prefix — match anywhere, not ^.
+    if (!/sacred:/i.test(String(i && i.t || ''))) { continue; }
     const p = parseMod(i.t, model);
     if (p) mods.push(p);
   }
