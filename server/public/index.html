@@ -92,6 +92,20 @@
   .modn { margin: 6px 0 0 20px; font-size: 13px; }
   .modn b { color: var(--ink-2); }
 
+  /* Visual passive tree */
+  .tskill { padding: 14px 16px; }
+  .tnode { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px;
+           padding: 6px 10px; font-size: 13px; cursor: help; }
+  .tnode b { color: var(--ink); font-size: 13px; }
+  .tnode .max { color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+  .tnode.pick { border-color: var(--series-1); box-shadow: 0 0 0 1px #3987e533; }
+  .tnode.pick .take { color: var(--series-1); font-weight: 600; margin-left: 6px; }
+  .tnode.dead { border-style: dashed; opacity: 0.55; }
+  .tskill > .tnode { display: inline-block; margin-bottom: 4px; }
+  .tspecs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .tcol { padding: 10px 0 0 12px; border-left: 2px solid var(--baseline); display: grid; gap: 6px; align-content: start; }
+  .tcol .tnode.mod { margin-left: 14px; font-size: 12.5px; }
+
   /* Build progression + roll priority */
   .lvrow { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
   .lvrow input { width: 70px; background: var(--surface); color: var(--ink); border: 1px solid var(--border);
@@ -551,16 +565,26 @@ async function advisor(name) {
   render();
 }
 
-function treeSection(archetype, passives) {
+function treeSection(archetype, passives, builds) {
   const t = passives && passives[archetype];
   if (!t) return null;
+  // Highlight the suggested build's allocations on the tree itself.
+  const cb = builds && builds.classes && builds.classes[archetype];
+  const picks = new Map(arr(cb && cb.builds[0] && cb.builds[0].order).map(o => [str(o.n), +o.r]));
+  const node = (n, cls) => {
+    const dead = /\(inactive\)\s*$/.test(str(n.text));
+    const pick = picks.get(str(n.name));
+    return el('div', { class: `tnode ${cls}${pick ? ' pick' : ''}${dead ? ' dead' : ''}`, title: str(n.text) },
+      el('b', null, str(n.name)), el('span', { class: 'max' }, str(n.max)),
+      pick ? el('span', { class: 'take' }, `take ${pick}`) : null, dead ? el('span', { class: 'max' }, 'inactive') : null);
+  };
   return [el('h2', null, 'Full passive tree'),
-    el('p', { class: 'sub' }, str(t.root)),
-    el('div', { class: 'stack' }, arr(t.skills).map(s => el('details', { class: 'card skill' },
-      el('summary', null, el('b', null, str(s.name)), ` ${str(s.max)} — ${str(s.text)}`),
-      arr(s.specializations).map(sp => el('div', { class: 'spec' },
-        el('div', null, el('b', null, str(sp.name)), ` ${str(sp.max)} — ${str(sp.text)}`),
-        arr(sp.modifiers).map(m => el('div', { class: 'modn' }, el('b', null, str(m.name)), ` ${str(m.max)} — ${str(m.text)}`)))))))];
+    el('p', { class: 'sub' }, str(t.root) + ' — highlighted nodes are the suggested build; hover any node for its effect.'),
+    el('div', { class: 'stack' }, arr(t.skills).map(s => el('div', { class: 'card tskill' },
+      node(s, 'skill'),
+      el('div', { class: 'tspecs' }, arr(s.specializations).map(sp => el('div', { class: 'tcol' },
+        node(sp, 'spec'),
+        arr(sp.modifiers).map(m => node(m, 'mod'))))))))];
 }
 
 async function classView(archetype) {
@@ -578,7 +602,7 @@ async function classView(archetype) {
       ? `${role ? str(role) + ' · ' : ''}what ${c.players} tracked player${c.players === 1 ? '' : 's'} run · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`
       : `${role ? str(role) + ' · ' : ''}no tracked players yet`),
     buildCards(archetype, builds),
-    treeSection(archetype, passives),
+    treeSection(archetype, passives, builds),
     c && arr(c.passives).length ? [el('h2', null, 'Popular passives'),
       el('div', { class: 'card' }, barChart(arr(c.passives).map(p => ({
         label: str(p.name) + (p.tier != null ? ` (T${str(p.tier)})` : ''),
