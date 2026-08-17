@@ -195,6 +195,9 @@
   .fl { font-size: 0.76rem; padding: 1px 0; }
   .fl .ft { color: #8a7fb0; font-variant-numeric: tabular-nums; margin-right: 6px; }
   .fl.taken { color: #ff9d9d; } .fl.healed { color: #7fdba3; } .fl.death { color: #ff8080; font-weight: 700; }
+  .fl.shielded, .fl.shieldout { color: #82aaff; }
+  .fl.buffgain { color: #c792ea; } .fl.bufflost { color: #8a7fb0; }
+  .fl .mit { color: #8a7fb0; font-size: 0.92em; }
 
   /* stream picture-in-picture — .apanel shell */
   #streampanel { top: auto; bottom: 16px; right: 16px; z-index: 35; width: 480px; height: 302px;
@@ -1187,20 +1190,33 @@
     const G = (key, mk) => { let g = groups.get(key); if (!g) { g = mk(); groups.set(key, g); } return g; };
     for (const ev of evs) {
       const b = Math.floor((ev.atMs || 0) / 1000);
+      // absorbed/mitigated portion of a hit (armor, shields, damage-reduction buffs)
+      const mit = (ev) => Math.max(0, (ev.unmitigatedDamage || 0) - (ev.damage || 0));
       if (ev.kind === 'attack' && ev.attacker === myId) {
         if (ev.evaded) G('e' + ev.target + b, () => ({ at: ev.atMs, kind: 'myevaded', tgt: names[ev.target], n: 0 })).n++;
-        else { const g = G('a' + ev.target + b, () => ({ at: ev.atMs, kind: 'hit', tgt: names[ev.target], n: 0, dmg: 0, crits: 0 })); g.n++; g.dmg += ev.damage || 0; if (ev.isCrit) g.crits++; }
+        else { const g = G('a' + ev.target + b, () => ({ at: ev.atMs, kind: 'hit', tgt: names[ev.target], n: 0, dmg: 0, crits: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); if (ev.isCrit) g.crits++; }
       } else if (ev.kind === 'attack' && ev.target === myId) {
         if (ev.evaded) G('g' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'dodged', src: names[ev.attacker], n: 0 })).n++;
-        else { const g = G('t' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'taken', src: names[ev.attacker], n: 0, dmg: 0 })); g.n++; g.dmg += ev.damage || 0; }
+        else { const g = G('t' + ev.attacker + b, () => ({ at: ev.atMs, kind: 'taken', src: names[ev.attacker], n: 0, dmg: 0, mit: 0 })); g.n++; g.dmg += ev.damage || 0; g.mit += mit(ev); }
       } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.target === myId && ev.healer !== myId) {
-        G('h' + ev.healer + b, () => ({ at: ev.atMs, kind: 'healed', src: names[ev.healer], amt: 0 })).amt += ev.amount || 0;
+        // shields get their own line kind — a shield isn't a heal
+        const sh = ev.kind === 'shield';
+        G((sh ? 's' : 'h') + ev.healer + b, () => ({ at: ev.atMs, kind: sh ? 'shielded' : 'healed', src: names[ev.healer], amt: 0 })).amt += ev.amount || 0;
       } else if ((ev.kind === 'heal' || ev.kind === 'shield') && ev.healer === myId && ev.target !== myId) {
-        G('o' + ev.target + b, () => ({ at: ev.atMs, kind: 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
+        const sh = ev.kind === 'shield';
+        G((sh ? 'so' : 'o') + ev.target + b, () => ({ at: ev.atMs, kind: sh ? 'shieldout' : 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
       } else if (ev.kind === 'defeat' && ev.unit === myId) {
         groups.set('d' + b, { at: ev.atMs, kind: 'death' });
       } else if (ev.kind === 'buffSnapshot' && ev.unit === myId) {
-        mySnaps.push({ at: ev.atMs || 0, buffs: ev.buffs || [] }); // for the Buffs panel
+        // Buffs panel data + gained/lost feed lines (diff vs the previous snapshot)
+        const prev = mySnaps.length ? mySnaps[mySnaps.length - 1].buffs : null;
+        mySnaps.push({ at: ev.atMs || 0, buffs: ev.buffs || [] });
+        if (prev) {
+          const was = new Set(prev.map(([k]) => k)), now = new Set((ev.buffs || []).map(([k]) => k));
+          const gained = [...now].filter(k => !was.has(k)), lost = [...was].filter(k => !now.has(k));
+          if (gained.length) groups.set('bg' + b + gained[0], { at: ev.atMs, kind: 'buffgain', names: gained });
+          if (lost.length) groups.set('bl' + b + lost[0], { at: ev.atMs, kind: 'bufflost', names: lost });
+        }
       }
     }
     const dur = d.displayDurationMs || maxAt;
@@ -1213,13 +1229,21 @@
     renderFight();
     if (fight && Date.now() - fight.t0 < fight.dur) fightTimer = setInterval(renderFight, 900);
   }
+  // mitigation suffix: only shown when meaningful (>2% of the hit) — armor,
+  // shields, and damage-reduction buffs all land in unmitigated-vs-actual
+  const mitTxt = (g, who) => g.mit > (g.dmg + g.mit) * 0.02 ? ` <span class="mit">(${fmtN(g.mit)} absorbed by ${who})</span>` : '';
+  const buffNames = (g) => g.names.map(k => esc(prettyBuff(k))).join(', ');
   const FLINE = {
-    hit: (g) => `⚔️ You → ${esc(g.tgt)}: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits${g.crits ? `, ${g.crits} crit` : ''})` : g.crits ? ' (crit)' : ''}`,
+    hit: (g) => `⚔️ You → ${esc(g.tgt)}: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits${g.crits ? `, ${g.crits} crit` : ''})` : g.crits ? ' (crit)' : ''}${mitTxt(g, 'their defenses')}`,
     myevaded: (g) => `🌫️ ${esc(g.tgt)} evaded you${g.n > 1 ? ` ×${g.n}` : ''}`,
     dodged: (g) => `🌀 You evaded ${esc(g.src)}${g.n > 1 ? ` ×${g.n}` : ''}`,
-    taken: (g) => `🩸 ${esc(g.src)} → you: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits)` : ''}`,
+    taken: (g) => `🩸 ${esc(g.src)} → you: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits)` : ''}${mitTxt(g, 'your defenses')}`,
     healed: (g) => `💚 ${esc(g.src)} healed you <b>${fmtN(g.amt)}</b>`,
     healout: (g) => `💚 You healed ${esc(g.tgt)} <b>${fmtN(g.amt)}</b>`,
+    shielded: (g) => `🛡️ ${esc(g.src)} shielded you <b>${fmtN(g.amt)}</b>`,
+    shieldout: (g) => `🛡️ You shielded ${esc(g.tgt)} <b>${fmtN(g.amt)}</b>`,
+    buffgain: (g) => `✨ Gained: <b>${buffNames(g)}</b>`,
+    bufflost: (g) => `🕯️ Faded: ${buffNames(g)}`,
     death: () => `💀 You were defeated`,
   };
   function renderFight() {
