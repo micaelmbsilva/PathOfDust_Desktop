@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 84;
+const BRIDGE_REV = 85;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -114,7 +114,27 @@ async function me() {
   const bt = (text.match(/<table class="buff-activity-table"[\s\S]*?<\/table>/) || [])[0] || '';
   const buffTable = [...bt.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
     .map(m => [...m[1].matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/g)].map(c => strip(c[1])));
-  return { name, nav, stats, autoRepair, autoRepairTip, repairAll, reforge, xp, wings, countdowns, archetype, buffTable };
+  // Character Model picker: a radio per sprite, plus a Custom Sprites section
+  // that only exists when someone has dropped PNGs in for this login. `free`
+  // covers both the global free-for-all flag and banked free changes — the site
+  // has already resolved that into the button's own label.
+  const mForm = (text.split('action="/change-model"')[1] || '').split('</form>')[0];
+  const mBtn = mForm.match(/<button([^>]*)>([^<]*)</) || [];
+  const model = mForm ? {
+    current: strip((text.split('<h2>Character Model</h2>')[1] || '').match(/Current model:\s*([^<]+)/)?.[1] || ''),
+    label: strip(mBtn[2] || 'Change'),
+    disabled: /\bdisabled\b/.test(mBtn[1] || ''),
+    options: [...mForm.matchAll(/<input type="radio" name="model" value="([^"]+)"([^>]*)>[\s\S]*?<img src="([^"]+)"[^>]*alt="([^"]*)"/g)]
+      .map(m => ({ value: m[1], selected: /\bchecked\b/.test(m[2]), img: SITE + m[3], label: strip(m[4]) })),
+  } : null;
+  // "Purchase (Nd)" — only rendered while the character does NOT own wings.
+  const pwForm = (text.split('action="/purchase-wings"')[1] || '').split('</form>')[0];
+  const pwBtn = pwForm.match(/<button([^>]*)>([^<]*)</) || [];
+  const buyWings = pwForm ? { label: strip(pwBtn[2] || 'Purchase'), disabled: /\bdisabled\b/.test(pwBtn[1] || '') } : null;
+  // Shown instead of the whole dashboard until the character exists.
+  const canJoin = /action="\/join"/.test(text);
+
+  return { name, nav, stats, autoRepair, autoRepairTip, repairAll, reforge, xp, wings, buyWings, model, canJoin, countdowns, archetype, buffTable };
 }
 const strip = (s) => s.replace(/<[^>]*>/g, '')
   .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
@@ -356,6 +376,9 @@ export async function inventory() { // exported for scrape smoke-tests
   const sand = (text.match(/data-sand="(\d+)"/) || [])[1]
     ?? (nav.match(/🪵\s*([\d.KM]+)/) || [])[1] ?? '?';
   const tokens = [...text.matchAll(/class="token-pill">([^<]*)</g)].map(m => strip(m[1]));
+  // Bag header prints "Bag (used/capacity)" — read the cap off the page rather
+  // than copying INVENTORY_CAPACITY into our source, where it would silently rot.
+  const bagCap = +(text.match(/<h2>Bag \((\d+)\/(\d+)\)<\/h2>/) || [])[2] || null;
 
   // Equipped: gear-slots inside the "Equipped Items" card (before bag-card).
   const equippedRegion = (text.split('Equipped Items')[1] || '').split('bag-card')[0];
@@ -424,7 +447,7 @@ export async function inventory() { // exported for scrape smoke-tests
   // keeps prompting, and submitting an EMPTY value is how you decline (it
   // records "asked and skipped" so it stops). Only one pending item is offered
   // at a time even if several are waiting.
-  return { dust, sand, tokens, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle }, veil, autoDisenchant, nameItem: nameItemOf(text) };
+  return { dust, sand, tokens, bagCap, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle }, veil, autoDisenchant, nameItem: nameItemOf(text) };
 }
 
 // One passive canvas out of a page fragment. The site renders the same
