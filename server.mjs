@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 86;
+const BRIDGE_REV = 87;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -409,13 +409,20 @@ export async function inventory() { // exported for scrape smoke-tests
   const selA = (craftForm.match(/<select name="item_a">([\s\S]*?)<\/select>/) || [])[1] || '';
   // Attribute-order independent (the site appends new data-* attrs, e.g.
   // data-polish-room in Aug '26). polishRoom: null = attr absent (old site).
-  const options = [...selA.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)</g)]
+  // The site groups these: an "Equipped" optgroup first, then one per slot, and
+  // the label already carries tier/mod-count/quality plus 🔒 and ✦ markers. Walk
+  // the markup in order so the grouping survives instead of being flattened.
+  let group = '';
+  const options = [...selA.matchAll(/<optgroup label="([^"]*)"|<option value="([^"]+)"([^>]*)>([^<]*)</g)]
     .map(m => {
-      const at = m[2], num = (n) => { const v = (at.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
-      return { id: m[1], affixes: num('data-affixes') ?? 0, tier: num('data-tier') ?? 0,
+      if (m[1] !== undefined) { group = strip(m[1]); return null; }
+      const at = m[3], num = (n) => { const v = (at.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
+      return { id: m[2], group, affixes: num('data-affixes') ?? 0, tier: num('data-tier') ?? 0,
         quality: num('data-quality') ?? 0, perfect: num('data-perfect') === 1,
-        polishRoom: num('data-polish-room'), label: strip(m[3]) };
-    });
+        polishRoom: num('data-polish-room'), label: strip(m[4]),
+        // The site preselects whatever you crafted last.
+        selected: /\bselected\b/.test(at) };
+    }).filter(Boolean);
   // Capture each button's cost data so the client can replicate the live
   // per-item cost calc (base + 3*tier, veil extras, reforge 30*tier, polish).
   const actions = [...craftForm.matchAll(/name="action" value="([^"]+)"([^>]*)>([^<]*)</g)]

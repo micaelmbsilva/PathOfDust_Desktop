@@ -70,6 +70,17 @@
   .craft { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 12px; }
   .craft select { width: 100%; margin: 4px 0 8px; padding: 6px; background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; }
   .craft label { font-size: 0.85rem; display: block; margin-bottom: 8px; }
+  /* drag-to-arrange craft sections */
+  .csec { border: 1px solid rgba(160,140,255,0.18); border-radius: 9px; padding: 6px 8px 8px; margin-top: 8px; }
+  .csec-h { display: flex; align-items: center; gap: 6px; }
+  .csec-name { flex: 1; background: none; border: 1px solid transparent; border-radius: 6px;
+    color: #b0a2d9; font: inherit; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 5px; }
+  .csec-name:hover, .csec-name:focus { border-color: rgba(160,140,255,0.3); background: #1c1830; color: #eae6f5; outline: none; }
+  .csec-del { background: none; border: 0; color: #8a7fb0; cursor: pointer; padding: 0 4px; font-size: 0.85rem; }
+  .csec-del:hover { color: #ff8080; background: none; }
+  .csec-body { min-height: 34px; border-radius: 7px; padding: 2px; }
+  .csec-body.over { background: rgba(120,90,255,0.14); outline: 1px dashed rgba(160,140,255,0.5); }
+  .csec-body [data-craft] { cursor: grab; }
   .muted { color: #8a7fb0; }
   #err { color: #ff8080; }
   #toasts { position: fixed; right: 14px; bottom: 14px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
@@ -341,26 +352,37 @@
     renderBag();
 
     // crafting form — keep the selection across reloads AND app restarts (localStorage fallback)
-    const prevA = $('itemA')?.value || localStorage.getItem('craftItemA');
+    // Your in-page choice wins over the stored one, and the site's own
+    // preselection (whatever you crafted last) is the final fallback — that's
+    // what the game does when it re-renders after a craft.
+    const siteSel = (inv.craft.options.find(o => o.selected) || {}).id;
+    const prevA = $('itemA')?.value || localStorage.getItem('craftItemA') || siteSel;
     const prevB = $('itemB')?.value || localStorage.getItem('craftItemB');
-    const opt = (o) => `<option value="${o.id}">${o.label}</option>`;
+    // Mirror the site's grouping: an "Equipped" group first, then one per slot.
+    const opts = (list, lead) => {
+      let out = lead || '', group = null;
+      for (const o of list) {
+        if (o.group !== group) { if (group !== null) out += '</optgroup>'; group = o.group; if (group) out += `<optgroup label="${esc(group)}">`; }
+        out += `<option value="${o.id}">${esc(o.label)}</option>`;
+      }
+      return out + (group ? '</optgroup>' : '');
+    };
     $('craft').innerHTML = `
-      <label>Item A <select id="itemA">${inv.craft.options.map(opt).join('')}</select></label>
-      <label>Item B (Recombine) <select id="itemB"><option value="">None</option>${inv.craft.options.map(opt).join('')}</select></label>
-      <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"> Veil This Craft (+500 dust; Recombine also +500 per combined modifier)</label>
-      ${inv.craft.hideoutKrangle ? `<label class="hint" title="Hideout Warrior only: leave checked to end on Krangle (permanently locks the item); uncheck to stop after Exalt"><input type="checkbox" id="hideoutK"${inv.craft.hideoutKrangle.checked ? ' checked' : ''}> Include Krangle (Hideout Warrior)</label>` : ''}
-      <div class="acts">${inv.craft.actions.filter(a => !a.polish && !a.reforge).map(a =>
-        `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}</div>
-      <div class="acts" style="align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid rgba(160,140,255,0.18)">
-        <span class="muted">Polish / Reforge:</span>
-        <label class="hint" title="Run Polishing/Reforge 5 times in one go"><input type="checkbox" class="batchx" value="5"> ×5</label>
-        <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"> ×10</label>
-        ${inv.craft.actions.filter(a => a.polish || a.reforge).map(a =>
-          `<button data-craft="${a.action}"${tip(a.tip)}>${a.label}</button>`).join('')}
-      </div>`;
+      <label>Item A <select id="itemA">${opts(inv.craft.options)}</select></label>
+      <label>Item B (Recombine) <select id="itemB">${opts(inv.craft.options, '<option value="">None</option>')}</select></label>
+      <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"${cbGet('veil') ? ' checked' : ''}> Veil This Craft (+500 dust; Recombine also +500 per combined modifier)</label>
+      ${inv.craft.hideoutKrangle ? `<label class="hint" title="Hideout Warrior only: leave checked to end on Krangle (permanently locks the item); uncheck to stop after Exalt"><input type="checkbox" id="hideoutK"${cbGet('hideoutK', inv.craft.hideoutKrangle.checked) ? ' checked' : ''}> Include Krangle (Hideout Warrior)</label>` : ''}
+      <div class="acts" style="align-items:center;margin:10px 0 4px">
+        <span class="muted">Polish / Reforge batch:</span>
+        <label class="hint" title="Run Polishing/Reforge 5 times in one go"><input type="checkbox" class="batchx" value="5"${cbGet('batch') === 5 ? ' checked' : ''}> ×5</label>
+        <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"${cbGet('batch') === 10 ? ' checked' : ''}> ×10</label>
+      </div>
+      <div id="craftSections"></div>`;
+    renderSections(inv.craft.actions);
     // x5/x10 are mutually exclusive, like the site's batch-check boxes
     document.querySelectorAll('.batchx').forEach(b => b.onchange = () => {
       if (b.checked) document.querySelectorAll('.batchx').forEach(o => { if (o !== b) o.checked = false; });
+      cbSet('batch', b.checked ? +b.value : 0);
       updateCosts();
     });
     const keep = (sel, v) => { if (v && [...sel.options].some(o => o.value === v)) sel.value = v; };
@@ -370,7 +392,9 @@
     updateCosts();
     $('itemA').onchange = () => { localStorage.setItem('craftItemA', $('itemA').value); updateCosts(); };
     $('itemB').onchange = () => { localStorage.setItem('craftItemB', $('itemB').value); updateCosts(); };
-    $('veil').onchange = updateCosts;
+    $('veil').onchange = () => { cbSet('veil', $('veil').checked); updateCosts(); };
+    const hk = $('hideoutK');
+    if (hk) hk.onchange = () => cbSet('hideoutK', hk.checked);
 
     // While a choice is pending the site rejects every craft — lock the form so
     // "nothing happened" clicks can't pile up, and point at the pending card.
@@ -379,6 +403,96 @@
       $('craft').insertAdjacentHTML('afterbegin',
         '<p class="muted">⏳ Crafting is locked until you finish the pending choice above.</p>');
     }
+  }
+
+  // ---- persisted checkbox state ----
+  // Veil, Include Krangle and the batch multiplier survive reloads. Veil costs
+  // extra, so it stays visibly checked rather than being silently remembered —
+  // the cost preview on every button reflects it.
+  const CB = 'craftFlags';
+  const cbAll = () => { try { return JSON.parse(localStorage.getItem(CB)) || {}; } catch { return {}; } };
+  const cbGet = (k, dflt) => { const v = cbAll()[k]; return v === undefined ? dflt : v; };
+  const cbSet = (k, v) => { const o = cbAll(); o[k] = v; localStorage.setItem(CB, JSON.stringify(o)); };
+
+  // ---- customizable craft sections ----
+  // Same idea as the main window's toolbar: a persisted layout the user drags
+  // into shape. Sections instead of dropdown groups — every button stays
+  // visible, which is what you want mid-craft.
+  const SEC = 'craftSections';
+  const DEFAULT_SECTIONS = [
+    { name: 'Modify', items: ['transmute', 'augment', 'regal', 'exalt'] },
+    { name: 'Risky', items: ['scour', 'annulment', 'krangle', 'chancing'] },
+    { name: 'Improve', items: ['polishing', 'reforge', 'recombine'] },
+  ];
+  const loadSections = () => { try { const s = JSON.parse(localStorage.getItem(SEC)); return Array.isArray(s) && s.length ? s : null; } catch { return null; } };
+  const saveSections = (s) => localStorage.setItem(SEC, JSON.stringify(s));
+  let sections = loadSections() || JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
+  let dragging = null;
+
+  function renderSections(actions) {
+    const byAction = Object.fromEntries(actions.map(a => [a.action, a]));
+    const placed = new Set();
+    // Drop anything the site no longer offers; keep unknown/new actions by
+    // appending them, the same way the toolbar absorbs newly added items.
+    sections = sections.map(s => ({ name: s.name, items: (s.items || []).filter(id => {
+      if (!byAction[id] || placed.has(id)) return false; placed.add(id); return true; }) }));
+    const extra = actions.filter(a => !placed.has(a.action)).map(a => a.action);
+    if (extra.length) {
+      const last = sections[sections.length - 1] || (sections[sections.length] = { name: 'More', items: [] });
+      last.items.push(...extra);
+    }
+    $('craftSections').innerHTML = sections.map((s, i) => `
+      <div class="csec" data-sec="${i}">
+        <div class="csec-h"><input class="csec-name" data-sec="${i}" value="${esc(s.name)}" maxlength="24"
+          title="Rename this section"><button class="csec-del" data-del="${i}" title="Remove section (its buttons move to the one before)">✕</button></div>
+        <div class="acts csec-body" data-sec="${i}">
+          ${s.items.map(id => { const a = byAction[id];
+            return `<button data-craft="${a.action}" draggable="true"${tip(a.tip)}>${a.label}</button>`; }).join('')
+          || '<span class="muted" style="font-size:0.78rem">Drag a craft here</span>'}
+        </div>
+      </div>`).join('') +
+      `<div class="acts" style="margin-top:6px"><button id="secAdd" class="chip" style="cursor:pointer">＋ Section</button>
+        <button id="secReset" class="chip" style="cursor:pointer" title="Back to the default grouping">↺ Reset</button></div>`;
+    wireSections(actions);
+  }
+
+  function wireSections(actions) {
+    const commit = () => { saveSections(sections); renderSections(actions); updateCosts(); };
+    $('craftSections').querySelectorAll('.csec-name').forEach(el => {
+      el.onchange = () => { sections[+el.dataset.sec].name = el.value.trim() || 'Section'; saveSections(sections); };
+      el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); };
+    });
+    $('craftSections').querySelectorAll('[data-del]').forEach(el => el.onclick = () => {
+      const i = +el.dataset.del;
+      if (sections.length < 2) return;                       // never leave zero sections
+      const into = sections[i - 1] || sections[i + 1];        // buttons are never lost
+      into.items.push(...sections[i].items);
+      sections.splice(i, 1);
+      commit();
+    });
+    $('secAdd').onclick = () => { sections.push({ name: 'Section', items: [] }); commit(); };
+    $('secReset').onclick = () => { sections = JSON.parse(JSON.stringify(DEFAULT_SECTIONS)); commit(); };
+
+    $('craftSections').querySelectorAll('[data-craft]').forEach(btn => {
+      btn.ondragstart = (e) => { dragging = btn.dataset.craft; btn.style.opacity = '0.4'; e.dataTransfer.effectAllowed = 'move'; };
+      btn.ondragend = () => { dragging = null; btn.style.opacity = ''; };
+    });
+    $('craftSections').querySelectorAll('.csec-body').forEach(body => {
+      body.ondragover = (e) => { e.preventDefault(); body.classList.add('over'); };
+      body.ondragleave = () => body.classList.remove('over');
+      body.ondrop = (e) => {
+        e.preventDefault(); body.classList.remove('over');
+        if (!dragging) return;
+        for (const s of sections) { const k = s.items.indexOf(dragging); if (k >= 0) s.items.splice(k, 1); }
+        const target = sections[+body.dataset.sec];
+        // Dropped onto a specific button: land before it, so order is editable
+        // without needing a separate handle.
+        const over = e.target.closest('[data-craft]');
+        const at = over ? target.items.indexOf(over.dataset.craft) : -1;
+        if (at >= 0) target.items.splice(at, 0, dragging); else target.items.push(dragging);
+        commit();
+      };
+    });
   }
 
   // Replicate the live site's per-item cost calc so button costs are correct
