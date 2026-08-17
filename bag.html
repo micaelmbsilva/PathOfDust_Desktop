@@ -436,21 +436,28 @@
   function renderSections(actions) {
     const byAction = Object.fromEntries(actions.map(a => [a.action, a]));
     const placed = new Set();
-    // Drop anything the site no longer offers; keep unknown/new actions by
-    // appending them, the same way the toolbar absorbs newly added items.
+    // The layout is PERSISTENT — an id stays in its section even when the game
+    // isn't currently offering that craft (which crafts are valid depends on the
+    // selected item, so this changes every craft). Dropping an unavailable id
+    // here used to forget it, then re-add it as "new" into the last section on
+    // its return, funnelling every button into one section over time. So only
+    // dedupe within the layout; never remove an id for being unavailable.
     sections = sections.map(s => ({ name: s.name, items: (s.items || []).filter(id => {
-      if (!byAction[id] || placed.has(id)) return false; placed.add(id); return true; }) }));
+      if (placed.has(id)) return false; placed.add(id); return true; }) }));
+    // Genuinely new craft types — never seen in any section — join the last one.
     const extra = actions.filter(a => !placed.has(a.action)).map(a => a.action);
     if (extra.length) {
       const last = sections[sections.length - 1] || (sections[sections.length] = { name: 'More', items: [] });
       last.items.push(...extra);
     }
+    // Render only the buttons currently offered; the rest keep their slot in the
+    // saved layout for when the item makes them valid again.
     $('craftSections').innerHTML = sections.map((s, i) => `
       <div class="csec" data-sec="${i}">
         <div class="csec-h"><input class="csec-name" data-sec="${i}" value="${esc(s.name)}" maxlength="24"
           title="Rename this section"><button class="csec-del" data-del="${i}" title="Remove section (its buttons move to the one before)">✕</button></div>
         <div class="acts csec-body" data-sec="${i}">
-          ${s.items.map(id => { const a = byAction[id];
+          ${s.items.filter(id => byAction[id]).map(id => { const a = byAction[id];
             return `<button data-craft="${esc(a.action)}" draggable="true"${tip(a.tip)}>${esc(a.label)}</button>`; }).join('')
           || '<span class="muted" style="font-size:0.78rem">Drag a craft here</span>'}
         </div>
