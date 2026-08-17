@@ -430,6 +430,11 @@
     }
     const save = () => {
       if (!el.offsetWidth) return; // hidden (e.g. chat closed) — don't store zeros
+      // A panel opening during restore fires the ResizeObserver, which would
+      // write back whatever position it happens to have mid-startup — including
+      // one the clamp below just nudged. That overwrote the real saved geometry
+      // and compounded on every launch, walking panels across the screen.
+      if (restoringPanels) return;
       const r = el.getBoundingClientRect(), prev = LS.get(key, {}), collapsed = el.classList.contains('collapsed');
       LS.set(key, {
         left: Math.round(r.left), top: Math.round(r.top), width: Math.round(el.offsetWidth),
@@ -768,6 +773,10 @@
   // Panels open at close reopen next launch (positions already persist via lay.*)
   const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
   let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
+  // True until the saved layout has been reapplied and the window has settled.
+  // Guards both geometry writes and the viewport clamp, so restoring a layout
+  // can never rewrite the layout it is restoring.
+  let restoringPanels = true;
   const persistPanels = () => LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
     document.getElementById(w + 'panel')?.classList.contains('open')));
   function toggleModal(which, show) {
@@ -781,12 +790,17 @@
     if (open) {
       ({ party: renderParty, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox,
          characters: framePanel('characters', '/character.html'), fights: framePanel('fights', '/fights.html') })[which]();
-      // clamp into the viewport — a position saved on a big window must still
-      // be reachable on a small (mobile-ish) one
+      // Clamp into the viewport — a position saved on a big window must still be
+      // reachable on a small one. During restore only rescue panels that are
+      // ENTIRELY off-screen: the window is still settling then, so nudging
+      // anything that merely overhangs moved panels that were perfectly fine.
       const r = p.getBoundingClientRect();
+      const lost = r.left > innerWidth - 40 || r.top > innerHeight - 40 || r.right < 40 || r.bottom < 40;
+      if (restoringPanels && !lost) return;
       if (r.right > innerWidth) { p.style.left = Math.max(4, innerWidth - r.width - 8) + 'px'; p.style.right = 'auto'; }
       if (r.bottom > innerHeight) p.style.top = Math.max(48, innerHeight - r.height - 8) + 'px';
       if (r.left < 0) p.style.left = '4px';
+      if (r.top < 44) p.style.top = '48px';
     }
   }
   // drag + collapse + geometry persistence — same behavior as the chat/stream panels
@@ -1255,7 +1269,7 @@
       `<div class="fhead" style="margin-top:10px">⚡ Performance</div>` +
       row('Refresh Mode', sel('refresh', [['resp', 'Responsive'], ['bal', 'Balanced'], ['low', 'Low Data']]), 'How often stats and bag re-poll. Responsive: 3s (30s while live events flow). Balanced: half that. Low Data: quarter.') +
       row('Unload Chat When Hidden', chk('chatUnload'), 'Frees CPU/RAM while chat is closed; reopening reloads it.') +
-      row('Save Fight Logs to Disk', chk('logToDisk'), 'One JSON file per fight in the app\'s fight-logs folder (newest 100 kept). Independent of the history above — clearing history keeps the files.') +
+      row('Save Fight Logs to Disk', chk('logToDisk'), 'One JSON file per fight in the app\'s fight-logs folder (newest 100 kept). This is the only place your personal combat log is kept — Fight History shows the game\'s exact totals, which carry no per-player events.') +
       `<div class="fhead" style="margin-top:10px">📊 Diagnostics</div>
        <div id="diagBody"><p class="muted" style="font-size:0.78rem">Measuring…</p></div>
        <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
@@ -1740,19 +1754,33 @@
   // from lay.*). Only acts once a saved list exists, and also closes panels the
   // user had closed, so markup defaults don't resurrect them. The operator-only
   // inbox is skipped here — it restores once /api/me confirms the name.
-  (function restorePanels() {
+  // Deferred to `load`: the panels' saved geometry is only meaningful against a
+  // settled window, and reopening them before layout finishes made the clamp
+  // fire against an innerWidth that wasn't final yet.
+  function restorePanels() {
     const saved = LS.get('openPanels', null);
-    if (!Array.isArray(saved)) return;
-    inboxWasOpen = saved.includes('inbox'); // captured BEFORE persistPanels overwrites the list
-    for (const w of RESTORABLE_PANELS) {
-      if (w === 'inbox') continue;
-      const want = saved.includes(w);
-      if (want === !!document.getElementById(w + 'panel')?.classList.contains('open')) continue;
-      if (w === 'chat') toggleChat(want);
-      else if (w === 'stream') toggleStream(want);
-      else toggleModal(w, want);
+    try {
+      if (!Array.isArray(saved)) return;
+      inboxWasOpen = saved.includes('inbox'); // captured BEFORE persistPanels overwrites the list
+      for (const w of RESTORABLE_PANELS) {
+        if (w === 'inbox') continue;
+        const want = saved.includes(w);
+        if (want === !!document.getElementById(w + 'panel')?.classList.contains('open')) continue;
+        // One panel failing to restore must not strand the rest.
+        try {
+          if (w === 'chat') toggleChat(want);
+          else if (w === 'stream') toggleStream(want);
+          else toggleModal(w, want);
+        } catch (e) { console.error('restore', w, e); }
+      }
+    } finally {
+      // Two frames after layout: geometry is final, so saves resume and the
+      // clamp goes back to its normal job.
+      requestAnimationFrame(() => requestAnimationFrame(() => { restoringPanels = false; }));
     }
-  })();
+  }
+  if (document.readyState === 'complete') restorePanels();
+  else addEventListener('load', restorePanels, { once: true });
 
   // Full-width system banner across the top; one per id. Used for restart
   // notices, the legacy-shell warning, and operator broadcasts.
