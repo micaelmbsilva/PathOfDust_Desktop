@@ -135,6 +135,12 @@
   button { font: inherit; color: var(--ink); background: var(--surface); cursor: pointer;
            border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; }
   button:disabled { color: var(--muted); cursor: default; }
+  /* Admin panel: tab bar above every keyed page, and the overview's stat tiles. */
+  .adminnav { margin: 0 0 20px; padding-bottom: 12px; border-bottom: 1px solid var(--grid); }
+  .lvrow input.wide { width: auto; flex: 1 1 220px; } /* .lvrow input is 70px — a name needs room */
+  .tile { display: block; text-decoration: none; }
+  .tile .big { color: var(--ink); font-size: 26px; font-weight: 600; margin-top: 4px; }
+  a.tile:hover { border-color: var(--accent); }
   .lvrow input { width: 70px; background: var(--surface); color: var(--ink); border: 1px solid var(--border);
                  border-radius: 6px; padding: 4px 8px; font: inherit; }
   .steps { list-style: none; margin: 8px 0 0; padding: 0; }
@@ -168,7 +174,14 @@ function el(tag, attrs, ...kids) {
     n.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
   return n;
 }
-const view = (...kids) => app.replaceChildren(el('div', null, kids));
+// Keyed pages are tabs of the admin panel, so the nav belongs to view() itself —
+// a page that re-renders in place (the advisor's role chips) would otherwise
+// drop it. adminNav is defined further down; view only calls it at render time.
+const KEYED_ROUTE = /^#\/(admin|feedback|watchlist|intel|advisor\/)/;
+const view = (...kids) => {
+  app.replaceChildren(el('div', null, kids));
+  if (KEYED_ROUTE.test(location.hash)) app.prepend(adminNav());
+};
 const arr = (x) => Array.isArray(x) ? x : [];
 const str = (x) => (typeof x === 'string' || typeof x === 'number') ? String(x) : '';
 
@@ -319,6 +332,9 @@ function agoText(iso) {
   const rel = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 2880 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`;
   return `${d.toLocaleString()} (${rel})`;
 }
+// Just the relative half — what a stat tile has room for.
+const agoShort = (iso) => agoText(iso).replace(/^.*\((.*)\)$/, '$1');
+const plural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 // Watermark footer on every page: deploy rev, app interface rev, and data freshness.
 let META = null;
@@ -357,6 +373,15 @@ async function ladder() {
 const siteKey = () => localStorage.getItem('pod.key') || '';
 const keyDenied = () => view(el('p', { class: 'status' }, 'This page needs a key — open it once with ?key=… appended.'));
 
+// The keyed pages are one admin panel: route() prepends this bar to each of
+// them, so they read as tabs rather than as unrelated hidden URLs.
+const ADMIN_TABS = [['#/admin', 'Overview'], ['#/feedback', 'Feedback'],
+  ['#/watchlist', 'Watchlist'], ['#/intel', 'Investigation']];
+const adminNav = () => el('div', { class: 'chips adminnav' },
+  ADMIN_TABS.map(([href, label]) => el('a',
+    { class: 'chip' + (location.hash === href ? ' on' : ''), href }, label)),
+  el('a', { class: 'chip', href: '#/' }, '← Ladder'));
+
 // Hidden route: #/watchlist — the OP interactions list, no nav links to it.
 // Filterable by entry type and by class.
 async function watchlist() {
@@ -389,7 +414,7 @@ async function watchlist() {
         : el('p', { class: 'status' }, 'Nothing matches this filter.'));
   }
   render();
-  view(el('p', null, el('a', { href: '#/' }, '← Ladder')), el('h1', null, 'OP interactions watchlist'), wrap);
+  view(el('h1', null, 'OP interactions watchlist'), wrap); // back link lives in the admin nav
 }
 
 // Hidden route: #/feedback — operator inbox for in-app feedback plus recent app
@@ -420,9 +445,8 @@ async function feedbackView() {
   if (fb.length) localStorage.setItem('pod.fbseen', String(fb[0].id)); // visiting marks read
   badge(0);
   view(
-    el('p', null, el('a', { href: '#/' }, '← Ladder')),
     el('h1', null, 'Feedback inbox'),
-    el('p', { class: 'sub' }, `${fb.length} messages · ${errs.length} recent errors`),
+    el('p', { class: 'sub' }, `${plural(fb.length, 'message')} · ${plural(errs.length, 'recent error')}`),
     fb.length ? el('div', { class: 'stack' }, fb.map(x => feedbackCard(x)))
       : el('p', { class: 'status' }, 'No feedback yet.'),
     errs.length ? [el('h2', null, 'Recent app errors'),
@@ -529,7 +553,71 @@ async function intel() {
   }
   paint(d);
   if (d.scraping) setTimeout(poll, 10000);
-  view(el('p', null, el('a', { href: '#/' }, '← Ladder')), el('h1', null, 'Investigation'), wrap);
+  view(el('h1', null, 'Investigation'), wrap);
+}
+
+// Hidden route: #/admin — the panel's front page. Every number here is a link
+// to the tab that acts on it; nothing is edited from this view.
+async function admin() {
+  const key = encodeURIComponent(siteKey());
+  const seen = +localStorage.getItem('pod.fbseen') || 0;
+  const [allR, unreadR, intelR, watchR] = await Promise.all([
+    fetch('api/feedback?key=' + key + '&since=0'),
+    fetch('api/feedback?key=' + key + '&since=' + seen),
+    fetch('api/intel?key=' + key),
+    fetch('api/watchlist?key=' + key)]);
+  if (allR.status === 403) return keyDenied();
+  // null means the endpoint failed — say so rather than showing a confident zero.
+  const body = async (r) => r.ok ? r.json().catch(() => null) : null;
+  const [all, unreadJ, intel, watch] = await Promise.all([allR, unreadR, intelR, watchR].map(body));
+  const total = all && +all.unread || (all ? 0 : null);
+  const unread = unreadJ && +unreadJ.unread || (unreadJ ? 0 : null);
+  const items = watch ? arr(watch.interactions) : null;
+  const latest = intel && intel.latest;
+  const byImpact = ['high', 'medium', 'low']
+    .map(k => [k, arr(items).filter(i => str(i.impact) === k).length]).filter(([, n]) => n);
+
+  // Jump straight to a player's advisor page — the one keyed view that needs an
+  // argument, so it can't be a plain tab.
+  const who = el('input', { type: 'text', placeholder: 'player name', class: 'wide' });
+  const go = el('button', null, 'Open advisor');
+  const open = () => { if (who.value.trim()) location.hash = '#/advisor/' + encodeURIComponent(who.value.trim()); };
+  go.onclick = open;
+  who.onkeydown = (e) => { if (e.key === 'Enter') open(); };
+
+  const tile = (href, label, big, sub) => el('a', { class: 'card tile', href },
+    el('div', { class: 'sub', style: 'margin:0' }, label),
+    el('div', { class: 'big' }, big),
+    el('div', { class: 'sub', style: 'margin:6px 0 0' }, sub));
+
+  view(
+    el('h1', null, 'Admin'),
+    el('p', { class: 'sub' }, 'Everything behind the site key, in one place.'),
+    el('div', { class: 'grid2' },
+      tile('#/feedback', 'Feedback',
+        total == null ? '—' : unread ? `${unread} new` : String(total),
+        total == null ? 'unavailable' : unread ? `${total} total` : total ? 'all read' : 'nothing yet'),
+      tile('#/watchlist', 'Watchlist', items ? String(items.length) : '—',
+        !items ? 'unavailable'
+          : byImpact.length ? byImpact.map(([k, n]) => `${n} ${k}`).join(' · ') : 'hand-curated file'),
+      tile('#/intel', 'Investigation', latest ? agoShort(latest.ts) : '—',
+        !intel ? 'unavailable'
+          : latest ? `${plural(arr(latest.interactions).length, 'interaction')} · ${plural(arr(latest.patterns).length, 'pattern')}`
+          : 'no investigation run yet'),
+      tile('#/intel', 'Game data',
+        !intel ? '—' : intel.scraping ? 'pulling…' : intel.lastScrape ? agoShort(intel.lastScrape) : '—',
+        !intel ? 'unavailable'
+          : !intel.sources ? 'source status unknown'
+          : (!intel.sources.wikiLoaded || !intel.sources.patchNoteDates) ? '⚠ wiki or patch notes missing'
+          : `wiki loaded · ${plural(intel.sources.patchNoteDates, 'patch-note date')}`)),
+    el('h2', null, 'Advisor'),
+    el('div', { class: 'card' },
+      el('div', { class: 'lvrow' }, who, go),
+      el('p', { class: 'sub', style: 'margin:0' },
+        'Scores every class against that player\'s actual gear, including the watchlist findings that name it.')),
+    latest && str(latest.summary) ? [el('h2', null, 'Latest investigation'),
+      el('div', { class: 'card' }, el('p', { style: 'margin:0' }, str(latest.summary)),
+        el('p', { class: 'sub', style: 'margin:8px 0 0' }, `${agoText(latest.ts)} · ${str(latest.model)}`))] : null);
 }
 
 function itemCard(it) {
@@ -736,7 +824,6 @@ async function advisor(name) {
       return e;
     };
     view(
-      el('p', null, el('a', { href: '#/' }, '← Ladder')),
       el('h1', null, 'Advisor'),
       el('p', { class: 'sub' }, `${str(b.name)} · ${str(b.archetype)} Lv ${str(b.level)} — full-loadout suggestions from live data.`),
       el('div', { class: 'chips', style: 'margin:0 0 14px' },
@@ -902,8 +989,15 @@ async function route() {
   // Capture ?key=… from the hash once, remember it, strip it from the URL.
   const km = location.hash.match(/^(.*?)\?key=([^&]+)$/);
   if (km) { localStorage.setItem('pod.key', decodeURIComponent(km[2])); location.replace(location.pathname + km[1]); return; }
-  const solo = { '#/watchlist': watchlist, '#/feedback': feedbackView, '#/intel': intel }[location.hash];
-  if (solo) { try { await solo(); } catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); } window.scrollTo(0, 0); renderFoot(); checkFeedback(); return; }
+  const solo = { '#/admin': admin, '#/watchlist': watchlist, '#/feedback': feedbackView, '#/intel': intel }[location.hash];
+  if (solo) {
+    // view() adds the nav; a thrown page never called it, so add it here too.
+    try { await solo(); } catch (e) {
+      app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.'));
+      app.prepend(adminNav());
+    }
+    window.scrollTo(0, 0); renderFoot(); checkFeedback(); return;
+  }
   const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
   try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
   catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); }
