@@ -161,8 +161,10 @@ app.get('/feedback-recent', h(async (req, res) => {
 // Dashboard JSON — guarded by ?token=STATS_TOKEN
 app.get('/stats', h(async (req, res) => {
   // Fail closed: without STATS_TOKEN configured this dump (install ids + full
-  // JSONB incl. bags/currency) must not be public.
-  if (!process.env.STATS_TOKEN || req.query.token !== process.env.STATS_TOKEN) return res.sendStatus(403);
+  // JSONB incl. bags/currency) must not be public. The operator key (x-pod-owner)
+  // is equivalent authority and saves the operator juggling a second secret.
+  const tokenOk = process.env.STATS_TOKEN && req.query.token === process.env.STATS_TOKEN;
+  if (!tokenOk && !ownerOk(req)) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
   const one = async (q) => (await pool.query(q)).rows;
   const num = async (q) => +(await one(q))[0].count;
@@ -189,7 +191,17 @@ const PUB = `FROM installs WHERE name IS NOT NULL AND data ? 'equipped'`;
 app.get('/api/ladder', h(async (_req, res) => {
   if (!pool) return res.sendStatus(503);
   const [players, byClass, levels, total] = await Promise.all([
-    pool.query(`SELECT name, archetype, level, date_trunc('day', last_seen) AS last_seen, data->'stats' AS stats ${PUB}
+    // Rare-gear counts ride along with the ladder rows (the board is the same
+    // players, different columns). Equipped only — the bag stays private.
+    // Compared as jsonb rather than cast to bool: client-supplied values that
+    // aren't booleans would error the whole query on a cast.
+    pool.query(`SELECT name, archetype, level, date_trunc('day', last_seen) AS last_seen, data->'stats' AS stats,
+                  (SELECT count(*) FROM jsonb_array_elements(data->'equipped') it WHERE it->'sacred' = 'true'::jsonb)::int AS sacred,
+                  (SELECT count(*) FROM jsonb_array_elements(data->'equipped') it WHERE it->'unique' = 'true'::jsonb)::int AS "unique",
+                  (SELECT count(*) FROM jsonb_array_elements(data->'equipped') it WHERE it->'krangled' = 'true'::jsonb)::int AS krangled,
+                  (SELECT max((substring(it->>'tier' from '\\d+'))::int) FROM jsonb_array_elements(data->'equipped') it
+                    WHERE it->>'tier' ~ '\\d') AS top_tier
+                ${PUB}
                 ORDER BY level DESC NULLS LAST, last_seen DESC LIMIT 200`),
     pool.query(`SELECT archetype, count(*)::int ${PUB} GROUP BY archetype ORDER BY 2 DESC`),
     pool.query(`SELECT (level/10)*10 AS bucket, count(*)::int ${PUB} AND level IS NOT NULL GROUP BY 1 ORDER BY 1`),

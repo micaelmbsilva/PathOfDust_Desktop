@@ -284,44 +284,74 @@ function advStats(players, passives) {
     el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:14px 16px' }, cards));
 }
 
-function playersTable(players, passives) {
-  const rows = players.map((p, i) => ({ p, rank: i + 1, pw: power(p, passives) }));
+// Rare gear a player has equipped. Sacred/unique/krangled counts come from
+// /api/ladder; total is what the rare-gear board ranks on.
+const rareOf = (p) => {
+  const n = (k) => Math.max(0, +(p && p[k]) || 0);
+  return { sacred: n('sacred'), unique: n('unique'), krangled: n('krangled'),
+    tier: n('top_tier'), total: n('sacred') + n('unique') + n('krangled') };
+};
+const RARITIES = [['sacred', '✦ Sacred'], ['unique', 'Unique'], ['krangled', 'Krangled']];
+
+// Column set shared by both player tables — the rare-gear board is the same
+// rows with different columns, so it reuses the sorting/filtering below.
+const COLS = {
+  name: { label: 'Name', get: r => str(r.p.name).toLowerCase(),
+    cell: r => el('td', null, el('a', { href: '#/build/' + encodeURIComponent(str(r.p.name)) }, str(r.p.name))) },
+  class: { label: 'Class', get: r => str(r.p.archetype),
+    cell: r => el('td', null, r.p.archetype ? classLink(r.p.archetype) : '—') },
+  level: { label: 'Level', right: true, get: r => +r.p.level || 0,
+    cell: r => el('td', { class: 'r' }, str(r.p.level) || '—') },
+  power: { label: 'Power', right: true, get: r => r.pw.val,
+    cell: r => el('td', { class: 'r', title: r.pw.why }, r.pw.val ? fmt(r.pw.val) + ' ' + r.pw.unit : '—') },
+  seen: { label: 'Last seen', get: r => str(r.p.last_seen), cell: r => el('td', null, seenDay(r.p.last_seen)) },
+  rare: { label: 'Rare items', right: true, get: r => r.rare.total,
+    cell: r => el('td', { class: 'r' }, r.rare.total || '—') },
+  sacred: { label: 'Sacred', right: true, get: r => r.rare.sacred,
+    cell: r => el('td', { class: 'r' }, r.rare.sacred ? el('span', { class: 'badge sacred' }, r.rare.sacred) : '—') },
+  unique: { label: 'Unique', right: true, get: r => r.rare.unique,
+    cell: r => el('td', { class: 'r' }, r.rare.unique ? el('span', { class: 'badge unique' }, r.rare.unique) : '—') },
+  krangled: { label: 'Krangled', right: true, get: r => r.rare.krangled,
+    cell: r => el('td', { class: 'r' }, r.rare.krangled ? el('span', { class: 'badge krangled' }, r.rare.krangled) : '—') },
+  tier: { label: 'Top tier', right: true, get: r => r.rare.tier,
+    cell: r => el('td', { class: 'r' }, r.rare.tier ? 'T' + r.rare.tier : '—') },
+};
+
+// opts: cols (COLS keys), sort (default sort key), rarity (adds the rarity chips).
+function playersTable(players, passives, opts) {
+  const o = opts || {};
+  const cols = o.cols || ['name', 'class', 'level', 'power', 'seen'];
+  const rows = players.map((p, i) => ({ p, rank: i + 1, pw: power(p, passives), rare: rareOf(p) }));
   const classes = [...new Set(rows.map(r => str(r.p.archetype)).filter(Boolean))];
   const wrap = el('div', null);
-  let sortKey = 'level', dir = -1, cls = null, roleF = null;
+  let sortKey = o.sort || 'level', dir = -1, cls = null, roleF = null, rareF = null;
   const ROLES = [['dps', '🗡️ DPS'], ['tank', '🛡️ Tanks'], ['healer', '🩹 Healers']];
-  const get = (r, k) => k === 'name' ? str(r.p.name).toLowerCase() : k === 'class' ? str(r.p.archetype)
-    : k === 'power' ? r.pw.val : k === 'seen' ? str(r.p.last_seen) : (+r.p.level || 0);
+  const get = (r, k) => COLS[k].get(r);
   function render() {
     const shown = rows.filter(r => (!cls || str(r.p.archetype) === cls)
-        && (!roleF || rolesOf(r.p.archetype, passives).includes(roleF)))
+        && (!roleF || rolesOf(r.p.archetype, passives).includes(roleF))
+        && (!rareF || r.rare[rareF] > 0))
       .sort((a, b) => (get(a, sortKey) > get(b, sortKey) ? 1 : get(a, sortKey) < get(b, sortKey) ? -1 : 0) * dir);
-    const th = (label, key, right) => {
-      const e = el('th', { class: (right ? 'r ' : '') + 'sortable' }, label, sortKey === key ? (dir < 0 ? ' ▾' : ' ▴') : '');
+    const chip = (label, on, click) => { const e = el('span', { class: 'chip' + (on ? ' on' : '') }, label); e.onclick = click; return e; };
+    const th = (key) => {
+      const c = COLS[key];
+      const e = el('th', { class: (c.right ? 'r ' : '') + 'sortable' }, c.label, sortKey === key ? (dir < 0 ? ' ▾' : ' ▴') : '');
       e.onclick = () => { dir = sortKey === key ? -dir : -1; sortKey = key; render(); };
       return e;
     };
-    wrap.replaceChildren(
+    // replaceChildren stringifies null (el() filters it) — build then drop the gaps.
+    wrap.replaceChildren(...[
       el('div', { class: 'chips', style: 'margin:0 0 10px' }, [
-        ...[[null, 'All'], ...ROLES].map(([r, label]) => {
-          const e = el('span', { class: 'chip' + (r === roleF && (r || !cls) ? ' on' : '') }, label);
-          e.onclick = () => { roleF = r; if (!r) cls = null; render(); };
-          return e;
-        }),
-        ...classes.map(c => {
-          const e = el('span', { class: 'chip' + (c === cls ? ' on' : '') }, c);
-          e.onclick = () => { cls = c === cls ? null : c; render(); };
-          return e;
-        })]),
+        ...[[null, 'All'], ...ROLES].map(([r, label]) =>
+          chip(label, r === roleF && (r || !cls), () => { roleF = r; if (!r) cls = null; render(); })),
+        ...classes.map(c => chip(c, c === cls, () => { cls = c === cls ? null : c; render(); }))]),
+      o.rarity ? el('div', { class: 'chips', style: 'margin:0 0 10px' },
+        RARITIES.map(([k, label]) => chip(label, k === rareF, () => { rareF = k === rareF ? null : k; render(); }))) : null,
       el('table', null,
-        el('thead', null, el('tr', null, th('Name', 'name'),
-          th('Class', 'class'), th('Level', 'level', true), th('Power', 'power', true), th('Last seen', 'seen'))),
-        el('tbody', null, shown.map(r => el('tr', null,
-          el('td', null, el('a', { href: '#/build/' + encodeURIComponent(str(r.p.name)) }, str(r.p.name))),
-          el('td', null, r.p.archetype ? classLink(r.p.archetype) : '—'),
-          el('td', { class: 'r' }, str(r.p.level) || '—'),
-          el('td', { class: 'r', title: r.pw.why }, r.pw.val ? fmt(r.pw.val) + ' ' + r.pw.unit : '—'),
-          el('td', null, seenDay(r.p.last_seen)))))));
+        el('thead', null, el('tr', null, cols.map(th))),
+        el('tbody', null, shown.map(r => el('tr', null, cols.map(k => COLS[k].cell(r)))))),
+      shown.length ? null : el('p', { class: 'sub' }, 'No players match those filters.'),
+    ].filter(Boolean));
   }
   render();
   return wrap;
@@ -348,6 +378,21 @@ async function renderFoot() {
     ` · site updated ${agoText(META.deployed)} · data fetched ${agoText(META.lastScrape || META.dbLatest)}`;
 }
 
+// Who owns the most rare gear. Equipped items only — bags never leave the DB.
+function rareBoard(players, passives) {
+  const owners = players.filter(p => rareOf(p).total > 0);
+  if (!owners.length) return null;
+  const tally = (k) => owners.reduce((a, p) => a + rareOf(p)[k], 0);
+  return [
+    el('h2', null, 'Rare gear'),
+    el('p', { class: 'sub' }, `${plural(owners.length, 'player')} wearing rare gear · `
+      + RARITIES.map(([k, label]) => `${tally(k)} ${label.replace(/^\S+ /, '').toLowerCase()}`).join(' · ')
+      + '. Equipped items only — bag contents stay private. Click headers to sort, chips to filter.'),
+    playersTable(owners, passives, { rarity: true, sort: 'rare',
+      cols: ['name', 'class', 'level', 'rare', 'sacred', 'unique', 'krangled', 'tier', 'seen'] }),
+  ];
+}
+
 async function ladder() {
   const [r, { builds, passives }] = await Promise.all([fetch('api/ladder'), staticData()]);
   if (!r.ok) throw new Error('ladder ' + r.status);
@@ -365,6 +410,7 @@ async function ladder() {
     el('h2', null, 'Players'),
     el('p', { class: 'sub' }, 'Power is role-aware — raw DPS for damage classes, effective HP for tanks, effective HPS for healers. Hover a value for the math. Click headers to sort, chips to filter by class.'),
     playersTable(arr(players), passives),
+    rareBoard(arr(players), passives),
     advStats(arr(players), passives),
     null); // watermark footer is global, see renderFoot()
 }

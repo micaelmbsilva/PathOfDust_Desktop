@@ -70,12 +70,20 @@ function initAutoUpdate() {
   // Silent + relaunch: the installer is the assisted (directory-picking) one, so
   // the default would pop its full wizard on every auto-update. NSIS remembers
   // the directory the user chose, so a silent run still lands there.
-  global.__applyUpdate = () => autoUpdater.quitAndInstall(true, true); // called by /api/apply-update
+  // macOS: Squirrel.Mac refuses to install into an app without a Developer ID
+  // signature, so quitAndInstall on our ad-hoc-signed build silently no-ops.
+  // Don't stage a download that can't apply; "apply" opens the release page
+  // for a manual dmg instead. Real signing + notarization lifts this.
+  const macManual = process.platform === 'darwin';
+  global.__applyUpdate = macManual
+    ? () => shell.openExternal('https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest')
+    : () => autoUpdater.quitAndInstall(true, true); // called by /api/apply-update
   global.__checkUpdate = () => autoUpdater.checkForUpdates().catch(() => {}); // called by /api/check-update
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = !macManual;
   // Publish update state on the global so the bridge can report it and the UI can
-  // toast — "downloading" when found, "ready" once staged.
-  autoUpdater.on('update-available', (i) => { global.__update = { status: 'downloading', version: i.version }; });
+  // toast — "downloading" when found, "ready" once staged (mac: found = ready,
+  // since "apply" is just a link there).
+  autoUpdater.on('update-available', (i) => { global.__update = { status: macManual ? 'ready' : 'downloading', version: i.version }; });
   autoUpdater.on('update-downloaded', (i) => { global.__update = { status: 'ready', version: i.version }; });
   autoUpdater.on('error', () => {}); // offline / feed hiccup — retried by the interval below
   autoUpdater.checkForUpdates().catch(() => {});

@@ -2462,7 +2462,12 @@
   const fmtV = (v) => { const m = +String(v).split('.')[0]; return m ? `${Math.floor(m / 10)}.${m % 10}` : v; };
   const showShellUpdateToast = (v) => mkToast(`⬆️ Update v${fmtV(v)} Ready`,
     'Restart to install — your login and layout are kept.',
-    [{ label: 'Restart &amp; Update', onClick: () => fetch('/api/apply-update', { method: 'POST' }) }],
+    // Mac bridges answer { manual, url } instead of installing (unsigned app,
+    // Squirrel.Mac won't apply) — send the player to the release page.
+    [{ label: 'Restart &amp; Update', onClick: async () => {
+      const r = await fetch('/api/apply-update', { method: 'POST' }).then(r => r.json()).catch(() => null);
+      if (r && r.manual) window.open(r.url);
+    } }],
     { cls: 'update', dedupe: '.toast.update', dismissLabel: 'Later' });
   async function checkShellUpdate() {
     let u; try { u = await fetch('/api/update-status', { cache: 'no-store' }).then(r => r.json()); } catch { return; }

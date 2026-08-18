@@ -40,7 +40,7 @@ async function ping() {
       snap.dust = inv.dust; snap.sand = inv.sand; snap.tokens = inv.tokens;
       const gear = (it) => ({ slot: it.slot, name: it.name, tier: it.tier, quality: it.quality,
         primary: it.primary, mods: it.mods, sacred: it.sacred, implicits: it.implicits,
-        krangled: it.krangled, protected: it.protected });
+        krangled: it.krangled, unique: it.unique, protected: it.protected });
       snap.equipped = (inv.equipped || []).map(gear);
       snap.bag = (inv.bag || []).map(gear);
     } catch {}
@@ -56,7 +56,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 91;
+const BRIDGE_REV = 92;
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -806,6 +806,12 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {
+      // Mac shells' __applyUpdate quitAndInstalls into the void — Squirrel.Mac
+      // rejects installs into an app without a Developer ID signature. This
+      // bridge hot-updates to already-installed shells, so intercept here and
+      // hand the UI a manual-download link instead.
+      if (process.platform === 'darwin')
+        return json(res, { ok: false, manual: true, url: 'https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest' });
       const ok = typeof globalThis.__applyUpdate === 'function';
       json(res, { ok });
       if (ok) setTimeout(globalThis.__applyUpdate, 200); // quit + install the staged update
