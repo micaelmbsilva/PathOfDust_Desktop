@@ -1,7 +1,7 @@
 {
   "name": "lokati_overlay",
   "productName": "Path of Dust",
-  "version": "32.2.0",
+  "version": "32.2.1",
   "description": "Custom overlay + dashboard app for adventure.lokati.net",
   "main": "main.cjs",
   "author": "Kibukah",
@@ -21,6 +21,7 @@
   },
   "build": {
     "appId": "net.lokati.pathofdust",
+    "afterPack": "./sign-mac.cjs",
     "productName": "Path of Dust",
     "asar": false,
     "files": [
@@ -42,7 +43,8 @@
       "!*.test.mjs",
       "!findings-*.json",
       "!intel-*.json",
-      "!run.txt"
+      "!run.txt",
+      "!sign-mac.cjs"
     ],
     "win": {
       "target": "nsis",
