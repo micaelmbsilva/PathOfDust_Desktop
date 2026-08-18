@@ -13,7 +13,34 @@ permissions:
   contents: write
 
 jobs:
+  # Gate every publish on the versions agreeing. electron-builder names the
+  # release from package.json, NOT from the tag, so a tag pushed at a commit
+  # whose package.json says something else quietly uploads its artifacts into
+  # the other version's release — which is exactly what v32.3.0 did, landing in
+  # the v32.2.0 release and leaving no 32.3.0 at all. Both publish jobs need
+  # this, so nothing is built or uploaded until it passes.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Tag matches package.json and package-lock.json
+        run: node .github/check-versions.mjs "${{ github.ref_name }}"
+
+      - name: Interface manifest is coherent
+        run: node .github/check-manifest.mjs
+
+      - name: Tests
+        run: |
+          node advisor-core.test.mjs
+          node scrape.test.mjs
+
   build:
+    needs: verify
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +63,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
   build-mac:
+    needs: verify
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

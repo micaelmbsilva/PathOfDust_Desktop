@@ -1,0 +1,14 @@
+# Pin line endings so they don't depend on each machine's core.autocrlf. Blobs
+# are already LF; this stops a clone configured differently from committing CRLF
+# and producing whole-file diffs.
+* text=auto eol=lf
+
+# Never touched as text.
+*.png binary
+*.ico binary
+*.icns binary
+*.gif binary
+*.webp binary
+*.jpg binary
+*.mp3 binary
+*.mp4 binary
