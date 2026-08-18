@@ -70,6 +70,31 @@
   .craft { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 12px; }
   .craft select { width: 100%; margin: 4px 0 8px; padding: 6px; background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; }
   .craft label { font-size: 0.85rem; display: block; margin-bottom: 8px; }
+  /* Item picker. A native <select> popup is drawn by the browser/OS, so no DOM
+     events reach its <option>s and hovering one can't preview anything — this
+     list replaces the popup while the real <select> stays as the state holder. */
+  .isel { position: relative; margin: 4px 0 8px; }
+  .isel-btn { width: 100%; text-align: left; padding: 6px; font-size: 0.85rem;
+    background: #1c1830; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; }
+  /* narrower than the form so the hover preview has room beside it */
+  .isel-list { display: none; position: absolute; z-index: 40; left: 0; top: 100%; margin-top: 2px;
+    width: min(100%, 420px);
+    max-height: 280px; overflow-y: auto; background: #17132a; border: 1px solid rgba(160,140,255,0.35);
+    border-radius: 8px; padding: 3px; box-shadow: 0 6px 18px rgba(0,0,0,0.55); }
+  .isel.open .isel-list { display: block; }
+  .isel-opt { padding: 4px 7px; border-radius: 5px; font-size: 0.82rem; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .isel-opt:hover { background: rgba(120,90,255,0.28); }
+  .isel-g { font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase;
+    color: #8a7fb0; padding: 5px 7px 2px; }
+  .ipreview { position: fixed; z-index: 3100; width: 250px; pointer-events: none;
+    filter: drop-shadow(0 6px 16px rgba(0,0,0,0.65)); }
+  .ipreview .acts, .craftpick .acts { display: none; }
+  /* selected item(s) card above the craft form */
+  .craftpick { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25);
+    border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+  .craftpick-h { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #b0a2d9; margin-bottom: 8px; }
   /* drag-to-arrange craft sections */
   .csec { border: 1px solid rgba(160,140,255,0.18); border-radius: 9px; padding: 6px 8px 8px; margin-top: 8px; }
   .csec-h { display: flex; align-items: center; gap: 6px; }
@@ -102,6 +127,7 @@
   <div id="veilChoice"></div>
 
   <h2>Crafting</h2>
+  <div id="craftPick"></div>
   <div class="craft" id="craft"></div>
 
   <h2>Equipped</h2>
@@ -308,6 +334,7 @@
       $('adPct').onchange = saveAd;
     }
 
+    lastEquipped = inv.equipped;
     $('equipped').innerHTML = inv.equipped.map(it =>
       itemCard(it, `<button data-un="${it.slot}">Unequip</button> ${repairBtn(it)} ${shareBtn(it)}`)).join('') || '<p class="muted">Nothing equipped.</p>';
 
@@ -401,6 +428,8 @@
     const hk = $('hideoutK');
     if (hk) hk.onchange = () => cbSet('hideoutK', hk.checked);
 
+    dropdown($('itemA')); dropdown($('itemB'));
+
     // While a choice is pending the site rejects every craft — lock the form so
     // "nothing happened" clicks can't pile up, and point at the pending card.
     if (inv.veil) {
@@ -408,6 +437,93 @@
       $('craft').insertAdjacentHTML('afterbegin',
         '<p class="muted">⏳ Crafting is locked until you finish the pending choice above.</p>');
     }
+  }
+
+  // ---- item picker with hover preview ----
+  // An option id is the item id, which bag items carry directly. Equipped items
+  // never print their item_id in the gear slot, so those match on the option
+  // label's leading name ("Crude Blade (Weapon, T1, 1 mod)").
+  const itemForOption = (id) => {
+    if (!id) return null;
+    const inBag = lastBag.find(i => i.id === id);
+    if (inBag) return inBag;
+    const o = (lastCraft.options || []).find(x => x.id === id);
+    if (!o) return null;
+    const name = o.label.replace(/\s*\(.*$/, '').replace(/[🔒✦]/g, '').trim();
+    return lastEquipped.find(i => i.name === name)
+        || lastEquipped.find(i => name.startsWith(i.name)) || null;
+  };
+
+  let previewEl = null;
+  const hidePreview = () => { if (previewEl) previewEl.remove(); previewEl = null; };
+  function showPreview(it, anchor) {
+    hidePreview();
+    if (!it) return;
+    previewEl = document.createElement('div');
+    previewEl.className = 'ipreview';
+    previewEl.innerHTML = itemCard(it, '');
+    document.body.appendChild(previewEl);
+    // Beside the hovered row: right by default, left when that overflows, and
+    // below it when neither side fits (narrow window) so it never covers the row.
+    const r = anchor.getBoundingClientRect(), w = previewEl.offsetWidth, h = previewEl.offsetHeight;
+    const fitsR = r.right + 8 + w <= innerWidth, fitsL = r.left - 8 - w >= 0;
+    previewEl.style.left = (fitsR ? r.right + 8 : fitsL ? r.left - w - 8
+      : Math.max(4, Math.min(r.left, innerWidth - w - 4))) + 'px';
+    previewEl.style.top = (fitsR || fitsL
+      ? Math.max(4, Math.min(r.top - 4, innerHeight - h - 4))
+      : Math.min(r.bottom + 6, innerHeight - h - 4)) + 'px';
+  }
+
+  // Replace a <select>'s popup with an in-page list that fires hover events.
+  // The <select> itself stays (hidden) — persistence, updateCosts and the craft
+  // POST all read .value off it, and a dispatched change keeps them in sync.
+  function dropdown(sel) {
+    const wrap = document.createElement('div');
+    wrap.className = 'isel';
+    wrap.innerHTML = '<button type="button" class="isel-btn"></button><div class="isel-list"></div>';
+    sel.after(wrap);
+    sel.style.display = 'none';
+    const btn = wrap.firstChild, list = wrap.lastChild;
+    const sync = () => { btn.textContent = (sel.selectedOptions[0] || {}).textContent || 'None'; };
+    let group = null, html = '';
+    for (const o of sel.options) {
+      const g = (o.parentElement.label) || '';
+      if (g !== group) { group = g; if (g) html += `<div class="isel-g">${esc(g)}</div>`; }
+      html += `<div class="isel-opt" data-v="${esc(o.value)}">${esc(o.textContent)}</div>`;
+    }
+    list.innerHTML = html;
+    sync();
+    btn.onclick = () => {
+      const open = !wrap.classList.contains('open');
+      document.querySelectorAll('.isel.open').forEach(w => w.classList.remove('open'));
+      wrap.classList.toggle('open', open);
+      hidePreview();
+      if (open) list.querySelector(`[data-v="${CSS.escape(sel.value)}"]`)?.scrollIntoView({ block: 'nearest' });
+    };
+    list.onmouseover = (e) => { const o = e.target.closest('.isel-opt'); if (o) showPreview(itemForOption(o.dataset.v), o); };
+    list.onmouseleave = hidePreview;
+    list.onclick = (e) => {
+      const o = e.target.closest('.isel-opt'); if (!o) return;
+      sel.value = o.dataset.v; sync();
+      wrap.classList.remove('open'); hidePreview();
+      sel.dispatchEvent(new Event('change'));
+    };
+  }
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.isel')) return;
+    document.querySelectorAll('.isel.open').forEach(w => w.classList.remove('open'));
+    hidePreview();
+  });
+
+  // Persistent card above the craft form: whatever Item A (and the Recombine
+  // partner) currently are, drawn exactly like Equipped/Bag. Selection itself
+  // already survives reloads and restarts via localStorage, so this does too.
+  function renderPick() {
+    const items = [$('itemA') && $('itemA').value, $('itemB') && $('itemB').value]
+      .map(itemForOption).filter(Boolean);
+    $('craftPick').innerHTML = !items.length ? '' :
+      `<div class="craftpick"><div class="craftpick-h">Crafting</div>
+        <div class="grid">${items.map(it => itemCard(it, '')).join('')}</div></div>`;
   }
 
   // ---- persisted checkbox state ----
@@ -533,6 +649,7 @@
       btn.textContent = `${a.dataLabel} (${cost > 0 ? cost + 'd' : 'Free'})`;
       btn.disabled = false;
     }
+    renderPick();
   }
 
   // Refresh now, then once more after the server settles the action.
@@ -542,7 +659,7 @@
   const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, 500); };
 
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
-  let lastBag = [], lastCap = null, meName = '';
+  let lastBag = [], lastEquipped = [], lastCap = null, meName = '';
   const numTier = (i) => +(i.tier?.match(/\d+/) || [0])[0];
   const numQual = (i) => i.sacred || i.quality === 'Sacred' ? 102 : i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
   const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
