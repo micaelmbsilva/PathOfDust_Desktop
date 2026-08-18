@@ -178,6 +178,25 @@ assert.equal(pointsForLevel(119), 30);
   assert.ok(bestTree('Warrior', warrior, g, 119, model, 0).spent === 0);
 }
 
+// bestTree spendAll: the advisor's respec plan must spend EVERY point even after
+// closed-form gain flattens (caps hit, heal power saturated); the default
+// (theoretical optimizer) stops at the positive-gain ceiling. Both respect max
+// ranks and parent gates.
+{
+  const paladin = tree.classes.Paladin;
+  const g = { ...emptyBuckets(), weaponPower: 2000, elemDivine: 4, attackSpeed: 0.5 };
+  const pts = pointsForLevel(184); // 47
+  const ceiling = bestTree('Paladin', paladin, g, 184, model, pts);
+  const full = bestTree('Paladin', paladin, g, 184, model, pts, (s) => s.score, true);
+  assert.ok(ceiling.spent < pts, `ceiling should underspend, got ${ceiling.spent}`);
+  assert.equal(full.spent, pts, `spendAll should spend all ${pts}, got ${full.spent}`);
+  for (const [key, rank] of Object.entries(full.alloc)) {
+    const n = paladin.find((x) => x.key === key);
+    assert.ok(rank <= n.max, `${key} over max rank`);
+    if (n.parent) assert.ok((full.alloc[n.parent] || 0) >= (n.unlockAt || 1), `${key} without parent gate`);
+  }
+}
+
 // searchBuild: require forces an affix in, ban keeps it out, a clean run drops
 // nothing. (The whole gear+tree search tools/best-builds.mjs and #/explorer run.)
 {

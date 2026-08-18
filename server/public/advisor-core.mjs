@@ -17,7 +17,9 @@ const ELEMS = ['elemCold', 'elemFire', 'elemLightning', 'elemDivine', 'elemChaos
 
 export const UNMODELED_NOTE = 'Per-fight mechanics (Frenzy/Twin Strikes multi-strike, shields, '
   + 'reflects, stacking speed/damage buffs, marks and curses, Retaliation counters, Bloodpact, '
-  + 'FlickerStrike) are real in combat but not in this closed-form score — treat them as upside.';
+  + 'FlickerStrike) are real in combat but not in this closed-form score — treat them as upside. '
+  + 'Real bosses also deal unmitigable boss_pierce_pct damage (bypasses evasion/block/DR, ramps with '
+  + 'stage) not in eHP here — so eHP is optimistic against high-stage bosses.';
 
 // Rust PassiveStat → the bucket name used here.
 const TREE_STAT = {
@@ -327,14 +329,25 @@ function prereqs(byKey, alloc, key, want) {
 // ("take node X to rank r, buying whatever prerequisite ranks that needs")
 // rather than single ranks — a Specialization's 4th point grows nothing on
 // its own, so a rank-at-a-time greedy could never reach any Modifier.
-export function bestTree(cls, nodes, g, level, model, points, objective = (s) => s.score) {
+//
+// `spendAll` (advisor respec plans): once no positive-gain bundle remains, keep
+// allocating the max-gain affordable bundle anyway — preferring harmless nodes
+// (gain 0, incl. inert Skill/root nodes) over strictly harmful ones — until the
+// whole point budget is spent or the tree is full. The theoretical optimizers
+// (best-builds.mjs / searchBuild) leave it false: they want the best build, not
+// a fully-drained tree.
+export function bestTree(cls, nodes, g, level, model, points, objective = (s) => s.score, spendAll = false) {
   const byKey = new Map((nodes || []).map(n => [n.key, n]));
   const alloc = {};
   let left = points, base = objective(classScore(cls, g, level, model, { nodes, alloc }));
   while (left > 0) {
-    let pick = null;
+    let pick = null; // best positive-gain bundle, by rate (gain/cost)
+    let fill = null; // spendAll fallback: max gain, tie-break lowest cost
     for (const n of nodes || []) {
-      if (n.effect.kind === 'none') continue; // allocatable, but does nothing yet
+      // Inert nodes do nothing on their own; only worth buying as a prereq
+      // (which prereqs() handles) — except under spendAll, where they soak up
+      // leftover points harmlessly.
+      if (n.effect.kind === 'none' && !spendAll) continue;
       for (let want = (alloc[n.key] || 0) + 1; want <= n.max; want++) {
         const need = prereqs(byKey, alloc, n.key, want);
         let cost = 0;
@@ -344,12 +357,15 @@ export function bestTree(cls, nodes, g, level, model, points, objective = (s) =>
         for (const [k, r] of need) trial[k] = r;
         const gain = objective(classScore(cls, g, level, model, { nodes, alloc: trial })) - base;
         if (gain > 0 && (!pick || gain / cost > pick.rate)) pick = { trial, cost, gain, rate: gain / cost };
+        if (spendAll && (!fill || gain > fill.gain || (gain === fill.gain && cost < fill.cost)))
+          fill = { trial, cost, gain };
       }
     }
-    if (!pick) break;
-    Object.assign(alloc, pick.trial);
-    base += pick.gain;
-    left -= pick.cost;
+    const chosen = pick || (spendAll ? fill : null);
+    if (!chosen) break;
+    Object.assign(alloc, chosen.trial);
+    base += chosen.gain;
+    left -= chosen.cost;
   }
   return { alloc, spent: points - left, value: base };
 }

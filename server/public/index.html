@@ -827,11 +827,16 @@ async function advisor(name) {
   const lvl = num(b.level) || 1;
   // Empirical per-tier map for the model (covers a live balance-toml override);
   // "max hp" is skipped — the rates table mixes its flat and % variants.
+  // api/affix-rates reports per_tier in PERCENT-per-tier (value/tier off a
+  // "+295%" mod = ~2.32), but the model and parseMod work in FRACTION-per-tier
+  // (elem 0.0225, dr 0.02) — same /100 parseMod applies to a rolled value. Every
+  // affix here is a % variant (max hp, the only flat one, is skipped above), so
+  // divide by 100 or rollTargets picks the ~100x-inflated value for every mod.
   const empirical = {};
   for (const a of model.affixes) {
     if (a.match === 'max hp') continue;
     const q = rates.find(x => str(x.affix).includes(a.match));
-    if (q) empirical[a.match] = +q.per_tier;
+    if (q) empirical[a.match] = +q.per_tier / 100;
   }
   // Craftable candidates per slot: every UNKRANGLED, non-unique item the
   // player owns for that slot (equipped or bag) — a krangled item is locked
@@ -851,6 +856,7 @@ async function advisor(name) {
 
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
   let pinned = null; // a class name forces the whole plan onto it, not the top pick
+  let sortKey = 'score', sortDir = -1; // all-classes table sort (persists across render)
   function render() {
     // Source-grounded scoring: evaluate each class's closed-form power
     // (game-model.json cites the PathofDust formulas) over the best loadout
@@ -892,6 +898,13 @@ async function advisor(name) {
     // player's real gear), falling back to builds.json's curated order when
     // passive-tree.json isn't available.
     const budget = core.pointsForLevel(lvl);
+    // Ranking uses the positive-gain tree (the class's real ceiling), but the
+    // player has to spend EVERY point — so re-solve just the chosen class's tree
+    // with spendAll, filling leftover points onto harmless nodes once the
+    // closed-form gain flattens (caps hit, heal power saturated). Only for
+    // `best`; the other classes keep their ceiling tree for the ranking.
+    if (best && best.tree) best.tree = { nodes: best.tree.nodes,
+      alloc: core.bestTree(best.cls, best.tree.nodes, best.loadout.buckets, lvl, model, budget, undefined, true).alloc };
     const alloc = new Map(arr(b.passives && b.passives.nodes).filter(n => rankNum(n.rank) > 0)
       .map(n => [str(n.name), rankNum(n.rank)]));
     const nodeName = (cls, key) => {
@@ -969,14 +982,32 @@ async function advisor(name) {
       e.onclick = () => { role = rv; pinned = null; render(); };
       return e;
     };
-    // Click any class to pin the plan to it; clearing the role filter so the
-    // pinned class is always in range.
-    const classChip = (x) => {
-      const e = el('span', { class: 'chip' + (x.cls === best.cls ? ' on' : '') }, `${x.cls} · ${x.score}`);
-      e.onclick = () => { pinned = x.cls; role = null; render(); };
-      return e;
-    };
     const resetChip = () => { const e = el('span', { class: 'chip' }, '↺ best'); e.onclick = () => { pinned = null; render(); }; return e; };
+    // Every class scored for this gear, sortable by any column, filtered by the
+    // Role chips above. Click a row to pin its full plan below. Values are the
+    // closed-form score already computed for each class in `ranked`.
+    const RANK_COLS = [
+      { k: 'cls', label: 'Class', get: x => x.cls, cell: x => (x.cls === best.cls ? '▶ ' : '') + x.cls },
+      { k: 'role', label: 'Role', get: x => rolesOf(x.cls, passives)[0] || 'melee', cell: x => rolesOf(x.cls, passives).join('/') || 'melee' },
+      { k: 'score', label: 'Score', right: true, get: x => x.raw, cell: x => str(x.score) },
+      { k: 'dps', label: 'DPS', right: true, get: x => x.cs.dps, cell: x => fmt(x.cs.dps) },
+      { k: 'ehp', label: 'eHP', right: true, get: x => x.cs.ehp, cell: x => fmt(x.cs.ehp) },
+      { k: 'hps', label: 'HPS', right: true, get: x => x.cs.hps, cell: x => fmt(x.cs.hps) },
+    ];
+    const rankTable = () => {
+      const col = RANK_COLS.find(c => c.k === sortKey) || RANK_COLS[2];
+      const sorted = [...ranked].sort((a, z) => { const av = col.get(a), zv = col.get(z); return (av > zv ? 1 : av < zv ? -1 : 0) * sortDir; });
+      const th = (c) => { const e = el('th', { class: (c.right ? 'r ' : '') + 'sortable' }, c.label, sortKey === c.k ? (sortDir < 0 ? ' ▾' : ' ▴') : '');
+        e.onclick = () => { sortDir = sortKey === c.k ? -sortDir : -1; sortKey = c.k; render(); }; return e; };
+      return el('table', null,
+        el('thead', null, el('tr', null, RANK_COLS.map(th))),
+        el('tbody', null, sorted.map(x => {
+          const tr = el('tr', x.cls === best.cls ? { style: 'background:rgba(160,140,255,0.12)' } : null,
+            RANK_COLS.map(c => el('td', c.right ? { class: 'r' } : null, c.cell(x))));
+          tr.style.cursor = 'pointer'; tr.onclick = () => { pinned = x.cls; render(); };
+          return tr;
+        })));
+    };
     view(
       el('h1', null, 'Advisor'),
       el('p', { class: 'sub' }, `${str(b.name)} · ${str(b.archetype)} Lv ${str(b.level)} — full-loadout suggestions from live data.`),
@@ -999,9 +1030,11 @@ async function advisor(name) {
             i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
             arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
           el('p', null, str(i.text)))))] : null,
-      best && ranked.length > 1 ? el('div', { class: 'chips', style: 'margin:10px 0 0', title: 'Click a class to plan for it instead' },
-        el('span', { class: 'sub' }, pinned ? 'Pinned — plan for:' : 'Or plan for:'),
-        pinned ? resetChip() : null, ranked.map(classChip)) : null,
+      best && ranked.length > 1 ? [
+        el('div', { class: 'chips', style: 'margin:14px 0 6px', title: 'Filter with the Role chips above; click a header to sort; click a row to plan for that class' },
+          el('span', { class: 'sub' }, pinned ? `Pinned ${best.cls} — click any class to switch, or ` : 'All classes for this gear (click a row to plan for it):'),
+          pinned ? resetChip() : null),
+        rankTable()] : null,
       best ? [
         el('h2', null, 'Passives plan'),
         el('div', { class: 'card' },
@@ -1018,15 +1051,22 @@ async function advisor(name) {
             const it = cb && cb.it;
             const sac = it ? sacredLineOf(it) : '';
             const have = new Set(arr(it && it.mods).map(m => (core.parseMod(str(m && m.t), model) || {}).bucket).filter(Boolean));
-            const mark = (p) => {
-              const bucket = (core.parseMod('+1% ' + p.match, model) || {}).bucket;
-              return `${p.match} ${fmtAvg(p)}${bucket && have.has(bucket) ? ' ✓have' : ''}`;
-            };
+            const bucketOf = (p) => (core.parseMod('+1% ' + p.match, model) || {}).bucket;
+            const mark = (p) => `${p.match} ${fmtAvg(p)}${have.has(bucketOf(p)) ? ' ✓have' : ''}`;
+            // Don't tell someone to reroll a base that already carries a Sacred
+            // implicit AND a full set of crafted mods — a Sacred is a stage-300+
+            // upgrade you can't easily replace. Only flag the mods it's actually
+            // missing; if it already covers the plan, say leave it alone.
+            const crafted = it && sac && arr(it.mods).length >= model.rules.modCap;
+            const missing = picks.filter(p => !have.has(bucketOf(p)));
+            const craftCell = !crafted ? picks.map(mark).join(' · ')
+              : missing.length ? [el('span', { class: 'sub' }, 'already crafted — reroll only for: '), missing.map(mark).join(' · ')]
+              : el('span', { class: 'sub' }, 'already covers this plan — keep it');
             return el('tr', null,
               el('td', null, slot),
               el('td', null, !it ? 'next drop'
                 : `${cb.worn ? 'worn' : 'bag'} t${tnum(it)}${cb.worn ? '' : ' ' + str(it.name)}${!cb.worn && arr(it.mods).length ? ' · has ' + arr(it.mods).map(m => str(m.t)).join(', ') : ''}`),
-              el('td', null, picks.map(mark).join(' · ')),
+              el('td', null, craftCell),
               el('td', null, sac ? `locked in: ${sac}` : targets.sacred ? `wish: ${targets.sacred.match} ${fmtAvg(targets.sacred)}` : '—'));
           }))),
         craftRows.length ? [el('h2', null, 'Crafting worklist'),
