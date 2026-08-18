@@ -95,6 +95,7 @@
     border-radius: 10px; padding: 10px; margin-bottom: 10px; }
   .craftpick-h { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase;
     color: #b0a2d9; margin-bottom: 8px; }
+  .recombnote { font-size: 0.85rem; color: #cdbdf5; margin: -2px 0 8px; }
   /* drag-to-arrange craft sections */
   .csec { border: 1px solid rgba(160,140,255,0.18); border-radius: 9px; padding: 6px 8px 8px; margin-top: 8px; }
   .csec-h { display: flex; align-items: center; gap: 6px; }
@@ -247,9 +248,11 @@
     // noise), so it always came back empty and toasted a false "no change".
     // Report the freshly-appeared bag item(s) directly instead.
     if (opts && opts.recombine) {
+      opts.newItems = [];
       const bIds = new Set((before.bag || []).map(it => it.id));
       for (const it of (after.bag || [])) {
         if (bIds.has(it.id)) continue;
+        opts.newItems.push(it);
         const crit = (it.mods || []).find(m => m.crit);
         parts.push(`Recombined → <b>${esc(it.name)}</b>${it.tier ? ` (T${esc(it.tier)})` : ''}` +
           (crit ? ` <span class="mt crit">+${esc(crit.t)} ✦ crit!</span>` : ''));
@@ -539,11 +542,20 @@
   // Persistent card above the craft form: whatever Item A (and the Recombine
   // partner) currently are, drawn exactly like Equipped/Bag. Selection itself
   // already survives reloads and restarts via localStorage, so this does too.
+  let recombResult = null; // set after a recombine — {a, b, id} of the fresh result item
   function renderPick() {
-    const items = [$('itemA') && $('itemA').value, $('itemB') && $('itemB').value]
-      .map(itemForOption).filter(Boolean);
+    const aVal = $('itemA') && $('itemA').value;
+    const items = [aVal, $('itemB') && $('itemB').value].map(itemForOption).filter(Boolean);
+    // Only while the recombine result is still the selected Item A: name its
+    // sources and flag the crit-granted modifier ("how it was affected").
+    let note = '';
+    if (recombResult && aVal === recombResult.id) {
+      const made = itemForOption(aVal), crit = made && (made.mods || []).find(m => m.crit);
+      note = `<div class="recombnote">Result of recombine: <b>${esc(recombResult.a || '?')}</b> + <b>${esc(recombResult.b || '?')}</b>` +
+        (crit ? ` <span class="mt crit">+${esc(crit.t)} ✦ crit!</span>` : '') + `</div>`;
+    }
     $('craftPick').innerHTML = !items.length ? '' :
-      `<div class="craftpick"><div class="craftpick-h">Crafting</div>
+      `<div class="craftpick"><div class="craftpick-h">Crafting</div>${note}
         <div class="grid">${items.map(it => itemCard(it, `${eqBtn(it)} ${lockBtn(it)} ${disBtn(it)} ${shareBtn(it)}`)).join('')}</div></div>`;
   }
 
@@ -849,7 +861,20 @@
       const aDef = (lastCraft.actions || []).find(x => x.action === action);
       if ((aDef?.confirm || action === 'scour' || action === 'krangle') &&
           !confirm(`${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
-      await craftAct('craft', fields, title(action), action === 'recombine' ? { recombine: true } : undefined); refresh();
+      if (action === 'recombine') {
+        const aName = itemForOption($('itemA').value)?.name, bName = itemForOption($('itemB').value)?.name;
+        const opts = { recombine: true };
+        await craftAct('craft', fields, title(action), opts);
+        const made = (opts.newItems || [])[0]; // recombine consumes A+B, emits one fresh item
+        if (made) {
+          recombResult = { a: aName, b: bName, id: made.id };
+          localStorage.setItem('craftItemA', made.id); // select it on the reload below
+          localStorage.removeItem('craftItemB');        // B was consumed
+        }
+      } else {
+        await craftAct('craft', fields, title(action));
+      }
+      refresh();
     }
   });
 
