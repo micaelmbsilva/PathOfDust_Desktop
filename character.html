@@ -297,9 +297,12 @@
     renderRoster();
   }
 
-  async function loadRoster() {
+  // fresh = the user asked for this (Reload), so bypass the bridge's roster
+  // cache — otherwise the button re-renders the same stale classes it already
+  // has and looks broken.
+  async function loadRoster(fresh) {
     $('err').textContent = '';
-    try { rosterList = await get('/api/roster'); }
+    try { rosterList = await get('/api/roster' + (fresh ? '?fresh=1' : '')); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
     if (rosterList.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
     rosterList = (rosterList || []).filter(r => r.login);
@@ -308,7 +311,7 @@
 
   $('find').oninput = () => { if (!current) renderRoster(); };
   $('pick').onchange = () => { const v = $('pick').value; v ? showCharacter(v) : back(); };
-  $('reload').onclick = () => current ? showCharacter(current) : loadRoster();
+  $('reload').onclick = () => current ? showCharacter(current) : loadRoster(true);
   $('tab-sheet').onclick = () => current ? showTab('sheet') : back();
   $('tab-tree').onclick = () => current && showTab('tree');
   // Your own sprite, so it works from the roster view too — no character selected.

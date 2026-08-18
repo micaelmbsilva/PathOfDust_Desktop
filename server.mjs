@@ -282,11 +282,21 @@ function bag(text) {
 }
 
 // Party classes: the /characters roster shows "Level N Class" per player — the
-// game WS roster doesn't carry class at all. Cached ~30 min; lowercased names.
+// game WS roster doesn't carry class at all. Cached; lowercased names.
 // A failed/empty scrape keeps serving the last good cache.
+// This cache lives in the Electron MAIN process, so reloading a page never
+// clears it — before invalidateRoster existed, a class change stayed invisible
+// until the TTL lapsed or the user quit the whole app, which is exactly what
+// they reported doing.
+const ROSTER_TTL_MS = 5 * 60000;
 let rosterCache = { at: 0, list: [] };
-export async function roster() { // exported for scrape smoke-tests
-  if (Date.now() - rosterCache.at < 30 * 60000) return rosterCache.list;
+// Force the next roster() to re-scrape. Called when we know the roster just
+// changed (a class switch through /api/action) rather than waiting out the TTL.
+export const invalidateRoster = () => { rosterCache.at = 0; };
+// `fresh` skips the TTL — same "a user-initiated refresh should always try"
+// rule pullInterface({manual:true}) follows, so a Refresh button isn't a no-op.
+export async function roster(fresh) { // exported for scrape smoke-tests
+  if (!fresh && Date.now() - rosterCache.at < ROSTER_TTL_MS) return rosterCache.list;
   let text;
   // site down / scrape hiccup → serve the stale cache instead of a 500; a dead
   // session still surfaces as 401 so the page can say "restart to re-login"
@@ -295,7 +305,7 @@ export async function roster() { // exported for scrape smoke-tests
   const list = rosterOf(text);
   // Stamp the time even on an empty parse (markup changed) so a broken scrape
   // doesn't re-fetch /characters on every single request with no throttle —
-  // keep serving the last good list until the 30-min window lapses.
+  // keep serving the last good list until the TTL window lapses.
   rosterCache = { at: Date.now(), list: list.length ? list : rosterCache.list };
   return rosterCache.list;
 }
@@ -319,8 +329,8 @@ export function rosterOf(text) { // exported for scrape smoke-tests
 }
 // Party panel's view of the same scrape: lowercased name -> {cls, level, login}.
 // The login is what /characters/:login needs — it isn't the display name.
-export async function rosterClasses() {
-  return Object.fromEntries((await roster())
+export async function rosterClasses(fresh) {
+  return Object.fromEntries((await roster(fresh))
     .map(r => [r.name.toLowerCase(), { cls: r.cls, level: r.level, login: r.login }]));
 }
 
@@ -872,11 +882,12 @@ const srv = createServer(async (req, res) => {
         return json(res, r.ok ? await r.json() : []);
       } catch { return json(res, []); }
     }
+    // ?fresh=1 = a user-initiated refresh; skip the roster cache entirely.
     if (url.pathname === '/api/roster-classes') {
-      return json(res, await rosterClasses());
+      return json(res, await rosterClasses(url.searchParams.has('fresh')));
     }
     if (url.pathname === '/api/roster') {
-      return json(res, await roster());
+      return json(res, await roster(url.searchParams.has('fresh')));
     }
     if (url.pathname === '/api/character' || url.pathname === '/api/character-passives') {
       // Path segment goes straight into a URL we fetch with the session cookie —
@@ -933,6 +944,11 @@ const srv = createServer(async (req, res) => {
       // Success-looking 302 to the login page = dead session; tell the UI apart
       // from a normal craft redirect so it can say "restart to re-login".
       if (r.ok && loginRedirect(r.location)) r.expired = true;
+      // A class switch (passives.html's archetype select) rewrites the roster
+      // line this bridge caches class off. Nothing else here can change anyone's
+      // class, so only that one endpoint drops the cache.
+      // Leading slash optional at the call site, same as post() itself allows.
+      if (r.ok && !r.expired && String(endpoint).replace(/^\//, '') === 'change-archetype') invalidateRoster();
       return json(res, r);
     }
     // static

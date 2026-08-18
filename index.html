@@ -1312,7 +1312,9 @@
     } catch {}
     rerenderIfOpen('party', renderParty);
   }
-  setTimeout(loadRosterClasses, 3000); setInterval(loadRosterClasses, 30 * 60000);
+  // Matched to the bridge's own roster TTL (ROSTER_TTL_MS) — polling slower
+  // than the cache expires just adds a second stale window on top of it.
+  setTimeout(loadRosterClasses, 3000); setInterval(loadRosterClasses, 5 * 60000);
   const classOf = (c) => (rosterCls[c.displayName.toLowerCase()] || {}).cls || '';
   // The site's URL slug, which is NOT the display name — only the roster scrape
   // knows it, so party cells are only clickable once that has landed.
