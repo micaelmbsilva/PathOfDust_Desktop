@@ -204,7 +204,9 @@ function initWindowPersistence(win, state) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     const s = state[winKey(url)] || {};
     const bounds = s.x != null ? { x: s.x, y: s.y, width: s.width, height: s.height } : {};
-    return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16', ...bounds } };
+    // Same icon as main (assets/icon.png) — child windows otherwise show a
+    // blank/black icon in their title bar and taskbar entry.
+    return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16', icon: path.join(__dirname, 'assets', 'icon.png'), ...bounds } };
   });
   // Foreground a window and hand it keyboard focus. focus()+moveTop() alone
   // don't reliably win against the Windows foreground lock; a momentary
