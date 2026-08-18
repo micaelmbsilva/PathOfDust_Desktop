@@ -143,7 +143,10 @@ async function me() {
   // Shown instead of the whole dashboard until the character exists.
   const canJoin = /action="\/join"/.test(text);
 
-  return { name, nav, stats, autoRepair, autoRepairTip, repairAll, reforge, xp, wings, buyWings, model, canJoin, countdowns, archetype, buffTable };
+  // Same derived stat the character sheet carries (see elementalOf) — the
+  // overlay's own stats panel reads /api/me, not /api/character, so it needs
+  // its own copy or the card only ever shows up on other people's sheets.
+  return { name, nav, stats, elemental: elementalOf(stats), autoRepair, autoRepairTip, repairAll, reforge, xp, wings, buyWings, model, canJoin, countdowns, archetype, buffTable };
 }
 const strip = (s) => s.replace(/<[^>]*>/g, '')
   .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')

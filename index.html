@@ -113,6 +113,8 @@
   .srow { display: flex; justify-content: space-between; gap: 10px; font-size: 0.83rem; padding: 2px 0; }
   .srow .l { color: #b0a2d9; } .srow .v { font-weight: 600; }
   .srow[title] { cursor: help; } .tmods span[title] { cursor: help; }
+  .srow .l[data-tip], .srow .v[data-tip] { cursor: help; }
+  .elemsub { font-size: 0.76rem; opacity: 0.85; }
   .srow.repair { cursor: pointer; border-bottom: 1px solid rgba(160,140,255,0.15); margin-bottom: 3px; padding-bottom: 4px; }
   .srow.repair.on .v { color: #7fdba3; } .srow.repair.off .v { color: #ff8080; }
   .srow.wings { cursor: pointer; }
@@ -737,9 +739,20 @@
       const nextRow = `<div class="srow" id="nextBattle" style="${eta0 ? '' : 'display:none'}" data-tip="Estimated from the cadence of recent battles — the game doesn't announce fights ahead of time. The 💀 counter tracks the usual 3-normals-then-boss pattern (a guess, not a schedule)."><span class="l">⚔️ Next Battle</span><span class="v">${eta0 ? (eta0 > Date.now() ? `~${mmss(eta0 - Date.now())}` : 'any moment…') + bossHint() : ''}</span></div>`;
       const joinRow = r.canJoin ? `<div class="srow repair on" id="joinRow" data-tip="You don't have a character yet — this is the same as typing !join in chat.">` +
         `<span class="l">🎉 Join the Adventure</span><span class="v">Start</span></div>` : '';
-      document.getElementById('rows').innerHTML = joinRow + nextRow + retreatRow + arRow + raRow + wingsRow + xpRow + r.stats.map(s =>
-        `<div class="srow"${s.tip ? ` data-tip="${s.tip.replace(/"/g, '&quot;')}"` : ''}>` +
-        `<span class="l">${esc(s.label)}</span><span class="v">${esc(s.value)}</span></div>`).join('');
+      // Two independent hovers per stat, like the game's own sheet: the label
+      // explains the stat, the value carries its multi-line source breakdown
+      // (Dmg Taken/Block/Evasion/Dmg Dealt/Intervene have one). Hanging both off
+      // the row meant only one could ever show, and the breakdown always lost.
+      const tipAttr = (t) => t ? ` data-tip="${t.replace(/"/g, '&quot;')}"` : '';
+      const statRow = (s) => `<div class="srow">` +
+        `<span class="l"${tipAttr(s.tip)}>${esc(s.label)}</span>` +
+        `<span class="v"${tipAttr(s.vtip)}>${esc(s.value)}</span></div>` +
+        // Elemental damage is the one derived stat here, and its per-type split
+        // is the point of it — shown inline rather than hover-only.
+        (s.sub ? `<div class="srow"><span class="l elemsub">${esc(s.sub)}</span></div>` : '');
+      const rows = r.elemental ? r.stats.concat(r.elemental) : r.stats;
+      document.getElementById('rows').innerHTML =
+        joinRow + nextRow + retreatRow + arRow + raRow + wingsRow + xpRow + rows.map(statRow).join('');
       document.getElementById('arRow').onclick = async () => { await action('toggle-auto-repair', {}); loadStats(); };
       const raEl = document.getElementById('raRow');
       if (raEl && !r.repairAll.disabled) raEl.onclick = async () => {
