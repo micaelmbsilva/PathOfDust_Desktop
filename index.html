@@ -496,7 +496,11 @@
     const s = LS.get(key, null);
     if (s) {
       if (s.left != null) { el.style.left = s.left + 'px'; el.style.right = 'auto'; }
-      if (s.top != null) el.style.top = s.top + 'px';
+      // Clear the opposite anchor too — the buffs panel ships bottom-anchored,
+      // and a restored `top` alongside a live `bottom` over-constrains the box:
+      // fine while an explicit height wins, but the moment .collapsed sets
+      // height:auto the panel stretches top-to-bottom instead of collapsing.
+      if (s.top != null) { el.style.top = s.top + 'px'; el.style.bottom = 'auto'; }
       if (s.width) el.style.width = s.width + 'px';
       if (s.height && !s.collapsed) el.style.height = s.height + 'px';
       if (s.collapsed) el.classList.add('collapsed');
