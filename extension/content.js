@@ -1,9 +1,11 @@
-// Twitch chat content script: tag "#pod-item=" links as they appear, show a
-// PoE-style hover card (rendered by card.js, styled by tooltip.css). Hover
-// only — clicks still navigate to the game site like any link.
-(async () => {
-  const codec = await import(chrome.runtime.getURL('shared/item-codec.mjs'));
-  const LINK_RE = codec.LINK_RE;
+// Twitch chat content script: tag "#pod-item=" links as they appear, replace
+// their visible URL with the item's name (PoE-style), and show the full card
+// on hover (rendered by card.js, styled by tooltip.css). Runs in every frame
+// (all_frames — the desktop app hosts chat in an iframe). Clicks still
+// navigate to the game site like any link. Codec comes from
+// shared/item-codec.js, loaded before this file by the manifest.
+(() => {
+  const { decodeItem, LINK_RE } = globalThis.PodItemCodec;
 
   // One shared floating card container, tooltip.js-style (position at cursor,
   // flip at viewport edges).
@@ -14,7 +16,7 @@
 
   const decoded = new Map(); // payload -> Promise<item|null>
   const decode = (payload) => {
-    if (!decoded.has(payload)) decoded.set(payload, codec.decodeItem(payload).catch(() => null));
+    if (!decoded.has(payload)) decoded.set(payload, decodeItem(payload).catch(() => null));
     return decoded.get(payload);
   };
 
@@ -45,12 +47,22 @@
   });
 
   // Tag anchors whose href (or text — Twitch sometimes strips fragments from
-  // the href but keeps the full URL as the link text) carries a payload.
+  // the href but keeps the full URL as the link text) carries a payload, then
+  // swap the ugly URL for the item's name, PoE-style. Decode failure leaves
+  // the raw URL visible so the message is never blanked.
   const tag = (root) => {
     for (const a of root.querySelectorAll('a[href]')) {
       if (a.dataset.podItem !== undefined) continue;
       const m = LINK_RE.exec(a.href) || LINK_RE.exec(a.textContent);
-      if (m) { a.dataset.podItem = m[1]; a.classList.add('pod-item-link'); }
+      if (!m) continue;
+      a.dataset.podItem = m[1];
+      a.classList.add('pod-item-link');
+      decode(m[1]).then((item) => {
+        if (!item || !item.n) return;
+        const f = item.f || {};
+        a.textContent = `[${item.n}]`;
+        a.classList.add('pod-named', f.kr ? 'kr' : f.sa ? 'sa' : f.un ? 'un' : 'norm');
+      });
     }
   };
 

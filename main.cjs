@@ -102,7 +102,7 @@ async function loadItemLinks(dir) {
     .find(p => fs.existsSync(path.join(p, 'manifest.json')));
   if (!ext) return;
   try { await session.defaultSession.loadExtension(ext); }
-  catch { /* chat still works, just without hover cards */ }
+  catch (e) { console.warn('item-links extension failed to load:', e.message); } // chat still works, just without hover cards
 }
 
 // A random, anonymous per-install id (no name/PII), persisted in userData.

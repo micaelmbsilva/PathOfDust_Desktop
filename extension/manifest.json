@@ -1,20 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Path of Dust Item Links (embedded)",
-  "version": "0.1.0",
-  "description": "Hover Path of Dust item links in the chat panel to see the item's full stats. Embedded copy of pod_chat_extension — no icons (the hot-updater only carries text files) and no Firefox keys.",
+  "version": "0.2.0",
+  "description": "Path of Dust item links in the chat panel become the item's name — hover for full stats. Embedded copy of pod_chat_extension — no icons (the hot-updater only carries text files) and no Firefox keys.",
   "content_scripts": [
     {
       "matches": ["https://www.twitch.tv/*", "https://dashboard.twitch.tv/*"],
-      "js": ["card.js", "content.js"],
+      "js": ["shared/item-codec.js", "card.js", "content.js"],
       "css": ["tooltip.css"],
+      "all_frames": true,
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["shared/item-codec.mjs"],
-      "matches": ["https://www.twitch.tv/*", "https://dashboard.twitch.tv/*"]
     }
   ]
 }

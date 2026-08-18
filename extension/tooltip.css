@@ -2,6 +2,13 @@
    tooltip.js. Everything scoped under .pod-tt / .pod-item-link so nothing
    bleeds into Twitch's own styles. */
 .pod-item-link { text-decoration: underline dotted; cursor: help; }
+/* URL swapped for "[Item Name]" — PoE-style colored link, rarity palette
+   matching the card's name colors. */
+.pod-item-link.pod-named { font-weight: 700; text-decoration-color: rgba(160, 140, 255, 0.6); }
+.pod-item-link.pod-named.norm { color: #c9a76b; }
+.pod-item-link.pod-named.sa { color: #8fd0ff; }
+.pod-item-link.pod-named.un { color: #ffd76b; }
+.pod-item-link.pod-named.kr { color: #e06a6a; }
 
 .pod-tt {
   position: fixed; z-index: 99999; pointer-events: none; max-width: 320px;

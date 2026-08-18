@@ -40,21 +40,40 @@
      GIF, so a text-shadow alone left the message unreadable over the light
      frames. The scrim darkens the whole thing and the text sits on its own
      plate, which keeps contrast constant no matter what frame is showing. */
-  #down .dscrim { position: absolute; inset: 0; background: rgba(4,3,10,0.82);
-    z-index: 1; opacity: 0; transition: opacity 0.4s; pointer-events: none; }
+  #down .dscrim { position: absolute; inset: 0; z-index: 1; opacity: 0;
+    transition: opacity 0.4s; pointer-events: none;
+    /* vignette instead of a flat wash — center stays a touch brighter for the
+       logo, edges pull darker for the text plate's contrast */
+    background: radial-gradient(ellipse at 50% 42%, rgba(4,3,10,0.66), rgba(4,3,10,0.92) 78%); }
   #down.art .dscrim { opacity: 1; }
-  #down .dlogo { position: absolute; z-index: 2; width: min(40vh, 40vw); max-width: 360px;
-    opacity: 0.3; filter: drop-shadow(0 0 40px rgba(143,123,216,0.45));
-    animation: dpulse 4.8s ease-in-out infinite; pointer-events: none; }
+  /* slow breathing on the vignette's dark edge */
+  #down .dscrim::after { content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 42%, transparent 45%, rgba(4,3,10,0.5) 90%);
+    animation: dpulse 9s ease-in-out infinite; }
+  /* Logo sits in flow above the plate (was position:absolute, which centered
+     the flex plate right on top of it). Breathing glow instead of the old
+     opacity pulse — the new artwork reads best at full strength. */
+  #down .dlogo { position: relative; z-index: 2; width: min(46vh, 60vw); max-width: 520px;
+    animation: dglow 5.2s ease-in-out infinite; pointer-events: none; }
   #down .dplate { position: relative; z-index: 3; display: flex; flex-direction: column;
     align-items: center; gap: 8px; padding: 22px 34px; border-radius: 16px;
     background: rgba(6,4,14,0.72); border: 1px solid rgba(160,140,255,0.28);
     box-shadow: 0 10px 50px rgba(0,0,0,0.75); backdrop-filter: blur(6px); }
+  #down.open .dplate { animation: drift-in 0.7s ease-out backwards; }
   #down .p { z-index: 3; }
-  #down .dtitle { color: #f0ebff; font-size: 1.45rem; font-weight: 700; letter-spacing: 0.01em;
-    text-shadow: 0 2px 14px #000, 0 0 30px rgba(0,0,0,0.9); animation: dpulse 2.4s ease-in-out infinite; }
-  #down .dmsg { color: #cdc2ee; font-size: 0.92rem; text-shadow: 0 1px 10px #000; }
+  /* Slow shimmer sweeping across the title, PoE-login style. */
+  #down .dtitle { font-size: 1.45rem; font-weight: 700; letter-spacing: 0.01em;
+    background: linear-gradient(100deg, #f0ebff 40%, #ffd9a0 50%, #f0ebff 60%) 0 0 / 300% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 2px 6px #000); animation: dshimmer 6s ease-in-out infinite; }
+  #down .dmsg { color: #cdc2ee; font-size: 0.92rem; text-shadow: 0 1px 10px #000;
+    animation: dpulse 4.8s ease-in-out infinite; }
   @keyframes dpulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+  @keyframes dglow {
+    0%, 100% { filter: drop-shadow(0 0 26px rgba(143,123,216,0.35)) drop-shadow(0 0 60px rgba(216,169,90,0.12)); }
+    50% { filter: drop-shadow(0 0 44px rgba(143,123,216,0.6)) drop-shadow(0 0 90px rgba(216,169,90,0.28)); } }
+  @keyframes dshimmer { 0%, 55%, 100% { background-position: 100% 0; } 75% { background-position: 0 0; } }
+  @keyframes drift-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   /* drifting dust motes */
   #down .p { position: absolute; bottom: -12px; border-radius: 50%;
     background: #8f7bd8; opacity: 0; filter: blur(1px);
