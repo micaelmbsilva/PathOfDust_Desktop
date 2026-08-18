@@ -198,7 +198,12 @@ export function classScore(cls, g, level, model, tree) {
     dr: sourceStat('dr', [recklessTaken, mag('barrier') + mag('ironbark')]),
     block: sourceStat('block'),
     evasion: sourceStat('evasion'),
-    intervene: sourceStat('intervene'),
+    // Intervene is the one capped stat with a hard ceiling on the COMBINED
+    // total, not just per source (character.rs:2776, 2026-08-18 fix — two
+    // 50%-capped sources were combining to 75%). DR and block have no such
+    // ceiling and genuinely reach 93.75%+; evasion's own 95% clamp lives at
+    // the resolve_hit roll instead, applied where `taken` is computed below.
+    intervene: Math.min(0.5, sourceStat('intervene')),
   };
 
   // defensive_overflow: gear+archetype only, 1:1 into the gear layer of

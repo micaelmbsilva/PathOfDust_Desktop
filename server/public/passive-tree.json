@@ -3894,7 +3894,7 @@
    {
     "key": "echoingpower",
     "name": "Echoing Power",
-    "description": "Spell Echo's re-cast damage is increased from 50% per rank (up to 80% at 3/3).",
+    "description": "Spell Echo's re-cast damage is increased from 50% per rank (up to 95% at 3/3).",
     "parent": "spellecho",
     "tier": "modifier",
     "max": 3,
@@ -4338,7 +4338,7 @@
    {
     "key": "doom",
     "name": "Doom",
-    "description": "Curse of Weakness detonates for a burst of damage when it expires, equal to 3% of damage dealt to the cursed target per rank (up to 9% at 3/3).",
+    "description": "Curse of Weakness detonates for a burst of damage when it expires, equal to 2% of damage dealt to the cursed target per rank (up to 6% at 3/3).",
     "parent": "curse",
     "tier": "spec",
     "max": 4,
@@ -4346,8 +4346,8 @@
     "unlockAt": null,
     "effect": {
      "kind": "special",
-     "r1": 0.03,
-     "per": 0.03
+     "r1": 0.02,
+     "per": 0.02
     }
    },
    {
