@@ -34,11 +34,11 @@ jobs:
       - name: Interface manifest is coherent
         run: node .github/check-manifest.mjs
 
+      # npm test, so package.json's list is the only list — a hand-copy here
+      # let a new test file silently skip CI. Tests use only node built-ins,
+      # so no install step is needed.
       - name: Tests
-        run: |
-          node advisor-core.test.mjs
-          node scrape.test.mjs
-          node codec.test.mjs
+        run: npm test
 
   build:
     needs: verify

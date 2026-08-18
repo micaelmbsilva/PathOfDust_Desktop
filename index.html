@@ -342,12 +342,6 @@
   #settingsBody .srow { align-items: center; }
   #settingsBody .fhead { margin-bottom: 4px; }
 
-  /* saved fight log inside a Combat History entry */
-  .flog summary { cursor: pointer; font-size: 0.8rem; color: #c9bdf0; margin: 6px 0 2px; }
-  .flog summary button { background: none; border: 1px solid rgba(160,140,255,0.35); border-radius: 5px;
-    color: #c9bdf0; cursor: pointer; font-size: 0.72rem; padding: 0 5px; margin-left: 4px; }
-  .flog summary button:hover { background: rgba(120,90,255,0.25); }
-  .flog .ffeed { max-height: 180px; }
 </style>
 </head>
 <body>
@@ -1627,6 +1621,10 @@
       // Live-feed trimming only ever affects `feed`; every number above is the
       // server's own. Recorded so a reader of the file knows which is which.
       feedTrimmed: !!thinningOf(d),
+      // `feed` timestamps are evenly re-spread within their second for display
+      // pacing (see startFight) — sub-second ordering is fabricated, the
+      // second each event belongs to is real.
+      feedSmeared: true,
     };
   }
   // Opt-in disk archive (userData/fight-logs, bridge keeps newest 100). This is
@@ -1640,8 +1638,6 @@
   const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
     : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
   const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''} ago`; };
-  // Metric-tabbed leaderboard table, shared by Combat History and Live Fight
-  // (attr differs so each panel's tab clicks re-render only itself).
   // ---- ⚙️ Settings panel ----
   function renderSettings() {
     const s = S();
@@ -1821,9 +1817,6 @@
   const fightTotalMs = (durMs) => CHARGE_MS + (durMs || 0) + RESOLVE_MS;
   let fight = null, fightTimer = null;
   const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-  // Fight-log tick label: position within the compressed 6-35s replay,
-  // adaptively: ms -> s -> m:ss.
-  const fmtT = (ms) => ms < 1000 ? Math.round(ms) + 'ms' : ms < 60000 ? (ms / 1000).toFixed(1) + 's' : mmss(ms);
   function startFight(d) {
     const players = {}, names = {};
     // Per-unit HP for the Party pane's bars. The state message the party renders
@@ -2013,9 +2006,11 @@
       startPartyFrames();
     }
   }
-  // Stop only when nothing wants it any more.
+  // Each consumer stops with its own panel: the interval only drives the fight
+  // feed and the raf loop only the party bars. Requiring BOTH panels closed
+  // left the interval ticking no-ops forever when just the fight panel closed.
   function maybeStopFightTimer() {
-    if (!fightPanelOpen() && !partyPanelOpen() && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
+    if (!fightPanelOpen() && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
     if (!partyPanelOpen() && partyRaf) { cancelAnimationFrame(partyRaf); partyRaf = null; }
   }
   // mitigation suffix: only shown when meaningful (>2% of the hit) — armor,
@@ -2036,13 +2031,17 @@
   function renderFight(rebuild) {
     const body = document.getElementById('fightBody');
     if (!fight) return; // placeholder stays
-    const cursor = fightCursor();
     const over = !fightLive();
+    // Once the fight is over the whole log is known — the cursor pins to the
+    // end so the final lines (usually the killing blow, or your death) can't
+    // be stranded past it. fightLive ends at dur but maxAt can sit past dur
+    // (vitals widen it), so fightCursor alone may never reach the tail.
+    const cursor = over ? fight.maxAt : fightCursor();
     if (over && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
     let fe = body.querySelector('.ffeed');
     if (rebuild || !fe || body.dataset.fid !== String(fight.t0)) {
       body.dataset.fid = String(fight.t0);
-      body.innerHTML = `<div class="fhead"></div>${partialNote(fight.thinned)}${feedChips()}<div class="ffeed pod-feed stream"></div>`;
+      body.innerHTML = `<div class="fhead"></div>${partialNote(fight.thinned)}${feedChips()}<div class="ffeed pod-feed"></div>`;
       bindFeedChips(body, () => renderFight(true));
       fe = body.querySelector('.ffeed');
       // Catch-up is one batch, not a drip — a filter switch or a panel opened
@@ -2059,12 +2058,14 @@
     // Follow the tail only when the reader is already at it — someone scrolled
     // up reading an earlier moment stays where they are.
     const follow = fe.scrollHeight - fe.scrollTop - fe.clientHeight < 30;
-    // Drip only while the log is keeping up. A panel opened mid-fight, or a
-    // window the OS throttled to 1Hz in the background, leaves a backlog that
-    // dripping would never clear — flush it in one go instead of falling
-    // further behind the fight.
+    // Drip only while the log is keeping up. A backlog dripping would never
+    // clear — a window the OS throttled to 1Hz in the background — flushes in
+    // one go instead of falling further behind. And the render that sees the
+    // fight over is the LAST render (the timer dies above), so it must flush
+    // everything still owed: a 2-line budget there dropped the final 1-12
+    // lines of every fight, death line included.
     const backlog = fight.feed[fight.shownIdx + FEED_CATCHUP];
-    const budget = backlog && backlog.at <= cursor ? Infinity : FEED_MAX_PER_TICK;
+    const budget = over || (backlog && backlog.at <= cursor) ? Infinity : FEED_MAX_PER_TICK;
     let added = 0;
     while (added < budget && fight.shownIdx < fight.feed.length && fight.feed[fight.shownIdx].at <= cursor) {
       const [e] = PodFeed.entries([fight.feed[fight.shownIdx++]], S().feedCat);
@@ -2079,6 +2080,7 @@
       }
       if (!fe.querySelector('.fl')) fe.innerHTML = ''; // drop the "nothing yet" placeholder
       fe.insertAdjacentHTML('beforeend', PodFeed.render([e]));
+      fe.lastElementChild.classList.add('new'); // ease in — dripped lines only, never a batch
       fight.lastEntry = e;
       added++;
     }
@@ -2391,6 +2393,10 @@
     // Hot-pulled pages running against an older in-process bridge: some features
     // won't work until the app is closed and reopened. Clears itself on restart.
     if (!v.bridgeRev || v.bridgeRev < 88) showRestartBanner(); // 88: owner build dossier gate; 87: craft optgroups; 86: disenchant dust range; 85: model/wings/join/bag-cap; 84: krangle name prompt; 83: periodic interface pull; 82: version/ui split; 81: bundled-asset static fallback; 80: /fights.json summary tier; 76: /api/netstats; 75: roster/character/fights routes, repair + durability scrape, 2nd-class tree
+    // A newer interface is downloaded but the bridge is serving the bundled
+    // copy (see the bridge's `staged`) — only a relaunch switches directories.
+    // Derived on every poll, so the banner survives page reloads.
+    if (v.staged > v.ui) showRestartBanner();
     caps = v; // shell/bridge capability flags for feature gating (fightLogs)
   }).catch(() => {});
 

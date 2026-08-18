@@ -248,7 +248,13 @@
       if (dust) parts.push(`<b>${dust > 0 ? '+' : ''}${dust.toLocaleString()}</b> dust`);
       if (sand) parts.push(`<b>${sand > 0 ? '+' : ''}${sand.toLocaleString()}</b> sand`);
     }
-    const toks = (inv) => { const m = {}; for (const t of (inv.tokens || [])) { const x = String(t).match(/([A-Za-z]+)\s*[×x]\s*(\d+)/); if (x) m[x[1]] = +x[2]; } return m; };
+    // Pill text is "🎫 Scour ×3", or "🎫 Celestial Shard → Celestial Conversion ×2"
+    // for the shard tokens — the name is the part before the arrow.
+    const toks = (inv) => { const m = {}; for (const t of (inv.tokens || [])) {
+      const name = String(t).split('→')[0].replace(/[^A-Za-z ]/g, '').trim();
+      const n = String(t).match(/[×x]\s*(\d+)/);
+      if (name && n) m[name] = +n[1];
+    } return m; };
     const tb = toks(before), ta = toks(after);
     for (const name of new Set([...Object.keys(tb), ...Object.keys(ta)])) {
       const d = (ta[name] || 0) - (tb[name] || 0);
@@ -695,8 +701,8 @@
     return `✨ ${it.name} 【${slotOf(it.slot)} · ${t} · ${q}】${it.primary ? ` ${it.primary}` : ''}${mods ? `${SHARE_ARROW}${mods}` : ''}`;
   };
   // Compact payload for the extension-readable item link — shape is the
-  // "#pod-item=" contract in /item-codec.mjs (canonical copy lives in
-  // pod_chat_extension/shared/).
+  // "#pod-item=" contract in /item-codec.js (mirrored byte-for-byte in
+  // extension/shared/, enforced by codec.test.mjs).
   const compactItem = (it) => ({
     n: it.name, s: (it.slot || '').toLowerCase(), t: numTier(it) || undefined,
     q: it.sacred ? 'Sacred' : it.quality || undefined, p: it.primary || undefined,

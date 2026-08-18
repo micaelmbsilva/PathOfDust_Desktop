@@ -155,7 +155,7 @@
       `<span class="chip muted" title="Roles come from each character's class kit, read off the roster — dual-role classes (Warrior, Paladin, Druid, Monk) appear under both. Anyone whose class hasn't loaded yet is always shown. Click a column heading to sort; the choice sticks across fights and restarts.">?</span></div>`;
   }
   let lastFights = null;
-  const renderAll = () => { if (lastFights) renderSummary(lastFights); };
+  const renderAll = () => { if (lastFights) safeRender(lastFights); };
 
 
   // Same guard as load(): a bad payload must name the error on the page, not

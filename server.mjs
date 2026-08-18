@@ -4,7 +4,7 @@
 import { createServer } from 'node:http';
 import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises';
 import { exec } from 'node:child_process';
-import { dirname, extname, join } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { post, getAuthed, loginRedirect, netStats } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL, PING_KEY } from './config.mjs';
@@ -57,7 +57,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 93; // 93: hot-updates write to userData/app, never the read-only install dir
+const BRIDGE_REV = 94; // 94: staged rev in /api/version; 93: hot-updates write to userData/app, never the read-only install dir
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -243,13 +243,16 @@ export function elementalOf(stats) {
 // One gear/bag card. Shared by our own pages and other players' — the site
 // builds all four of its item-card variants from the same block, so one parser
 // covers them; the owner-only bits (id, protect, repair) just come back null.
+// `unique` reads the gear-unique affix line, NOT the gear-name-unique class:
+// the site's item_name_class picks locked > sacred > unique, so a Sacred or
+// Krangled item carrying a Celestial/Unique Shard affix never gets that class.
 const itemOf = (chunk) => {
   const grab = (cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
   return {
     name: grab('gear-name'), slot: grab('gear-slot-label'), tier: grab('gear-tier'),
     quality: grab('gear-quality'), qtip: qtipOf(chunk), primary: grab('gear-primary'),
     mods: modsOf(chunk), implicits: implicitsOf(chunk),
-    sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
+    sacred: /gear-name-sacred/.test(chunk), unique: /class="gear-unique"/.test(chunk),
     krangled: /gear-name-locked/.test(chunk),
     durability: durabilityOf(chunk),
   };
@@ -271,7 +274,7 @@ function bag(text) {
       id, name: grab('gear-name'), slot: grab('gear-slot-label'),
       quality: grab('gear-quality'), qtip: qtipOf(chunk), tier: grab('gear-tier'),
       primary: grab('gear-primary'), mods: modsOf(chunk),
-      sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
+      sacred: /gear-name-sacred/.test(chunk), unique: /class="gear-unique"/.test(chunk),
       implicits: implicitsOf(chunk),
       krangled: /gear-name-locked/.test(chunk),
       protected: /name="protect"[^>]*checked/.test(chunk),
@@ -441,7 +444,10 @@ export async function inventory() { // exported for scrape smoke-tests
     ?? (nav.match(/💰\s*([\d.KM]+)/) || [])[1] ?? '?';
   const sand = (text.match(/data-sand="(\d+)"/) || [])[1]
     ?? (nav.match(/🪵\s*([\d.KM]+)/) || [])[1] ?? '?';
-  const tokens = [...text.matchAll(/class="token-pill">([^<]*)</g)].map(m => strip(m[1]));
+  // Token pills carry a data-tip between the class and the '>' — an anchored
+  // `class="token-pill">` matched nothing and read every player as tokenless.
+  // Text: "🎫 Celestial Shard → Celestial Conversion ×2".
+  const tokens = [...text.matchAll(/class="token-pill"[^>]*>([^<]*)</g)].map(m => strip(m[1]));
   // Bag header prints "Bag (used/capacity)" — read the cap off the page rather
   // than copying INVENTORY_CAPACITY into our source, where it would silently rot.
   const bagCap = +(text.match(/<h2>Bag \((\d+)\/(\d+)\)<\/h2>/) || [])[2] || null;
@@ -456,7 +462,7 @@ export async function inventory() { // exported for scrape smoke-tests
     equipped.push({
       slot, name: grab('gear-name'), quality: grab('gear-quality'), qtip: qtipOf(chunk),
       tier: grab('gear-tier'), primary: grab('gear-primary'), mods: modsOf(chunk),
-      sacred: /gear-name-sacred/.test(chunk), unique: /gear-name-unique/.test(chunk),
+      sacred: /gear-name-sacred/.test(chunk), unique: /class="gear-unique"/.test(chunk),
       implicits: implicitsOf(chunk),
       krangled: /gear-name-locked/.test(chunk),
       durability: durabilityOf(chunk), repair: repairOf(chunk),
@@ -702,6 +708,11 @@ let pullBackoffUntil = 0;    // set on failure so a 429 isn't hammered
 // without it keeps writing next to this file.
 const rootDir = fileURLToPath(ROOT);
 const writeDir = () => globalThis.__appDir || rootDir;
+// resolve() both sides: fileURLToPath of a directory URL keeps its trailing
+// separator and path.join never has one, so a raw === between them is always
+// false under Electron — which made every successful pull claim it needed a
+// restart it didn't need.
+const servingFrom = (dir) => resolve(dir) === resolve(rootDir);
 const revOf = async (dir) => { try { return JSON.parse(await readFile(join(dir, 'version.json'), 'utf8')).version || 0; } catch { return 0; } };
 async function pullInterface(opts = {}) {
   if (pulling) return pulling;
@@ -717,7 +728,8 @@ async function pullInterface(opts = {}) {
       const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' }, signal: AbortSignal.timeout(15000) }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
       const cur = await appVersion();                 // what this bridge is SERVING
       const dir = writeDir();
-      const staged = dir === rootDir ? cur : await revOf(dir); // what's waiting for a restart
+      const same = servingFrom(dir);
+      const staged = same ? cur : await revOf(dir); // what's waiting for a restart
       const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
       const base = `https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}`;
       const manifest = JSON.parse(await g(`${base}/version.json`));
@@ -739,10 +751,10 @@ async function pullInterface(opts = {}) {
         await writeFile(dest, t);
       }
       await writeFile(join(dir, 'version.json'), JSON.stringify(manifest));
-      console.log(`interface updated -> ${manifest.version}${dir === rootDir ? '' : ' (staged in ' + dir + ', needs a restart)'}`);
+      console.log(`interface updated -> ${manifest.version}${same ? '' : ' (staged in ' + dir + ', needs a restart)'}`);
       // A page reload only shows the new files when they landed in the directory
       // being served; otherwise the shell has to relaunch to pick that directory.
-      return { updated: true, version: manifest.version, needsRestart: dir !== rootDir };
+      return { updated: true, version: manifest.version, needsRestart: !same };
     } catch (e) {
       // Back off, but not equally for every failure. A 429 means we are the
       // problem and should stay away for a long while. Anything else — a 404
@@ -825,8 +837,14 @@ const srv = createServer(async (req, res) => {
       // Old shells without global.__version fall back to the bare revision.
       const [maj, min, patch] = (globalThis.__version || '').split('.').map(Number);
       const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${min || 0}${patch ? '.' + patch : ''}` : String(webRev);
+      // `staged`: a newer interface already downloaded to userData/app but not
+      // being served (bridge running from the bundled install dir). Reported on
+      // every poll so the UI's restart banner survives reloads — the pull
+      // response alone carried it exactly once and the auto pulls discard it.
+      const staged = globalThis.__appDir && !servingFrom(globalThis.__appDir) ? await revOf(globalThis.__appDir) : 0;
       return json(res, { version, ui: webRev, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV,
-        fightLogs: !!globalThis.__fightLogsDir }); // shell capability — old main.cjs never sets the dir
+        fightLogs: !!globalThis.__fightLogsDir, // shell capability — old main.cjs never sets the dir
+        ...(staged > webRev ? { staged } : {}) });
     }
     if (url.pathname === '/api/update-status') return json(res, globalThis.__update || {}); // electron-updater state
     if (url.pathname === '/api/apply-update' && req.method === 'POST') {

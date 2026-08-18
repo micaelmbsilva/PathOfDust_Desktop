@@ -1,5 +1,5 @@
-// Personal combat-feed renderer, shared by the Live Fight panel, Combat
-// History, the pop-out log, and Fight History.
+// Personal combat-feed renderer for the Live Fight panel, plus shared
+// helpers (fmtN, roles, buff table) used by Fight History.
 //
 // The feed is already reduced to "things involving you" when it's built (see
 // startFight in index.html): only events where you are the attacker, target,
@@ -21,12 +21,12 @@
   .pod-feed .fl.buffgain { color: #c792ea; }
   .pod-feed .fl.bufflost { color: #8a7fb0; }
   .pod-feed .fl .mit { color: #8a7fb0; font-size: 0.92em; }
-  /* Live panels add .stream: lines are appended one at a time there, so each
-     one eases in instead of the block appearing at once. A batch view (history,
-     a saved log) renders everything in one go and gets no animation. */
-  .pod-feed.stream .fl { animation: pod-fl-in 150ms ease-out; }
+  /* A live panel marks each line it appends with .new so it eases in. Per-line,
+     not per-container: a container-level class would replay the animation on a
+     whole catch-up batch (panel opened mid-fight) at once. */
+  .pod-feed .fl.new { animation: pod-fl-in 150ms ease-out; }
   @keyframes pod-fl-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
-  @media (prefers-reduced-motion: reduce) { .pod-feed.stream .fl { animation: none; } }`;
+  @media (prefers-reduced-motion: reduce) { .pod-feed .fl.new { animation: none; } }`;
   if (!document.getElementById('pod-feed-css')) {
     const s = document.createElement('style');
     s.id = 'pod-feed-css';
@@ -170,10 +170,9 @@
   // repeat, which flickers.
   const render = (es) => es.map(l =>
     `<div class="fl ${l.kind}"><span class="ft">${fmtT(l.at)}</span>${l.txt}${l.n > 1 ? ` <b class="fn">×${l.n}</b>` : ''}</div>`).join('');
-  const lines = (groups, cat) => render(entries(groups, cat));
 
   const bindChips = (root, onPick) => root.querySelectorAll('[data-fcat]').forEach(el =>
     el.onclick = () => onPick(el.dataset.fcat));
 
-  window.PodFeed = { lines, entries, render, folds, chips, bindChips, fmtT, fmtN, buff, KIND_ICON, ROLE_ICON, CLASS_ROLES, rolesOf };
+  window.PodFeed = { entries, render, folds, chips, bindChips, fmtT, fmtN, buff, KIND_ICON, ROLE_ICON, CLASS_ROLES, rolesOf };
 })();
