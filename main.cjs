@@ -245,6 +245,10 @@ async function start() {
   // everything as text, so images live here and only here (see the bridge's
   // static fallback).
   global.__bundledDir = __dirname;
+  // Where the bridge's own hot-update writes must land. NOT wherever it happens
+  // to be running from: `dir` above is the install directory whenever the
+  // bundled revision is the newer one, and that is read-only on Windows.
+  global.__appDir = path.join(app.getPath('userData'), 'app');
   // Operator secret for /broadcast and /feedback-recent — the real auth for
   // those, never shipped in the client (H3). Only the operator has it: set env
   // POD_OWNER_KEY, or drop the key into userData/operator-key. Absent for

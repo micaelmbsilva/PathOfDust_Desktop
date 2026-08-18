@@ -4,7 +4,8 @@
 import { createServer } from 'node:http';
 import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises';
 import { exec } from 'node:child_process';
-import { extname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { post, getAuthed, loginRedirect, netStats } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL, PING_KEY } from './config.mjs';
 
@@ -56,7 +57,7 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 92;
+const BRIDGE_REV = 93; // 93: hot-updates write to userData/app, never the read-only install dir
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -690,6 +691,18 @@ export const safeFile = (f) => typeof f === 'string' && f.length > 0 && f.length
 
 let pulling = null;          // in-flight guard — concurrent callers share one pull
 let pullBackoffUntil = 0;    // set on failure so a 429 isn't hammered
+// Where a pull WRITES, which is not necessarily where this file is running
+// from. main.cjs loads whichever of (bundled install, userData/app) has the
+// higher revision, so the moment a shipped installer's bundled revision
+// overtakes the hot-updated copy, the bridge runs out of the install directory
+// — read-only on Windows (Program Files). Writing there fails with EPERM on
+// every attempt, which is exactly how an app sat on the revision its installer
+// shipped with and reported "Interface check failed" forever. Hot-updates
+// always belong in userData/app; main.cjs hands us the path, and a dev run
+// without it keeps writing next to this file.
+const rootDir = fileURLToPath(ROOT);
+const writeDir = () => globalThis.__appDir || rootDir;
+const revOf = async (dir) => { try { return JSON.parse(await readFile(join(dir, 'version.json'), 'utf8')).version || 0; } catch { return 0; } };
 async function pullInterface(opts = {}) {
   if (pulling) return pulling;
   // The backoff exists so the automatic 30-min loop doesn't hammer a rate limit.
@@ -702,11 +715,16 @@ async function pullInterface(opts = {}) {
       // 15s timeout so a stalled request can't leave `pulling` set forever,
       // which would wedge every later pull (manual and auto) for the session.
       const g = async (u, j) => { const r = await fetch(u, { headers: { 'User-Agent': 'PathOfDust' }, signal: AbortSignal.timeout(15000) }); if (!r.ok) throw new Error(r.status); return j ? r.json() : r.text(); };
-      const cur = await appVersion();
+      const cur = await appVersion();                 // what this bridge is SERVING
+      const dir = writeDir();
+      const staged = dir === rootDir ? cur : await revOf(dir); // what's waiting for a restart
       const sha = (await g('https://api.github.com/repos/micaelmbsilva/PathOfDust_Desktop/commits/main', true)).sha;
       const base = `https://raw.githubusercontent.com/micaelmbsilva/PathOfDust_Desktop/${sha}`;
       const manifest = JSON.parse(await g(`${base}/version.json`));
-      if (manifest.version <= cur) return { updated: false, version: cur };
+      // Already downloaded but not yet loaded (we write somewhere the running
+      // bridge doesn't serve from) — say so instead of re-downloading it every
+      // 30 minutes until someone restarts.
+      if (manifest.version <= Math.max(cur, staged)) return { updated: false, version: cur, needsRestart: staged > cur };
       // The manifest is attacker-controlled if `main` is ever compromised. A
       // filename is interpolated straight into the write path, so a `../` or
       // absolute entry could write outside the app dir (Startup persistence,
@@ -715,10 +733,16 @@ async function pullInterface(opts = {}) {
         throw new Error('unsafe manifest file path');
       }
       const files = await Promise.all(manifest.files.map(f => g(`${base}/${f}`).then(t => [f, t]))); // all fetched before writing
-      for (const [f, t] of files) await writeFile(new URL('./' + f, import.meta.url), t);
-      await writeFile(new URL('./version.json', import.meta.url), JSON.stringify(manifest));
-      console.log(`interface updated -> ${manifest.version}`);
-      return { updated: true, version: manifest.version };
+      for (const [f, t] of files) {
+        const dest = join(dir, f);
+        await mkdir(dirname(dest), { recursive: true }); // the manifest lists subdir files (extension/)
+        await writeFile(dest, t);
+      }
+      await writeFile(join(dir, 'version.json'), JSON.stringify(manifest));
+      console.log(`interface updated -> ${manifest.version}${dir === rootDir ? '' : ' (staged in ' + dir + ', needs a restart)'}`);
+      // A page reload only shows the new files when they landed in the directory
+      // being served; otherwise the shell has to relaunch to pick that directory.
+      return { updated: true, version: manifest.version, needsRestart: dir !== rootDir };
     } catch (e) {
       // Back off, but not equally for every failure. A 429 means we are the
       // problem and should stay away for a long while. Anything else — a 404

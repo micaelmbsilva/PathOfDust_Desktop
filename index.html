@@ -2518,6 +2518,9 @@
   async function pullInterface(manual) {
     try {
       const r = await fetch('/api/pull-interface', { method: 'POST' }).then(x => x.json());
+      // Files that landed somewhere this bridge isn't serving from (see the
+      // bridge's writeDir) need the shell to relaunch, not a page reload.
+      if (r.needsRestart) { showRestartBanner(); return true; }
       if (r.updated) { location.reload(); return true; }
       if (manual && r.error) infoToast('Interface check failed');
     } catch {}
