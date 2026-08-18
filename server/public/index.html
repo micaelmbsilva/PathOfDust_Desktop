@@ -911,8 +911,15 @@ async function advisor(name) {
       const n = ptree && ptree.classes && arr(ptree.classes[cls]).find(x => x.key === key);
       return n ? n.name : key;
     };
+    // Order the allocation the way a player must BUY it: a Skill before its
+    // Specialization, a Spec (to 4) before its Modifier. bestTree emits nodes in
+    // greedy-rate order, so sort by prereq depth (parent-chain length) — parents
+    // land strictly before their children. Stable sort keeps the greedy priority
+    // among same-depth siblings.
+    const byKey = new Map(arr(ptree && ptree.classes && ptree.classes[best && best.cls]).map(n => [n.key, n]));
+    const prereqDepth = (k) => { let d = 0, n = byKey.get(k); while (n && n.parent) { d++; n = byKey.get(n.parent); } return d; };
     const target = new Map(best && best.tree
-      ? Object.entries(best.tree.alloc).map(([k, r]) => [nodeName(best.cls, k), r])
+      ? Object.entries(best.tree.alloc).sort((a, z) => prereqDepth(a[0]) - prereqDepth(z[0])).map(([k, r]) => [nodeName(best.cls, k), r])
       : core.trimOrder(arr(best && best.build.order), budget).map(o => [str(o.n), +o.r]));
     const toGet = [...target].filter(([n, tr]) => (alloc.get(n) || 0) < tr).map(([n, tr]) => `${n} ${alloc.get(n) || 0}→${tr}`);
     const toDrop = [...alloc].filter(([n]) => !target.has(n)).map(([n, tr]) => `${n} ${tr}`);
