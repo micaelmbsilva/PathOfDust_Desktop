@@ -919,7 +919,7 @@
 
   // ---- app settings: one JSON blob merged over defaults; knobs apply live ----
   const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
-    lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true,
+    lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true, passiveRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
     logToDisk: true, feedCat: 'all' };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
@@ -1653,6 +1653,7 @@
       row('Auto-Dismiss Loot Toasts', sel('lootTtl', [[0, 'Never'], [10, '10s'], [30, '30s'], [60, '60s']])) +
       row('Battle Results', chks([['battleWins', 'Wins'], ['battleLosses', 'Losses']]), 'The battle-end toast with the dust/sand readout.') +
       row('Reforge Reminder', chk('reforgeRemind'), 'The hourly ⚒️ Reforge Gear Ready toast.') +
+      row('Passive Points Reminder', chk('passiveRemind'), 'The 🌳 toast when you have unspent passive tree points. Snoozable.') +
       `<div class="fhead" style="margin-top:10px">🖥️ Display</div>` +
       row('Show Next-Battle ETA', chk('showEta'), 'Countdown estimated from recent battle cadence.') +
       row('Operator Broadcasts', chk('showBroadcasts'), 'Announcements from the app operator. Restart and update warnings always show.') +
@@ -1695,6 +1696,7 @@
     document.querySelectorAll('#settingsBody [data-set]').forEach(el => el.onchange = () => {
       setS(el.dataset.set, el.type === 'checkbox' ? el.checked : (/^\d+$/.test(el.value) ? +el.value : el.value));
       rerenderIfOpen('party', renderParty); // role classification reads the latest report
+      if (el.dataset.set === 'passiveRemind') reconcilePassives(); // apply now, not on next poll
       renderSettings(); // refresh counts (keeps focus loss acceptable — selects just changed)
     });
     // two-click confirm, same pattern as the loot toast's Disenchant
@@ -2297,6 +2299,7 @@
   }
   document.getElementById('dismissAll').onclick = () => {
     if (document.querySelector('#toasts .toast.reforge')) reforgeDismissed = true; // count as a reforge dismissal too
+    if (document.querySelector('#toasts .toast.passive')) LS.set('passiveSnoozeUntil', Date.now() + PASSIVE_DISMISS_MIN * 60000); // else it re-shows next poll
     document.querySelectorAll('#toasts .toast').forEach(t => t.remove());
     updateDismissAll();
   };
@@ -2375,6 +2378,43 @@
     if (rf && rf.available) { if (!cur && !reforgeDismissed) showReforge(rf); }
     else { reforgeDismissed = false; if (cur) { cur.remove(); updateDismissAll(); } } // window over — arm the next one
   }
+
+  // ---- Unspent passive-points reminder. Points only change on level-up/respec,
+  // so a slow /api/passives poll is plenty. Snooze buttons (and Dismiss = a long
+  // snooze) write a timestamp to LS so it survives page reloads. Muted in settings.
+  const PASSIVE_DISMISS_MIN = 1440; // "Dismiss" = a full-day snooze, distinct from the 12h button
+  function showPassives(n) {
+    document.querySelectorAll('.toast.passive').forEach(t => t.remove());
+    const el = document.createElement('div');
+    el.className = 'toast passive';
+    el.dataset.n = n; // so reconcilePassives can tell when the count changed
+    el.innerHTML = `
+      <div class="th"><span class="tn">🌳 Unspent Passive Points</span></div>
+      <div class="tmods"><span>You have <strong>${n}</strong> unallocated passive point${n > 1 ? 's' : ''} to spend.</span></div>
+      <div class="tacts">
+        <button data-min="10">10m</button>
+        <button data-min="30">30m</button>
+        <button data-min="60">1h</button>
+        <button data-min="720">12h</button>
+        <button data-min="${PASSIVE_DISMISS_MIN}">Dismiss</button>
+      </div>`;
+    el.querySelectorAll('[data-min]').forEach(b => b.onclick = () => {
+      LS.set('passiveSnoozeUntil', Date.now() + (+b.dataset.min) * 60000);
+      el.remove(); updateDismissAll();
+    });
+    document.getElementById('dismissAll').after(el); updateDismissAll();
+  }
+  async function reconcilePassives() {
+    const cur = document.querySelector('.toast.passive');
+    if (!S().passiveRemind) { if (cur) { cur.remove(); updateDismissAll(); } return; } // muted
+    if (Date.now() < LS.get('passiveSnoozeUntil', 0)) return; // snoozed — skip the fetch too
+    let n = 0;
+    try { n = parseInt((await fetch('/api/passives', { cache: 'no-store' }).then(r => r.json())).points) || 0; }
+    catch { return; } // "3/40 unspent" -> 3; Commoner (no chip) -> NaN -> 0
+    if (n > 0) { if (!cur || +cur.dataset.n !== n) showPassives(n); } // (re)show, or refresh a stale count
+    else if (cur) { cur.remove(); updateDismissAll(); } // spent them — clear a stale toast
+  }
+  reconcilePassives(); setInterval(reconcilePassives, 120000);
 
   wirePanel('stats', 'statsbar', 'toggle', 'lay.stats'); // stats shares the panel shell (no close button — always open)
 
