@@ -89,7 +89,7 @@
     color: #8a7fb0; padding: 5px 7px 2px; }
   .ipreview { position: fixed; z-index: 3100; width: 250px; pointer-events: none;
     filter: drop-shadow(0 6px 16px rgba(0,0,0,0.65)); }
-  .ipreview .acts, .craftpick .acts { display: none; }
+  .ipreview .acts { display: none; }
   /* selected item(s) card above the craft form */
   .craftpick { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25);
     border-radius: 10px; padding: 10px; margin-bottom: 10px; }
@@ -523,7 +523,7 @@
       .map(itemForOption).filter(Boolean);
     $('craftPick').innerHTML = !items.length ? '' :
       `<div class="craftpick"><div class="craftpick-h">Crafting</div>
-        <div class="grid">${items.map(it => itemCard(it, '')).join('')}</div></div>`;
+        <div class="grid">${items.map(it => itemCard(it, disBtn(it) + ' ' + shareBtn(it))).join('')}</div></div>`;
   }
 
   // ---- persisted checkbox state ----
@@ -688,10 +688,15 @@
     f: { ...(it.sacred ? { sa: 1 } : {}), ...(it.unique ? { un: 1 } : {}), ...(it.krangled ? { kr: 1 } : {}) },
   });
   const shareBtn = (it) => `<button data-share="${esc(shareText(it))}" data-sjson="${esc(JSON.stringify(compactItem(it)))}" title="Copy for chat">Share</button>`;
+  // Bag items only — equipped gear carries no item_id, and the site offers no
+  // disenchant for it either.
+  const disBtn = (it) => it.id
+    ? `<button class="danger" data-dis="${it.id}" data-name="${esc(it.name)}"${it.dust ? ` data-dmin="${it.dust.min}" data-dmax="${it.dust.max}"` : ''}>Disenchant</button>`
+    : '';
   const bagCard = (it) => itemCard(it,
     `<button data-eq="${it.id}">Equip</button>
      <button data-lock="${it.id}">${it.protected ? 'Unlock' : '🔒 Lock'}</button>
-     <button class="danger" data-dis="${it.id}" data-name="${esc(it.name)}"${it.dust ? ` data-dmin="${it.dust.min}" data-dmax="${it.dust.max}"` : ''}>Disenchant</button>
+     ${disBtn(it)}
      ${repairBtn(it)} ${shareBtn(it)}`);
   function renderBag() {
     const items = [...lastBag];
