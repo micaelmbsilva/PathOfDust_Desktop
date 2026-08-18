@@ -717,8 +717,12 @@ function buildCards(archetype, builds) {
 // the player's actual gear mods and recommends what to play. No nav links to it.
 const ROLL_KW = { 'Block': ['block'], 'Evasion': ['evasion'], 'Attack Speed': ['attack speed'],
   'Crit Chance': ['crit chance'], 'Increased Crit Dmg Dealt': ['crit dmg'], 'Increased Dmg Dealt': ['dmg dealt'],
-  'Max HP': ['max hp'], 'Healing Power': ['healing power'], 'Splash': ['splash'], 'Intervene': ['intervene'],
-  'Lingering Effect': ['lingering'], 'Leech': ['leech'], 'Reduced Dmg Taken': ['dmg taken reduction', 'reduced dmg'] };
+  'Max HP': ['max hp'], 'Splash': ['splash'], 'Intervene': ['intervene'],
+  'Lingering Effect': ['lingering'], 'Leech': ['leech'], 'Reduced Dmg Taken': ['dmg taken reduction', 'reduced dmg'],
+  // The Healing Power affix was retired on 2026-08-15 (reworked into Lingering
+  // Effect) — heal power now comes from the Divine Damage self-buff loop.
+  'Divine Damage': ['divine damage'], 'Cold Damage': ['cold damage'], 'Fire Damage': ['fire damage'],
+  'Lightning Damage': ['lightning damage'], 'Chaos Damage': ['chaos damage'] };
 const rankNum = (r) => +(String(r == null ? '' : r).match(/^\d+/) || [0])[0];
 const OP_W = { high: 3, medium: 1.5, low: 0.5 }; // watchlist impact → advisor score weight
 
@@ -730,10 +734,13 @@ async function advisor(name) {
   // Investigation findings steer the pick: an OP interaction this player's gear
   // already supports counts for more than one they would have to build toward.
   const watch = watchR.ok ? arr((await watchR.json()).interactions) : [];
-  const [r, { builds, passives }, ratesR, gearR, core, model] = await Promise.all([
+  const [r, { builds, passives }, ratesR, gearR, core, model, ptree] = await Promise.all([
     fetch('api/build/' + encodeURIComponent(name)), staticData(), ownerFetch('api/affix-rates'),
     ownerFetch('api/advisor-gear/' + encodeURIComponent(name)),
-    import('./advisor-core.mjs'), fetch('game-model.json').then(q => q.json())]);
+    import('./advisor-core.mjs'), fetch('game-model.json').then(q => q.json()),
+    // Machine-readable tree magnitudes, generated from src/passive_tree.rs —
+    // the prose in passives.json can't be scored against.
+    fetch('passive-tree.json').then(q => q.json()).catch(() => null)]);
   if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
   const b = await r.json();
   const bag = gearR.ok ? arr((await gearR.json()).bag) : [];
@@ -798,26 +805,42 @@ async function advisor(name) {
       .filter(([cls]) => !role || rolesOf(cls, passives).includes(role))
       .map(([cls, cb]) => {
         const build = arr(cb.builds)[0];
-        const loadout = core.bestLoadout(arr(b.equipped), bag, cls, lvl, model);
-        const cs = core.classScore(cls, loadout.buckets, lvl, model);
+        // Score each class at the tree it would actually be played with, not
+        // at zero investment — the tree is a full multiplicative layer on
+        // every stat, so a treeless comparison ranks classes wrong.
+        const nodes = ptree && ptree.classes && ptree.classes[cls];
+        const loadout = core.bestLoadout(arr(b.equipped), bag, cls, lvl, model, nodes && { nodes, alloc: {} });
+        const tr = nodes
+          ? { nodes, alloc: core.bestTree(cls, nodes, loadout.buckets, lvl, model, core.pointsForLevel(lvl)).alloc }
+          : null;
+        const cs = core.classScore(cls, loadout.buckets, lvl, model, tr);
         const ops = watch.filter(i => arr(i.classes).map(str).includes(cls));
         let bonus = 0;
         ops.forEach(i => {
           const w = arr(i.rolls).reduce((s, r) => s + matchWeight(ROLL_KW[r] || [str(r).toLowerCase()], 0), 0);
           bonus += (OP_W[str(i.impact)] || 0.5) * (arr(i.rolls).length ? Math.min(1, w) : 0.25);
         });
-        return { cls, build, raw: cs.score, cs, loadout, bonus, ops };
+        return { cls, build, raw: cs.score, cs, loadout, bonus, ops, tree: tr };
       }).filter(x => x.build);
     const maxRaw = Math.max(1, ...ranked.map(x => x.raw));
     ranked.forEach(x => { x.score = Math.round((100 * x.raw / maxRaw + x.bonus) * 10) / 10; });
     ranked.sort((a, z) => z.score - a.score);
     const best = ranked[0];
 
-    // Passive respec plan vs the pick's tree order, cut to the point budget
-    const budget = 1 + Math.floor(lvl / 4);
+    // Passive respec plan, cut to the point budget. The target is the tree
+    // the score itself was computed at (solved node-by-node against this
+    // player's real gear), falling back to builds.json's curated order when
+    // passive-tree.json isn't available.
+    const budget = core.pointsForLevel(lvl);
     const alloc = new Map(arr(b.passives && b.passives.nodes).filter(n => rankNum(n.rank) > 0)
       .map(n => [str(n.name), rankNum(n.rank)]));
-    const target = new Map(core.trimOrder(arr(best && best.build.order), budget).map(o => [str(o.n), +o.r]));
+    const nodeName = (cls, key) => {
+      const n = ptree && ptree.classes && arr(ptree.classes[cls]).find(x => x.key === key);
+      return n ? n.name : key;
+    };
+    const target = new Map(best && best.tree
+      ? Object.entries(best.tree.alloc).map(([k, r]) => [nodeName(best.cls, k), r])
+      : core.trimOrder(arr(best && best.build.order), budget).map(o => [str(o.n), +o.r]));
     const toGet = [...target].filter(([n, tr]) => (alloc.get(n) || 0) < tr).map(([n, tr]) => `${n} ${alloc.get(n) || 0}→${tr}`);
     const toDrop = [...alloc].filter(([n]) => !target.has(n)).map(([n, tr]) => `${n} ${tr}`);
 
@@ -835,7 +858,7 @@ async function advisor(name) {
       let pick = null, ps = -1;
       const others = arr(best ? best.loadout.items : []).filter(it => slotOf(it) !== k);
       for (const c of cands) {
-        const s = core.classScore(best.cls, core.sumBuckets(others.concat([c]).map(i => core.parseItem(i, model))), lvl, model).score;
+        const s = core.classScore(best.cls, core.sumBuckets(others.concat([c]).map(i => core.parseItem(i, model))), lvl, model, best.tree).score;
         if (s > ps) { ps = s; pick = c; }
       }
       return pick;
@@ -853,7 +876,7 @@ async function advisor(name) {
       const cb = craftBase(k);
       return [k, cb ? tnum(cb.it) : (wornBySlot[k] ? tnum(wornBySlot[k]) : 1)];
     }));
-    const targets = best ? core.rollTargets(best.cls, lvl, planTiers, model, best.loadout.buckets, empirical) : null;
+    const targets = best ? core.rollTargets(best.cls, lvl, planTiers, model, best.loadout.buckets, empirical, best.tree) : null;
     const fmtAvg = (p) => `+${fmt(p.avg * 100)}%`; // plan targets the % variants only
 
     // Per-item crafting advice against the derived plan. Krangled items are

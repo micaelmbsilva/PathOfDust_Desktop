@@ -2,8 +2,8 @@
 // math it mirrors (PathofDust source cites in server/public/game-model.json).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseMod, parseItem, sumBuckets, classScore, bestLoadout, rollTargets, trimOrder, emptyBuckets }
-  from './server/public/advisor-core.mjs';
+import { parseMod, parseItem, sumBuckets, classScore, bestLoadout, rollTargets, trimOrder, emptyBuckets,
+  treeLayer, bestTree, pointsForLevel } from './server/public/advisor-core.mjs';
 
 const model = JSON.parse(readFileSync(new URL('./server/public/game-model.json', import.meta.url)));
 
@@ -121,6 +121,61 @@ assert.deepEqual(trimOrder(order, 6), [{ n: 'A', r: 3 }, { n: 'B', r: 3 }]);
   const h = r.plan.helm.find(pk => pk.match === 'dmg dealt');
   if (w && h) assert.ok(Math.abs(w.avg / h.avg - 2) < 1e-9, `weapon ${w.avg} vs helm ${h.avg}`);
   assert.ok(r.sacred.avg > 0);
+}
+
+
+// ---- passive tree layer (passive-tree.json, generated from passive_tree.rs) --
+const tree = JSON.parse(readFileSync(new URL('./server/public/passive-tree.json', import.meta.url)));
+const warrior = tree.classes.Warrior;
+
+assert.equal(pointsForLevel(0), 1);
+assert.equal(pointsForLevel(119), 30);
+
+// FlatStat pooling + Colossus's cross-node special case: Juggernaut 3/3 is
+// 24% max hp, Colossus 3/3 doubles it (adds another 24%).
+{
+  const t = treeLayer(warrior, { juggernaut: 3, colossus: 3 }, {}, model);
+  assert.ok(Math.abs(t.get('incLife') - 0.48) < 1e-9, `incLife ${t.get('incLife')}`);
+  // A spec's 4th point unlocks children only — it must not grow the stat.
+  const t4 = treeLayer(warrior, { juggernaut: 3, colossus: 4 }, {}, model);
+  assert.ok(Math.abs(t4.get('incLife') - 0.48) < 1e-9);
+}
+
+// OverflowConversion draws on COMBINED gear+tree overflow and is hard-capped
+// at 0.10 per invested rank (OVERFLOW_CONVERSION_CAP_PER_RANK).
+{
+  const t = treeLayer(warrior, { bulwark: 3, unbreakable: 3 }, { block: 5.0 }, model);
+  assert.ok(Math.abs(t.get('inc') - 0.30) < 1e-9, `unbreakable capped at 0.30, got ${t.get('inc')}`);
+  const none = treeLayer(warrior, { unbreakable: 3 }, { block: 0.5 }, model);
+  assert.equal(none.get('inc'), 0); // nothing past the 75% cap to convert
+}
+
+// Sources combine multiplicatively, never additively: gear 90% (capped 75%)
+// and tree 90% (capped 75%) land at 93.75%, not 100%.
+{
+  const g = { ...emptyBuckets(), dr: 0.90 };
+  const s = classScore('Commoner', g, 0, model, { nodes: warrior, alloc: { fortress: 3 } });
+  // gear caps at 75%; Fortress 3/3 adds a 6% tree source on top: 1-(0.25)(0.94)
+  assert.ok(Math.abs(s.detail.eff.dr - 0.765) < 1e-9, `dr ${s.detail.eff.dr}`);
+  const both = classScore('Commoner', g, 0, model,
+    { nodes: [{ key: 'x', name: 'x', parent: null, tier: 'skill', max: 3, magnitudeCap: 3, unlockAt: null,
+      effect: { kind: 'flatStat', r1: 0.90, per: 0, stat: 'DamageReduction' } }], alloc: { x: 1 } });
+  assert.ok(Math.abs(both.detail.eff.dr - 0.9375) < 1e-9, `dr ${both.detail.eff.dr}`);
+}
+
+// bestTree: never overspends, and only reaches a Modifier by paying its
+// Specialization to 4/4 first (manager.rs's unlock gate).
+{
+  const g = { ...emptyBuckets(), block: 4.0 };
+  const r = bestTree('Warrior', warrior, g, 119, model, 30);
+  assert.ok(r.spent <= 30, `spent ${r.spent}`);
+  assert.ok(Object.values(r.alloc).reduce((a, b) => a + b, 0) === r.spent);
+  for (const [key, rank] of Object.entries(r.alloc)) {
+    const n = warrior.find((x) => x.key === key);
+    assert.ok(rank <= n.max, `${key} over max rank`);
+    if (n.parent) assert.ok((r.alloc[n.parent] || 0) >= (n.unlockAt || 1), `${key} allocated without its parent gate`);
+  }
+  assert.ok(bestTree('Warrior', warrior, g, 119, model, 0).spent === 0);
 }
 
 console.log('advisor-core tests passed');

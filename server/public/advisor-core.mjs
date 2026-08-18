@@ -2,17 +2,33 @@
 // source math (see game-model.json's src cites). Pure functions, no DOM, so
 // node can test it directly. Ruleset: ≤4 crafted mods per item + 1 Sacred,
 // no uniques/shards, no krangle/crit-bonus extras.
-// ponytail: passive-tree magnitudes are prose-only in passives.json, so the
-// tree layer is not modeled — class deltas from tree engines ride on the
-// watchlist bonus. Upgrade path: machine-readable node magnitudes.
+//
+// The passive tree IS modeled now (passive-tree.json, generated from
+// src/passive_tree.rs): every FlatStat node, every OverflowConversion node,
+// and the bespoke Special nodes that the character sheet's own combat_*
+// getters read by key. Special nodes that only exist inside simulate_battle
+// (procs, stacking buffs, shields, reflects, party broadcasts) are out of
+// scope for a closed-form score — see UNMODELED_NOTE.
 
 const BUCKETS = ['dr', 'block', 'evasion', 'intervene', 'inc', 'critChance', 'critMult',
   'splash', 'linger', 'leech', 'incLife', 'flatLife',
   'elemCold', 'elemFire', 'elemLightning', 'elemDivine', 'elemChaos'];
 const ELEMS = ['elemCold', 'elemFire', 'elemLightning', 'elemDivine', 'elemChaos'];
 
+export const UNMODELED_NOTE = 'Per-fight mechanics (Frenzy/Twin Strikes multi-strike, shields, '
+  + 'reflects, stacking speed/damage buffs, marks and curses, Retaliation counters, Bloodpact, '
+  + 'FlickerStrike) are real in combat but not in this closed-form score — treat them as upside.';
+
+// Rust PassiveStat → the bucket name used here.
+const TREE_STAT = {
+  DamageReduction: 'dr', BlockChance: 'block', Evasion: 'evasion', IntervenePct: 'intervene',
+  IncreasedDamage: 'inc', CritChance: 'critChance', CritMultiplier: 'critMult', Splash: 'splash',
+  HealPowerPct: 'healPower', LifeLeechPct: 'leech', AttackSpeed: 'attackSpeed', MaxHpPct: 'incLife',
+};
+const OVERFLOW_CAP = { dr: 0.75, block: 0.75, evasion: 0.75, intervene: 0.5 };
+
 export function emptyBuckets() {
-  const b = { attackSpeed: 0, weaponPower: 0, bodyPower: 0, unparsed: 0 };
+  const b = { attackSpeed: 0, weaponPower: 0, bodyPower: 0, helmPower: 0, helmCooldownMs: 0, unparsed: 0 };
   for (const k of BUCKETS) b[k] = 0;
   return b;
 }
@@ -60,13 +76,24 @@ export function parseItem(item, model) {
   if (/glove/.test(slot)) out.attackSpeed = /%/.test(primary) ? pv / 100 : pv;
   else if (/weapon/.test(slot)) out.weaponPower = pv;
   else if (/body/.test(slot)) out.bodyPower = pv;
+  else if (/helm/.test(slot)) {
+    // Helm power is dps-per-stack, gained every cooldown_ms (character.rs
+    // helm_skill) — the cooldown curve is tier-driven, so derive it here.
+    out.helmPower = pv;
+    const c = model.rules.cooldownCurves.helm;
+    out.helmCooldownMs = Math.max(c.floorMs, c.baseMs - out.tier * c.perTierMs);
+  }
   return out;
 }
 
 export function sumBuckets(items) {
   const total = emptyBuckets();
   for (const it of items) {
-    for (const k of Object.keys(total)) total[k] += it[k] || 0;
+    for (const k of Object.keys(total)) {
+      // Cooldown is a rate, not a quantity — the last helm seen wins.
+      if (k === 'helmCooldownMs') total[k] = it[k] || total[k];
+      else total[k] += it[k] || 0;
+    }
   }
   return total;
 }
@@ -81,26 +108,124 @@ function archBonus(cls, level, model) {
   return b;
 }
 
+// magnitude_at_rank (passive_tree.rs): a Specialization's 4th point only
+// unlocks its children, it never grows the node's own stat.
+function nodeMagnitude(node, rank) {
+  if (!node || !rank) return 0;
+  const e = node.effect;
+  if (!e || e.kind === 'none') return 0;
+  return e.r1 + e.per * (Math.min(rank, node.magnitudeCap) - 1);
+}
+
+// The tree's own two layers for one allocation: `flat` (pooled FlatStat
+// nodes, plus Warrior's Colossus special-case) and `over` (OverflowConversion
+// nodes, each drawing on COMBINED gear+tree overflow and hard-capped at
+// 0.10 per invested rank). `gearRaw` is the gear+archetype raw value per
+// capped stat, pre-cap. Mirrors Character::passive_bonus /
+// passive_overflow_bonus.
+export function treeLayer(nodes, alloc, gearRaw, model) {
+  const flat = {}, over = {}, mag = {};
+  const byKey = new Map((nodes || []).map(n => [n.key, n]));
+  for (const [key, rank] of Object.entries(alloc || {})) {
+    const n = byKey.get(key);
+    if (!n || !rank) continue;
+    mag[key] = nodeMagnitude(n, rank);
+    if (n.effect.kind === 'flatStat') {
+      const b = TREE_STAT[n.effect.stat];
+      if (b) flat[b] = (flat[b] || 0) + mag[key];
+    }
+  }
+  // Colossus multiplies Juggernaut's own max-hp bonus rather than adding a
+  // flat number — the one cross-node lookup in the whole tree.
+  const juggColossus = (mag.juggernaut || 0) * (mag.colossus || 0);
+  if (juggColossus) flat.incLife = (flat.incLife || 0) + juggColossus;
+
+  for (const [key, rank] of Object.entries(alloc || {})) {
+    const n = byKey.get(key);
+    if (!n || !rank || n.effect.kind !== 'overflowConversion') continue;
+    const inB = TREE_STAT[n.effect.input], outB = TREE_STAT[n.effect.output];
+    const cap = OVERFLOW_CAP[inB];
+    if (cap == null || !outB) continue;
+    const combined = (gearRaw[inB] || 0) + (flat[inB] || 0);
+    const spill = Math.max(0, combined - cap);
+    const raw = spill * mag[key];
+    over[outB] = (over[outB] || 0) + Math.min(raw, model.rules.overflowConversionCapPerRank * rank);
+  }
+  return { flat, over, mag, juggColossus, get: (b) => (flat[b] || 0) + (over[b] || 0) };
+}
+
+// combine_reduction_sources (character.rs:794) — independent mitigation
+// sources stack multiplicatively, never additively.
+const combineSources = (sources) =>
+  1 - sources.reduce((p, s) => p * (1 - Math.min(1, Math.max(-0.75, s))), 1);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// Berserker's Reckless Swing / Death Wish: two rank-matched step functions
+// each (combat.rs:3118-3150), not one linear formula.
+const RECKLESS_DEALT = [0, 0.15, 0.25, 0.35], RECKLESS_TAKEN = [0, 0.08, 0.13, 0.18];
+const DEATHWISH_DEALT = [0, 0.10, 0.20, 0.30], DEATHWISH_TAKEN = [0, 0.05, 0.10, 0.15];
+const step = (table, rank) => table[Math.min(rank || 0, 3)];
+
 // Closed-form power evaluation for one class over aggregated gear buckets at
 // the player's level. Mirrors the game formulas cited in game-model.json.
-export function classScore(cls, g, level, model) {
+// `tree` is optional: { nodes: passive-tree.json classes[cls], alloc: {key: rank} }.
+export function classScore(cls, g, level, model, tree) {
   const R = model.rules, B = archBonus(cls, level, model);
   const role = R.roles[B.role];
 
-  // Capped defenses; the spill feeds increased damage 1:1 (defensive_overflow).
-  const caps = { dr: [g.dr + (B.dr || 0), 0.75], block: [g.block + (B.block || 0), 0.75],
-    evasion: [g.evasion + (B.evasion || 0), 0.75], intervene: [g.intervene + (B.intervene || 0), 0.5] };
-  let overflow = 0; const eff = {};
-  for (const [k, [raw, cap]] of Object.entries(caps)) {
-    eff[k] = Math.min(raw, cap);
-    overflow += Math.max(0, raw - cap) * R.overflowToInc;
+  // Gear+archetype raw totals for the 4 capped stats — one SOURCE, before
+  // its own cap and before the tree's separate source is combined in.
+  const gearRaw = { dr: g.dr + (B.dr || 0), block: g.block + (B.block || 0),
+    evasion: g.evasion + (B.evasion || 0), intervene: g.intervene + (B.intervene || 0) };
+  const T = treeLayer(tree && tree.nodes, tree && tree.alloc, gearRaw, model);
+  const rank = (k) => ((tree && tree.alloc && tree.alloc[k]) || 0);
+  const mag = (k) => T.mag[k] || 0;
+
+  // Each of the 4 capped stats: gear+archetype capped on its own, the tree
+  // capped on its own, then combined multiplicatively (plus any bespoke
+  // extra source). Gear alone tops out at 75%; gear+tree reaches 93.75%.
+  const cap = R.capsPerSource;
+  const sourceStat = (b, extra = []) => combineSources([
+    clamp(gearRaw[b], cap[b][0], cap[b][1]),
+    clamp(T.get(b), cap[b][0], cap[b][1]),
+    ...extra,
+  ]);
+  // Reckless Swing/Death Wish's "taken" half is a NEGATIVE source; Reckless
+  // Abandon offsets it. Druid's Thorned Barrier + Ironbark is its own source.
+  const recklessTaken = -Math.max(0, step(RECKLESS_TAKEN, rank('reckless'))
+    + step(DEATHWISH_TAKEN, rank('deathwish')) - mag('recklessabandon'));
+  const eff = {
+    dr: sourceStat('dr', [recklessTaken, mag('barrier') + mag('ironbark')]),
+    block: sourceStat('block'),
+    evasion: sourceStat('evasion'),
+    intervene: sourceStat('intervene'),
+  };
+
+  // defensive_overflow: gear+archetype only, 1:1 into the gear layer of
+  // increased damage. (The tree's OverflowConversion nodes draw again off the
+  // same raw spill — deliberate, see game-model.json's overflow cite.)
+  let overflow = 0;
+  for (const b of ['dr', 'block', 'evasion', 'intervene']) {
+    overflow += Math.max(0, gearRaw[b] - cap[b][1]) * R.overflowToInc;
   }
 
   const elemTotal = ELEMS.reduce((s, e) => s + g[e], 0);
-  const inc = g.inc + (B.inc || 0) + overflow + elemTotal;
+  // Every bespoke conversion is its own multiplicative layer, not a term in
+  // the tree's additive pool (character.rs combat_increased_damage).
+  const layers = [
+    1 + g.inc + (B.inc || 0) + overflow + elemTotal,
+    1 + T.get('inc'),
+    1 + T.juggColossus * mag('titansgrip'),
+    1 + Math.max(0, eff.dr) * (mag('overwhelmingforce') + mag('grimresolve')),
+    1 + Math.max(0, eff.block) * mag('momentousblow'),
+    1 + step(RECKLESS_DEALT, rank('reckless')),
+    1 + step(DEATHWISH_DEALT, rank('deathwish')) + mag('gloryhound'),
+    1 + mag('lifetap') * (2 + mag('soulexchange')),
+  ];
+  const inc = Math.max(-0.9, layers.reduce((a, b) => a * b, 1) - 1);
 
-  const cc = R.critBase + g.critChance + (B.critChance || 0);
-  const cm = R.critMultBase + g.critMult + (B.critMult || 0);
+  const cc = (R.critBase + g.critChance + (B.critChance || 0)) * (1 + T.get('critChance') + mag('deadeye'));
+  const cm = Math.max(1, (R.critMultBase + g.critMult + (B.critMult || 0)) * (1 + T.get('critMult')));
   // Overcrit saturating curve (combat.rs crit_stack_bonus): first stack pays
   // the flat rate, stacks past it run through A*x/(x+h). Real stacks are
   // floor(cc) or floor(cc)+1, so the exact EV is the two-point mixture of the
@@ -114,51 +239,126 @@ export function classScore(cls, g, level, model) {
   const critF = 1 + (1 - ccRem) * stackBonus(ccFloor) + ccRem * stackBonus(ccFloor + 1);
 
   const procF = 1 + ELEMS.reduce((s, e) => s + (g[e] / R.elemProcDivisor) * (model.proxies.elemProcValue[e] || 0.5), 0);
-  const aoeF = 1 + (g.splash + (B.splash || 0)) * model.proxies.splashWeight;
-  const lingerF = 1 + g.linger * model.proxies.lingerWeight; // total DoT = unmitigated hit × linger%
+  // Splash: each extra target takes min(splash, 1) of the hit, and crossing
+  // 100% buys 2 more targets (apply_splash) — a step, not a linear ramp.
+  const splash = Math.max(0, (1 + g.splash + (B.splash || 0)) * (1 + T.get('splash')) * (1 + mag('primalforce')) - 1);
+  const splashTargets = Math.min(model.proxies.splashExpectedTargets,
+    R.splashMaxTargets + (splash > 1 ? R.splashOverflowBonusTargets : 0));
+  const aoeF = 1 + Math.min(splash, 1) * splashTargets * model.proxies.splashWeight;
 
-  // Cadence: gear/archetype speed layer, then the heal-power-excess divisor.
-  // Healer divine self-buff loop (uncapped stacks, 1%/stack, 4s) solved by
-  // fixed-point iteration — converges in a few rounds.
-  const as = g.attackSpeed + (B.attackSpeed || 0);
+  // Cadence: gear/archetype and tree speed are independent multiplicative
+  // layers, then the heal-power-excess divisor (widened by Wild Surge +
+  // Overgrowth). Healer divine self-buff loop (uncapped stacks, 1%/stack, 4s)
+  // solved by fixed-point iteration — converges in a few rounds.
+  const speedMult = (1 + g.attackSpeed + (B.attackSpeed || 0)) * (1 + T.get('attackSpeed'));
+  const wildSurge = mag('wildsurge') + mag('overgrowth');
   // Heal-function classes get a 0.5 baseline; others rely on the archetype
-  // bonus alone (combat_heal_power, character.rs:2831-2837 — Paladin's is real).
-  let healPower = (B.role === 'heal' ? R.healBase : 0) + (B.healPower || 0);
-  let interval = role.intervalMs / (1 + as);
-  if (B.role === 'heal' && g.elemDivine > 0) {
+  // bonus alone (combat_heal_power — Paladin's is real). Gear grants none.
+  const healBaseline = (B.role === 'heal' ? R.healBase : 0) + (B.healPower || 0);
+  const healOf = (divineStacks) => Math.max(0, (1 + healBaseline + divineStacks * R.divineHealBuffPerStack)
+    * (1 + T.get('healPower')) * (1 + mag('regrowth')) * (1 + mag('bloomingfield')) - 1);
+  const intervalOf = (hp) => Math.max(R.attackIntervalFloorMs,
+    role.intervalMs / Math.max(0.01, speedMult) / (1 + Math.max(0, hp - 1) * (1 + wildSurge)));
+  let healPower = healOf(0);
+  let interval = intervalOf(healPower);
+  // The divine self-buff fires from apply_heal, so anyone who heals at all
+  // gets it — Paladin included, not just the two Heal-function archetypes.
+  if (healPower > 0 && g.elemDivine > 0) {
     for (let i = 0; i < 6; i++) {
-      const stacksAlive = Math.floor(g.elemDivine) * (R.elemProcDurationMs / Math.max(R.attackIntervalFloorMs, interval));
-      healPower = R.healBase + (B.healPower || 0) + stacksAlive * R.divineHealBuffPerStack;
-      interval = role.intervalMs / (1 + as) / (1 + Math.max(0, healPower - 1));
+      const stacksAlive = Math.floor(g.elemDivine) * (R.elemProcDurationMs / interval);
+      healPower = healOf(stacksAlive);
+      interval = intervalOf(healPower);
     }
-  } else {
-    interval = interval / (1 + Math.max(0, healPower - 1));
   }
-  interval = Math.max(R.attackIntervalFloorMs, interval);
   const rate = 1000 / interval;
 
   const baseHit = role.mult * (R.baseAtk[0] + R.baseAtk[1] * level) + role.flat + g.weaponPower;
-  const dps = baseHit * (1 + inc) * critF * procF * aoeF * lingerF * rate;
+  // The helm's stacking dps buff averaged over a 30s fight (half the stacks
+  // it would reach by the end) — combat_total_output_per_sec.
+  const helm = g.helmPower > 0 && g.helmCooldownMs > 0
+    ? g.helmPower * (R.assumedFightDurationMs / g.helmCooldownMs) / 2 : 0;
+  const lingerPct = g.linger + mag('evergrowth') * healPower;
+  const lingerF = 1 + lingerPct * model.proxies.lingerWeight; // total DoT = unmitigated hit × linger%
+  const output = (baseHit * rate + helm) * (1 + inc) * critF * procF * aoeF * lingerF;
+  const dps = output * Math.max(0, 1 - healPower);
+  const hps = output * clamp(healPower, 0, 1);
 
-  const hp = (R.baseHp[0] + R.baseHp[1] * level + g.flatLife + g.bodyPower) * (1 + g.incLife + (B.incLife || 0));
-  const taken = (1 - eff.dr) * (1 - eff.block * R.blockDamageReduction) * (1 - eff.evasion);
-  const leechHps = Math.min((g.leech + (B.leech || 0)) * dps, R.leechCapPerSec * hp);
+  const hp = (R.baseHp[0] + R.baseHp[1] * level + g.flatLife + g.bodyPower)
+    * (1 + g.incLife + (B.incLife || 0)) * (1 + T.get('incLife'));
+  // Second Skin overrides the flat 50% a block takes off a hit.
+  const blockReduction = mag('secondskin') || R.blockDamageReduction;
+  const taken = (1 - Math.min(0.95, eff.evasion)) * (1 - eff.dr) * (1 - eff.block * blockReduction);
+  const leech = Math.max(0, (1 + g.leech + (B.leech || 0)) * (1 + T.get('leech')) - 1);
+  const leechHps = Math.min(leech * dps, R.leechCapPerSec * hp);
   const ehp = hp / Math.max(0.01, taken) + leechHps * model.proxies.leechSeconds;
 
-  return { score: dps * Math.sqrt(ehp), dps, ehp, overflow, healPower, interval,
-    detail: { inc, cc, cm, eff, unparsed: g.unparsed } };
+  // Healing is converted damage, so a healer's output is real party value —
+  // score it alongside dps rather than reading as zero damage.
+  return { score: (dps + hps) * Math.sqrt(ehp), dps, hps, ehp, hp, overflow, healPower, interval, splash, leech,
+    detail: { inc, cc, cm, eff, taken, lingerPct, helm, unparsed: g.unparsed } };
+}
+
+// Points a level has earned (passive_tree.rs points_for_level).
+export const pointsForLevel = (lv) => 1 + Math.floor(Math.max(0, +lv || 0) / 4);
+
+// Ranks that must be bought before `key` is legal at all: a Specialization
+// needs its Skill parent at 1, a Modifier needs its Specialization parent at
+// 4 (manager.rs preview_allocate_passive).
+function prereqs(byKey, alloc, key, want) {
+  const need = new Map();
+  const walk = (k, rank) => {
+    const n = byKey.get(k);
+    if (!n) return;
+    const have = need.get(k) ?? alloc[k] ?? 0;
+    if (have >= rank) return;
+    need.set(k, rank);
+    if (n.parent) walk(n.parent, byKey.get(n.parent).tier === 'spec' ? (n.unlockAt || 1) : 1);
+  };
+  walk(key, want);
+  return need;
+}
+
+// Best tree allocation for `points` under `objective`. Greedy over BUNDLES
+// ("take node X to rank r, buying whatever prerequisite ranks that needs")
+// rather than single ranks — a Specialization's 4th point grows nothing on
+// its own, so a rank-at-a-time greedy could never reach any Modifier.
+export function bestTree(cls, nodes, g, level, model, points, objective = (s) => s.score) {
+  const byKey = new Map((nodes || []).map(n => [n.key, n]));
+  const alloc = {};
+  let left = points, base = objective(classScore(cls, g, level, model, { nodes, alloc }));
+  while (left > 0) {
+    let pick = null;
+    for (const n of nodes || []) {
+      if (n.effect.kind === 'none') continue; // allocatable, but does nothing yet
+      for (let want = (alloc[n.key] || 0) + 1; want <= n.max; want++) {
+        const need = prereqs(byKey, alloc, n.key, want);
+        let cost = 0;
+        for (const [k, r] of need) cost += r - (alloc[k] || 0);
+        if (cost <= 0 || cost > left) continue;
+        const trial = { ...alloc };
+        for (const [k, r] of need) trial[k] = r;
+        const gain = objective(classScore(cls, g, level, model, { nodes, alloc: trial })) - base;
+        if (gain > 0 && (!pick || gain / cost > pick.rate)) pick = { trial, cost, gain, rate: gain / cost };
+      }
+    }
+    if (!pick) break;
+    Object.assign(alloc, pick.trial);
+    base += pick.gain;
+    left -= pick.cost;
+  }
+  return { alloc, spent: points - left, value: base };
 }
 
 // Greedy bag-swap: for each bag item, take it over the equipped piece in its
 // slot when the class score improves. Returns chosen items + swap advice.
-export function bestLoadout(equipped, bag, cls, level, model) {
+export function bestLoadout(equipped, bag, cls, level, model, tree) {
   const chosen = new Map(); // slot → {item, parsed}
   for (const it of equipped || []) {
     const slot = String(it.slot || '').toLowerCase();
     chosen.set(slot, { item: it, parsed: parseItem(it, model) });
   }
   const swaps = [];
-  const score = () => classScore(cls, sumBuckets([...chosen.values()].map(c => c.parsed)), level, model).score;
+  const score = () => classScore(cls, sumBuckets([...chosen.values()].map(c => c.parsed)), level, model, tree).score;
   let cur = score();
   for (const it of bag || []) {
     if (it && it.unique) continue; // excluded ruleset
@@ -180,7 +380,7 @@ export function bestLoadout(equipped, bag, cls, level, model) {
 // base item actually being crafted on (mods roll at ITEM tier). `empirical`
 // (from api/affix-rates) overrides a model perTier when they disagree by
 // >20% — covers a live balance-toml override.
-export function rollTargets(cls, level, tier, model, baseBuckets, empirical) {
+export function rollTargets(cls, level, tier, model, baseBuckets, empirical, tree, objective = (s) => s.score) {
   const tierOf = (s) => (tier && typeof tier === 'object') ? (+tier[s] || 1) : (+tier || 1);
   const perTier = (a) => {
     const emp = empirical && empirical[a.match];
@@ -190,10 +390,10 @@ export function rollTargets(cls, level, tier, model, baseBuckets, empirical) {
   const slots = ['weapon', 'helm', 'body', 'gloves', 'boots'];
   const plan = Object.fromEntries(slots.map(s => [s, []]));
   const gain = (a, t, mult) => { // % variant targeted when crafting (flat max hp shares its label)
-    const before = classScore(cls, g, level, model).score;
+    const before = objective(classScore(cls, g, level, model, tree));
     const v = perTier(a) * t * (mult || 1);
     g[a.bucket] += v;
-    const after = classScore(cls, g, level, model).score;
+    const after = objective(classScore(cls, g, level, model, tree));
     g[a.bucket] -= v;
     return after - before;
   };

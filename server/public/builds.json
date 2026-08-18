@@ -1,5 +1,5 @@
 {
- "note": "Curated from the full passive trees (game wiki, re-reviewed). Numbers quote max-rank values. Point budget: 1 + floor(level/4); orders sum to 23 (the lv-91 cap). Skills cost 3, specializations 4 (4th point reveals modifiers), modifiers 3.",
+ "note": "Curated from the passive trees, re-checked 2026-08-18 against the PathofDust Rust source (passive-tree.json is generated from src/passive_tree.rs). Numbers quote max-rank values. Point budget: 1 + floor(level/4) (passive_tree.rs points_for_level) — 23 points at level 88, 30 at 119. Skills cost 3, specializations 4 (the 4th point reveals modifiers but does not grow the spec's own stat), modifiers 3. Gear no longer rolls Healing Power: that affix was reworked into Lingering Effect on 2026-08-15, and heal power now comes only from archetype, passive tree, and the Divine Damage self-buff loop.",
  "classes": {
   "Warrior": {
    "builds": [
@@ -279,9 +279,9 @@
      ],
      "rolls": [
       {
-       "s": "Healing Power",
+       "s": "Divine Damage",
        "top": true,
-       "why": "Multiplies the heals AND the Holy Fire damage they become — double-dips everything"
+       "why": "Gear stopped granting Healing Power entirely (the affix was reworked into Lingering Effect on 2026-08-15) — Divine Damage is the replacement lever: every heal you land rolls floor(divine%) GUARANTEED self-buff stacks, 1% heal power each for 4s, uncapped, and the roll is flat increased damage on top. Weapon/helm only"
       },
       {
        "s": "Max HP",
@@ -512,9 +512,9 @@
      ],
      "rolls": [
       {
-       "s": "Healing Power",
+       "s": "Divine Damage",
        "top": true,
-       "why": "Three tree channels multiply it; overheal becomes shields instead of waste"
+       "why": "Gear no longer rolls Healing Power at all (retired 2026-08-15) — Divine Damage feeds the self-buff loop instead: floor(divine%) guaranteed 1%-heal-power stacks per heal, uncapped, which drives heal power past 100% and divides your action interval down to the 50ms floor. Weapon/helm only"
       },
       {
        "s": "Max HP",
@@ -571,9 +571,9 @@
      ],
      "rolls": [
       {
-       "s": "Healing Power",
+       "s": "Divine Damage",
        "top": true,
-       "why": "The flywheel: bigger heals, faster actions, more Lingering, more shields — all one stat"
+       "why": "Gear Healing Power is gone (retired 2026-08-15); Divine Damage is how you buy it now — floor(divine%) guaranteed self-buff stacks per heal, uncapped. That heal power then feeds Evergrowth (9% of it becomes Lingering Effect at 3/3) and divides your interval to the 50ms floor. Weapon/helm only"
       },
       {
        "s": "Lingering Effect",
