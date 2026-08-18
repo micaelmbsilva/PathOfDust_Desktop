@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseMod, parseItem, sumBuckets, classScore, bestLoadout, rollTargets, trimOrder, emptyBuckets,
-  treeLayer, bestTree, pointsForLevel } from './server/public/advisor-core.mjs';
+  treeLayer, bestTree, pointsForLevel, searchBuild } from './server/public/advisor-core.mjs';
 
 const model = JSON.parse(readFileSync(new URL('./server/public/game-model.json', import.meta.url)));
 
@@ -176,6 +176,20 @@ assert.equal(pointsForLevel(119), 30);
     if (n.parent) assert.ok((r.alloc[n.parent] || 0) >= (n.unlockAt || 1), `${key} allocated without its parent gate`);
   }
   assert.ok(bestTree('Warrior', warrior, g, 119, model, 0).spent === 0);
+}
+
+// searchBuild: require forces an affix in, ban keeps it out, a clean run drops
+// nothing. (The whole gear+tree search tools/best-builds.mjs and #/explorer run.)
+{
+  const nodes = tree.classes.Warrior;
+  const base = searchBuild('Warrior', nodes, 119, 119, model);
+  assert.ok(base.score.dps > 0 && (base.dropped || []).length === 0);
+  const picksOf = (r) => [].concat(...Object.values(r.gear.picks), r.gear.sacred || []);
+  const req = searchBuild('Warrior', nodes, 119, 119, model, { require: ['dmg dealt'] });
+  assert.ok(picksOf(req).includes('dmg dealt'), 'required affix not placed');
+  assert.equal(req.dropped.length, 0);
+  const banned = searchBuild('Warrior', nodes, 119, 119, model, { ban: ['dmg dealt'] });
+  assert.ok(!picksOf(banned).includes('dmg dealt'), 'banned affix appeared');
 }
 
 console.log('advisor-core tests passed');

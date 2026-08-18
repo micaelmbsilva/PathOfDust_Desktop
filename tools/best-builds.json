@@ -690,7 +690,7 @@
      "dr": 0.925,
      "block": 0.75,
      "evasion": 0.75,
-     "intervene": 0.52
+     "intervene": 0.5
     },
     "taken": 0.011718749999999993,
     "healPower": 6.45,
@@ -1754,7 +1754,7 @@
      "dr": 0.925,
      "block": 0.75,
      "evasion": 0.75,
-     "intervene": 0.52
+     "intervene": 0.5
     },
     "taken": 0.011718749999999993,
     "healPower": 12.05,

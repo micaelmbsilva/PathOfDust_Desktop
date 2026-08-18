@@ -428,6 +428,107 @@ export function rollTargets(cls, level, tier, model, baseBuckets, empirical, tre
   return { plan, sacred };
 }
 
+// Best reachable build for one class under the modeled ruleset (5 Perfect
+// items, 4 crafted mods each + 1 Sacred, no uniques/krangle), jointly
+// optimizing gear affixes and the passive tree for `objective`. Pure — the
+// same math the site scores players with. Mirrors tools/best-builds.mjs, which
+// now calls this. Constraints (opts):
+//   require: [affix.match | affix.label ...] forced into gear, one copy each
+//   ban:     [affix.match ...] never rolled (gear or Sacred)
+//   objective: score selector, default s => s.score
+export function searchBuild(cls, nodes, level, tier, model, opts = {}) {
+  const R = model.rules;
+  const objective = opts.objective || ((s) => s.score);
+  const points = pointsForLevel(level);
+  const require = opts.require || [];
+  const ban = new Set(opts.ban || []);
+  const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
+  // A Perfect item: primary = base × tier × 1.2 (roll) × 1.2 (Perfect); every
+  // affix = perTier × tier × 1.15 (max jitter) × 1.2 (Perfect) — the same 1.38×
+  // a Sacred implicit gets.
+  const PRIMARY = (slot) => R.slotBasePower[slot] * tier * R.powerRollRange[1] * R.perfectMult;
+  const AFFIX = (a) => a.perTier * tier * R.affixJitter[1] * R.perfectMult;
+  // "max hp" is two Rust affixes sharing a label (IncreasedLife %, FlatLife
+  // raw) — split so the flat variant is pickable. Then drop banned affixes.
+  const CHOICES = model.affixes.flatMap((a) => a.flatBucket
+    ? [{ ...a, label: a.match + ' %' }, { match: a.match, label: a.match + ' flat', bucket: a.flatBucket, perTier: a.flatPerTier, slots: a.slots }]
+    : [{ ...a, label: a.match }])
+    .filter((a) => !ban.has(a.match) && !ban.has(a.label));
+  const eligible = (slot) => CHOICES.filter((a) => !a.slots || a.slots.includes(slot));
+  // Required affixes, resolved once and ordered most-constrained-first (fewest
+  // eligible slots) so a scarce elemental slot isn't eaten by an unrestricted
+  // requirement placed earlier. Unresolvable names are dropped here silently;
+  // ones that resolve but can't fit are reported via `dropped` below.
+  const reqAffixes = require
+    .map((req) => CHOICES.find((c) => c.label === req || c.match === req))
+    .filter(Boolean)
+    .sort((a, b) => (a.slots ? a.slots.length : SLOTS.length) - (b.slots ? b.slots.length : SLOTS.length));
+
+  const baseGear = () => {
+    const g = emptyBuckets();
+    g.weaponPower = PRIMARY('weapon'); g.bodyPower = PRIMARY('body');
+    g.attackSpeed = PRIMARY('gloves'); g.helmPower = PRIMARY('helm');
+    const c = R.cooldownCurves.helm;
+    g.helmCooldownMs = Math.max(c.floorMs, c.baseMs - tier * c.perTierMs);
+    return g;
+  };
+
+  // Greedy fill of the 20 crafted slots (4 × 5 items) + 1 Sacred for one
+  // objective, given a fixed tree. Required affixes are placed first.
+  function bestGear(alloc) {
+    const g = baseGear();
+    const left = Object.fromEntries(SLOTS.map((s) => [s, R.modCap]));
+    const picks = Object.fromEntries(SLOTS.map((s) => [s, []]));
+    const t = { nodes, alloc };
+    const value = () => objective(classScore(cls, g, level, model, t));
+    // Force required affixes — one copy each into an eligible slot with room.
+    // Elemental affixes only fit weapon/helm; a requirement with no room left
+    // is recorded in `dropped` so the caller can warn instead of failing quiet.
+    const dropped = [];
+    for (const a of reqAffixes) {
+      const slot = SLOTS.find((s) => left[s] > 0 && eligible(s).includes(a));
+      if (!slot) { dropped.push(a.label); continue; }
+      g[a.bucket] += AFFIX(a); picks[slot].push(a.label); left[slot]--;
+    }
+    let cur = value();
+    for (let n = 0; n < SLOTS.length * R.modCap; n++) {
+      let pick = null;
+      for (const slot of SLOTS) {
+        if (!left[slot]) continue;
+        for (const a of eligible(slot)) {
+          const v = AFFIX(a);
+          g[a.bucket] += v; const gain = value() - cur; g[a.bucket] -= v;
+          if (gain > 0 && (!pick || gain > pick.gain)) pick = { slot, a, v, gain };
+        }
+      }
+      if (!pick) break;
+      g[pick.a.bucket] += pick.v; picks[pick.slot].push(pick.a.label); left[pick.slot]--; cur += pick.gain;
+    }
+    // The one Sacred: any affix, any slot, same 1.38× value, may duplicate.
+    let sac = null;
+    for (const a of CHOICES) {
+      const v = AFFIX(a);
+      g[a.bucket] += v; const gain = value() - cur; g[a.bucket] -= v;
+      if (!sac || gain > sac.gain) sac = { a, v, gain };
+    }
+    if (sac) g[sac.a.bucket] += sac.v;
+    return { g, picks, sacred: sac ? sac.a.label : null, dropped };
+  }
+
+  // Gear and tree each change what the other is worth (overflow conversions,
+  // Titan's Grip, the divine heal loop), so alternate until it settles.
+  let alloc = {}, gear = bestGear(alloc);
+  for (let i = 0; i < 4; i++) {
+    const t = bestTree(cls, nodes, gear.g, level, model, points, objective);
+    const next = bestGear(t.alloc);
+    const settled = objective(classScore(cls, next.g, level, model, { nodes, alloc: t.alloc }))
+      <= objective(classScore(cls, gear.g, level, model, { nodes, alloc })) * 1.0001;
+    alloc = t.alloc; gear = next;
+    if (settled) break;
+  }
+  return { cls, alloc, gear, score: classScore(cls, gear.g, level, model, { nodes, alloc }), dropped: gear.dropped };
+}
+
 // Passive order trimmed to the level's point budget (1 + floor(level/4)).
 export function trimOrder(order, points) {
   const out = [];

@@ -850,6 +850,7 @@ async function advisor(name) {
   }
 
   let role = null; // null = auto; 'dps' | 'tank' | 'healer'
+  let pinned = null; // a class name forces the whole plan onto it, not the top pick
   function render() {
     // Source-grounded scoring: evaluate each class's closed-form power
     // (game-model.json cites the PathofDust formulas) over the best loadout
@@ -881,7 +882,10 @@ async function advisor(name) {
     const maxRaw = Math.max(1, ...ranked.map(x => x.raw));
     ranked.forEach(x => { x.score = Math.round((100 * x.raw / maxRaw + x.bonus) * 10) / 10; });
     ranked.sort((a, z) => z.score - a.score);
-    const best = ranked[0];
+    // Pinning forces the plan onto a chosen class even if it isn't the top
+    // pick — "what would Kibukah do to play Paladin". Every downstream section
+    // (passives, craft plan, worklist) reads `best`, so this is all it takes.
+    const best = (pinned && ranked.find(x => x.cls === pinned)) || ranked[0];
 
     // Passive respec plan, cut to the point budget. The target is the tree
     // the score itself was computed at (solved node-by-node against this
@@ -962,16 +966,24 @@ async function advisor(name) {
 
     const roleChip = (rv, label) => {
       const e = el('span', { class: 'chip' + (role === rv ? ' on' : '') }, label);
-      e.onclick = () => { role = rv; render(); };
+      e.onclick = () => { role = rv; pinned = null; render(); };
       return e;
     };
+    // Click any class to pin the plan to it; clearing the role filter so the
+    // pinned class is always in range.
+    const classChip = (x) => {
+      const e = el('span', { class: 'chip' + (x.cls === best.cls ? ' on' : '') }, `${x.cls} · ${x.score}`);
+      e.onclick = () => { pinned = x.cls; role = null; render(); };
+      return e;
+    };
+    const resetChip = () => { const e = el('span', { class: 'chip' }, '↺ best'); e.onclick = () => { pinned = null; render(); }; return e; };
     view(
       el('h1', null, 'Advisor'),
       el('p', { class: 'sub' }, `${str(b.name)} · ${str(b.archetype)} Lv ${str(b.level)} — full-loadout suggestions from live data.`),
       el('div', { class: 'chips', style: 'margin:0 0 14px' },
         'Role: ', roleChip(null, 'Auto'), roleChip('dps', '🗡️ DPS'), roleChip('tank', '🛡️ Tank'), roleChip('healer', '🩹 Healer')),
       !best ? el('p', { class: 'status' }, 'No builds for this role.') : el('div', { class: 'card' },
-        el('div', { class: 'bname' }, `Play ${best.cls} — ${str(best.build.name)}`),
+        el('div', { class: 'bname' }, `${pinned ? 'Switch to' : 'Play'} ${best.cls} — ${str(best.build.name)}`),
         el('div', { class: 'btag' }, `score ${best.score} · ≈${fmt(best.cs.dps)} dps · ≈${fmt(best.cs.ehp)} ehp · ${fmt(best.cs.interval)}ms cadence`
           + (best.loadout.buckets.unparsed ? ` · ${best.loadout.buckets.unparsed} unrecognized mod(s) ignored` : '')),
         el('p', null, str(best.build.why)),
@@ -987,8 +999,9 @@ async function advisor(name) {
             i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
             arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
           el('p', null, str(i.text)))))] : null,
-      best && ranked.length > 1 ? el('div', { class: 'chips', style: 'margin:10px 0 0' }, ranked.slice(1, 4).map(x =>
-        el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(x.cls) }, `${x.cls} · ${x.score}`))) : null,
+      best && ranked.length > 1 ? el('div', { class: 'chips', style: 'margin:10px 0 0', title: 'Click a class to plan for it instead' },
+        el('span', { class: 'sub' }, pinned ? 'Pinned — plan for:' : 'Or plan for:'),
+        pinned ? resetChip() : null, ranked.map(classChip)) : null,
       best ? [
         el('h2', null, 'Passives plan'),
         el('div', { class: 'card' },
@@ -1119,7 +1132,7 @@ async function classView(archetype) {
     el('p', null, el('a', { href: '#/' }, '← Ladder')),
     el('h1', null, str(archetype)),
     el('p', { class: 'sub' }, c
-      ? `${role ? str(role) + ' · ' : ''}what ${c.players} tracked player${c.players === 1 ? '' : 's'} run · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`
+      ? `${role ? str(role) + ' · ' : ''}${c.players} tracked player${c.players === 1 ? '' : 's'}${c.total ? ` · ${Math.round(100 * c.players / c.total)}% of the ${c.total} on the ladder` : ''} · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`
       : `${role ? str(role) + ' · ' : ''}no tracked players yet`),
     buildCards(archetype, builds),
     treeSection(archetype, passives, builds, layout),
@@ -1134,6 +1147,83 @@ async function classView(archetype) {
         label: m.mod, count: m.players, num: pct(m.players),
       })), 'var(--series-2)'))] : null,
     null); // item names are flavor text — no per-slot section
+}
+
+// Public route: #/explorer — class-FIRST build search. Pick a class + level +
+// tier + objective + required/banned affixes; searchBuild returns the best
+// reachable build under the modeled ruleset. Pure model+tree math, no player
+// data, so no owner gate. Same engine tools/best-builds.mjs runs in batch.
+async function explorer() {
+  const [core, model, ptree] = await Promise.all([
+    import('./advisor-core.mjs'),
+    fetch('game-model.json').then(r => r.json()),
+    fetch('passive-tree.json').then(r => r.ok ? r.json() : null).catch(() => null),
+  ]);
+  if (!ptree || !ptree.classes) { view(el('h1', null, 'Build explorer'), el('p', { class: 'status' }, 'Passive tree data unavailable.')); return; }
+  const classes = Object.keys(model.archetypes).filter(c => arr(ptree.classes[c]).length);
+  const OBJ = { overall: s => s.score, damage: s => s.dps, tank: s => s.ehp, healing: s => s.hps };
+  const affixes = model.affixes.map(a => a.match);
+  const nodeName = (cls, key) => (arr(ptree.classes[cls]).find(n => n.key === key) || {}).name || key;
+  const pct = x => (x * 100).toFixed(1) + '%';
+  const sci = x => Number(x).toExponential(2);
+
+  const st = { cls: classes[0], level: 119, tier: 119, obj: 'overall', require: new Set(), ban: new Set() };
+  const lvl = x => { const n = Math.floor(+x); return n >= 1 ? n : 1; }; // model wants integer ≥ 1
+
+  function render() {
+    const nodes = ptree.classes[st.cls];
+    const r = core.searchBuild(st.cls, nodes, lvl(st.level), lvl(st.tier), model,
+      { objective: OBJ[st.obj], require: [...st.require], ban: [...st.ban] });
+    const s = r.score, d = s.detail;
+
+    const sel = el('select');
+    classes.forEach(c => sel.append(el('option', { value: c }, c)));
+    sel.value = st.cls; sel.onchange = () => { st.cls = sel.value; render(); };
+    // onchange (fires on blur/Enter), not oninput: render() rebuilds the whole
+    // view, so a per-keystroke rebuild would steal focus mid-type and re-run the
+    // full gear+tree search on every digit.
+    const numIn = (val, set) => { const i = el('input', { type: 'number', min: '1', value: val, style: 'width:5em' }); i.onchange = () => { set(i.value); render(); }; return i; };
+    const objChip = (k) => { const e = el('span', { class: 'chip' + (st.obj === k ? ' on' : '') }, k); e.onclick = () => { st.obj = k; render(); }; return e; };
+    // One affix chip toggles its own set; requiring clears a ban and vice-versa
+    // (an affix can't be both forced in and forbidden).
+    const affChip = (a, set, other) => { const e = el('span', { class: 'chip' + (set.has(a) ? ' on' : '') }, a);
+      e.onclick = () => { if (set.has(a)) set.delete(a); else { set.add(a); other.delete(a); } render(); }; return e; };
+
+    const stat = (label, val) => el('div', null, el('span', { class: 'sub', style: 'display:block;font-size:11px' }, label), el('b', null, val));
+    const gearRows = ['weapon', 'helm', 'body', 'gloves', 'boots'].map(k =>
+      el('li', null, el('b', null, k), ': ', arr(r.gear.picks[k]).length ? r.gear.picks[k].join(', ') : el('span', { class: 'sub' }, '(base only)')));
+    const treeEntries = Object.entries(r.alloc).filter(([, v]) => v > 0)
+      .map(([k, v]) => `${nodeName(st.cls, k)} ${v}`);
+    const dropped = r.dropped || []; // required affixes that couldn't be placed (slot cap / elemental contention)
+
+    view(
+      el('h1', null, 'Build explorer'),
+      el('p', { class: 'sub' }, 'Best reachable build for a chosen class under the modeled ruleset (5 Perfect items · 4 crafted mods + 1 Sacred · no uniques/krangle). Pure formula math — treat per-fight mechanics as upside.'),
+      el('div', { class: 'chips', style: 'align-items:center;gap:10px;margin:0 0 12px' },
+        el('span', null, 'Class '), sel,
+        el('span', null, ' Level '), numIn(st.level, v => st.level = v),
+        el('span', null, ' Tier '), numIn(st.tier, v => st.tier = v)),
+      el('div', { class: 'chips', style: 'margin:0 0 10px' }, el('span', { class: 'sub' }, 'Objective:'), Object.keys(OBJ).map(objChip)),
+      el('div', { class: 'chips', style: 'margin:0 0 6px' }, el('span', { class: 'sub' }, 'Require:'), affixes.map(a => affChip(a, st.require, st.ban))),
+      el('div', { class: 'chips', style: 'margin:0 0 12px' }, el('span', { class: 'sub' }, 'Ban:'), affixes.map(a => affChip(a, st.ban, st.require))),
+      dropped.length ? el('p', { class: 'status' }, `Couldn't fit ${dropped.length} required affix${dropped.length > 1 ? 'es' : ''}: ${dropped.join(', ')}. Ban fewer, or free up weapon/helm for elemental affixes.`) : null,
+      el('div', { class: 'card' },
+        el('h2', { style: 'margin-top:0' }, `${st.cls} · best ${st.obj}`),
+        el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:12px' },
+          stat('DPS', sci(s.dps)), stat('HPS', sci(s.hps)), stat('eHP', sci(s.ehp)), stat('HP', sci(s.hp)),
+          stat('Inc dmg', pct(d.inc)), stat('Crit ch', s.detail.cc.toFixed(1)), stat('Crit mult', s.detail.cm.toFixed(1)),
+          stat('DR/Blk/Eva', `${pct(d.eff.dr)} / ${pct(d.eff.block)} / ${pct(d.eff.evasion)}`),
+          stat('Heal', pct(s.healPower)), stat('Interval', `${s.interval.toFixed(0)}ms`))),
+      el('div', { class: 'grid2' },
+        el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, 'Gear'),
+          el('ul', null, gearRows),
+          el('p', null, el('b', null, 'Sacred: '), r.gear.sacred || '—')),
+        el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, `Passives (${treeEntries.length} nodes)`),
+          treeEntries.length ? el('ul', null, treeEntries.map(t => el('li', null, t))) : el('p', { class: 'sub' }, 'No nodes allocated.'))),
+      el('p', { class: 'sub', style: 'margin-top:14px' }, core.UNMODELED_NOTE),
+      el('p', null, el('a', { href: '#/' }, '← Ladder')));
+  }
+  render();
 }
 
 async function route() {
@@ -1151,7 +1241,7 @@ async function route() {
     if (owner) localStorage.setItem('pod.owner', owner);
     if (key || owner) { location.replace(location.pathname + km[1]); return; }
   }
-  const solo = { '#/admin': admin, '#/watchlist': watchlist, '#/feedback': feedbackView, '#/intel': intel }[location.hash];
+  const solo = { '#/admin': admin, '#/watchlist': watchlist, '#/feedback': feedbackView, '#/intel': intel, '#/explorer': explorer }[location.hash];
   if (solo) {
     // view() adds the nav; a thrown page never called it, so add it here too.
     try { await solo(); } catch (e) {

@@ -235,7 +235,8 @@ app.get('/api/class/:archetype', h(async (req, res) => {
   // rather than drop a possibly-active player from the meta.
   const W = `${PUB} AND archetype = $1`;
   const [meta, passives, mods] = await Promise.all([
-    pool.query(`SELECT count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level ${W}`, [a]),
+    pool.query(`SELECT count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level,
+                       (SELECT count(*)::int ${PUB}) AS total ${W}`, [a]),
     // Only allocated nodes count as picks (rank "2/4" or "2"; "0/4" = unallocated).
     pool.query(`SELECT n->>'name' AS name, count(*)::int AS players,
                        max(CASE WHEN n->>'tier' ~ '\\d' THEN (substring(n->>'tier' from '\\d+'))::int END) AS tier,

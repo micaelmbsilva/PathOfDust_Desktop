@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { emptyBuckets, classScore, bestTree, pointsForLevel } from '../server/public/advisor-core.mjs';
+import { searchBuild, pointsForLevel } from '../server/public/advisor-core.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p) => JSON.parse(readFileSync(join(here, '..', 'server', 'public', p), 'utf8'));
@@ -19,90 +19,9 @@ const LEVEL = +(process.argv[2] || 119);
 const TIER = +(process.argv[3] || 119);
 const POINTS = pointsForLevel(LEVEL);
 
-// A Perfect item's best case: primary = base × tier × 1.2 (roll) × 1.2
-// (Perfect); every affix = perTier × tier × 1.15 (max jitter) × 1.2 (Perfect),
-// which is the same 1.38× a Sacred implicit gets — Sacred's edge is being a
-// 5th affix outside the craft cap, not a bigger number.
-const R = model.rules;
-const PRIMARY = (slot) => R.slotBasePower[slot] * TIER * R.powerRollRange[1] * R.perfectMult;
-const AFFIX = (a) => a.perTier * TIER * R.affixJitter[1] * R.perfectMult;
-
-// 20 crafted mod slots (4 per equip slot) + 1 Sacred. Only weapon and helm
-// can roll the 5 elemental affixes; Sacred ignores slot eligibility entirely.
-const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
-// "max hp" is two distinct Rust affixes sharing one label (IncreasedLife %,
-// FlatLife raw) — the model file folds them into one entry, so split them
-// back out here or the flat variant can never be picked.
-const CHOICES = model.affixes.flatMap((a) => a.flatBucket
-  ? [{ ...a, label: a.match + ' %' }, { match: a.match, label: a.match + ' flat', bucket: a.flatBucket, perTier: a.flatPerTier, slots: a.slots }]
-  : [{ ...a, label: a.match }]);
-const eligible = (slot) => CHOICES.filter((a) => !a.slots || a.slots.includes(slot));
-
-function baseGear() {
-  const g = emptyBuckets();
-  g.weaponPower = PRIMARY('weapon');
-  g.bodyPower = PRIMARY('body');
-  g.attackSpeed = PRIMARY('gloves');
-  g.helmPower = PRIMARY('helm');
-  const c = R.cooldownCurves.helm;
-  g.helmCooldownMs = Math.max(c.floorMs, c.baseMs - TIER * c.perTierMs);
-  return g;
-}
-
-// Greedy fill of the 21 affix slots for one objective, given a fixed tree.
-function bestGear(cls, alloc, objective) {
-  const g = baseGear();
-  const left = Object.fromEntries(SLOTS.map((s) => [s, R.modCap]));
-  const picks = Object.fromEntries(SLOTS.map((s) => [s, []]));
-  const t = { nodes: tree.classes[cls], alloc };
-  const value = () => objective(classScore(cls, g, LEVEL, model, t));
-  let cur = value();
-  for (let n = 0; n < SLOTS.length * R.modCap; n++) {
-    let pick = null;
-    for (const slot of SLOTS) {
-      if (!left[slot]) continue;
-      for (const a of eligible(slot)) {
-        const v = AFFIX(a);
-        g[a.bucket] += v;
-        const gain = value() - cur;
-        g[a.bucket] -= v;
-        if (gain > 0 && (!pick || gain > pick.gain)) pick = { slot, a, v, gain };
-      }
-    }
-    if (!pick) break;
-    g[pick.a.bucket] += pick.v;
-    picks[pick.slot].push(pick.a.label);
-    left[pick.slot]--;
-    cur += pick.gain;
-  }
-  // The one Sacred: any affix, any slot, same 1.38× value, may duplicate.
-  let sac = null;
-  for (const a of CHOICES) {
-    const v = AFFIX(a);
-    g[a.bucket] += v;
-    const gain = value() - cur;
-    g[a.bucket] -= v;
-    if (!sac || gain > sac.gain) sac = { a, v, gain };
-  }
-  g[sac.a.bucket] += sac.v;
-  return { g, picks, sacred: sac.a.label };
-}
-
-// Gear and tree each change what the other is worth (overflow conversions,
-// Titan's Grip, the divine heal loop), so alternate until it settles.
-function optimize(cls, objective) {
-  let alloc = {}, gear = bestGear(cls, alloc, objective);
-  for (let i = 0; i < 4; i++) {
-    const t = bestTree(cls, tree.classes[cls], gear.g, LEVEL, model, POINTS, objective);
-    const next = bestGear(cls, t.alloc, objective);
-    const settled = objective(classScore(cls, next.g, LEVEL, model, { nodes: tree.classes[cls], alloc: t.alloc }))
-      <= objective(classScore(cls, gear.g, LEVEL, model, { nodes: tree.classes[cls], alloc })) * 1.0001;
-    alloc = t.alloc; gear = next;
-    if (settled) break;
-  }
-  const t = { nodes: tree.classes[cls], alloc };
-  return { cls, alloc, gear, score: classScore(cls, gear.g, LEVEL, model, t) };
-}
+// The whole gear+tree search now lives in advisor-core's searchBuild (shared
+// with the site's #/explorer route) — this tool is just a batch driver over it.
+const optimize = (cls, objective) => searchBuild(cls, tree.classes[cls], LEVEL, TIER, model, { objective });
 
 const OBJECTIVES = {
   damage: (s) => s.dps,
