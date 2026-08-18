@@ -131,8 +131,13 @@
   let roster = {};
   fetch('/api/roster-classes').then(r => r.json())
     .then(r => { if (r && !r.expired) { roster = r; if (Object.keys(roster).length) renderAll(); } }).catch(() => {});
-  const classOf = (n) => (roster[String(n || '').toLowerCase()] || {}).cls || '';
-  const rolesOf = (n) => PodFeed.rolesOf(classOf(n));
+  // Prefer the class the player actually ran THIS fight — the game records it
+  // per fight (lowercase archetype) and never backfills it, so a later respec
+  // doesn't rewrite history. Roster is the fallback for older records saved
+  // before the field existed (archetype missing/None).
+  const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : '';
+  const classOf = (p) => cap(p && p.archetype) || (roster[String((p && p.displayName) || '').toLowerCase()] || {}).cls || '';
+  const rolesOf = (p) => PodFeed.rolesOf(classOf(p));
 
   // Sort and role filter, both persisted — they are a reading preference, not
   // per-fight state, so they apply to every fight card at once.
@@ -191,7 +196,7 @@
       const rows = [...(f.players || [])]
         // Unknown class stays visible: hiding a row because the roster hasn't
         // loaded would quietly under-report the party.
-        .filter(p => { const r = rolesOf(p.displayName); return role === 'all' || !r || r.includes(role); })
+        .filter(p => { const r = rolesOf(p); return role === 'all' || !r || r.includes(role); })
         .sort((a, b) => valOf(b, sortKey, secs) - valOf(a, sortKey, secs));
       const total = rows.reduce((n, p) => n + (p.damageDealt || 0), 0);
       const mine = rows.find(p => (p.displayName || '').toLowerCase() === myName.toLowerCase());
@@ -209,10 +214,10 @@
           <thead><tr><th>#</th><th>Player</th><th>Class</th>${COLS.map(c =>
             `<th class="num${c.key === sortKey ? ' sorted' : ''}" data-sort="${c.key}" title="Sort by ${c.label}">${c.label}${c.key === sortKey ? ' ▾' : ''}</th>`).join('')}</tr></thead>
           <tbody>${rows.map((p, n) => {
-            const r = rolesOf(p.displayName);
+            const r = rolesOf(p);
             return `<tr${(p.displayName || '').toLowerCase() === myName.toLowerCase() ? ' class="mine"' : ''}>
             <td>${n + 1}</td><td>${esc(p.displayName)}${died(p.displayName) ? ` <span title="${wentFirst(p.displayName) ? 'First to go down this fight' : 'Went down this fight'}">💀</span>` : ''}</td>
-            <td>${esc(classOf(p.displayName))} ${(r || []).map(x => PodFeed.ROLE_ICON[x]).join('')}</td>
+            <td>${esc(classOf(p))} ${(r || []).map(x => PodFeed.ROLE_ICON[x]).join('')}</td>
             ${COLS.map(c => `<td class="num">${fmtN(valOf(p, c.key, secs))}</td>`).join('')}</tr>`;
           }).join('')}</tbody>
         </table></div>
