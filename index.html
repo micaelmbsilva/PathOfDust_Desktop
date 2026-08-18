@@ -2224,7 +2224,8 @@
 
   // Full-width system banner across the top; one per id. Used for restart
   // notices, the legacy-shell warning, and operator broadcasts.
-  function sysBanner(id, bg, fg, html, onDismiss) {
+  // `action` is an optional {label, onClick} button shown before Dismiss.
+  function sysBanner(id, bg, fg, html, onDismiss, action) {
     if (document.getElementById(id)) return;
     const el = document.createElement('div');
     el.id = id;
@@ -2233,9 +2234,13 @@
     document.querySelectorAll('.sysbanner').forEach(b => top += b.offsetHeight);
     el.style.cssText = `position:fixed;top:${top}px;left:0;right:0;z-index:2000;background:${bg};color:${fg};` +
       'font-weight:700;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.5)';
-    el.innerHTML = html +
-      ` <button style="margin-left:10px;background:${fg};color:${bg};border:0;border-radius:4px;padding:3px 9px;cursor:pointer;font-weight:700">Dismiss</button>`;
-    el.querySelector('button').onclick = () => { el.remove(); if (onDismiss) onDismiss(); };
+    // Marked buttons, not positional: `html` may carry its own (the legacy
+    // banner's download link is an <a>, but a broadcast could add one).
+    const btn = (mark, label) => ` <button data-sb="${mark}" style="margin-left:10px;background:${fg};color:${bg};` +
+      `border:0;border-radius:4px;padding:3px 9px;cursor:pointer;font-weight:700">${label}</button>`;
+    el.innerHTML = html + (action ? btn('act', action.label) : '') + btn('x', 'Dismiss');
+    el.querySelector('[data-sb="x"]').onclick = () => { el.remove(); if (onDismiss) onDismiss(); };
+    if (action) el.querySelector('[data-sb="act"]').onclick = action.onClick;
     document.body.appendChild(el);
   }
   const showRestartBanner = () => sysBanner('restartBanner', '#c0392b', '#fff',
@@ -2258,7 +2263,12 @@
     try {
       const b = await fetch(TELEMETRY + '/broadcast', { cache: 'no-store' }).then(r => r.json());
       if (b.id && localStorage.getItem('bcSeen') !== b.id)
-        sysBanner('bc-' + b.id, '#7c5cff', '#fff', '📢 ' + esc(b.message), () => localStorage.setItem('bcSeen', b.id));
+        // Broadcasts announce new versions, so carry the update action itself
+        // rather than making people find it in the toolbar. Same call as the
+        // ⬆️ Check for Updates item: interface pull first, then the shell.
+        sysBanner('bc-' + b.id, '#7c5cff', '#fff', '📢 ' + esc(b.message),
+          () => localStorage.setItem('bcSeen', b.id),
+          { label: '⬆️ Update Now', onClick: () => updateAction() });
     } catch {} // backend down / offline — try next tick
   }
   setTimeout(checkBroadcast, 5000);
