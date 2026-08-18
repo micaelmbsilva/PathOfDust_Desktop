@@ -511,6 +511,25 @@
   let restoreUntil = Date.now() + 20000; // generous cap if restore never runs at all
   const restoring = () => Date.now() < restoreUntil;
 
+  // Bring a panel to the front. Reopening one left it wherever the CSS put it,
+  // so it could come back UNDER a panel that was already open. Every floating
+  // panel shares one z band that has to stay under the toasts (40) and the
+  // menus (50/60), so raising renumbers the band instead of counting upward
+  // forever. Computed z is read, not inline, so the first raise preserves the
+  // stacking the stylesheet set up.
+  const Z0 = 30;
+  function front(el) {
+    const rest = [...document.querySelectorAll('.apanel')].filter(x => x !== el)
+      .sort((a, b) => (+getComputedStyle(a).zIndex || 0) - (+getComputedStyle(b).zIndex || 0));
+    [...rest, el].forEach((x, i) => { x.style.zIndex = Z0 + i; });
+  }
+  // Clicking anywhere in a panel raises it, like any window manager. Capture,
+  // so a panel whose own handlers stop propagation still comes forward.
+  addEventListener('pointerdown', (e) => {
+    const p = e.target.closest?.('.apanel');
+    if (p) front(p);
+  }, true);
+
   function persistPanel(el, key) {
     const s = LS.get(key, null);
     if (s) {
@@ -583,6 +602,7 @@
       f.src = `https://www.twitch.tv/popout/${TWITCH_LOGIN}/chat?popout=`;
     if (!open && S().chatUnload) f.src = 'about:blank'; // free CPU/RAM while hidden (setting)
     p.classList.toggle('open', open);
+    if (open) front(p);
     persistPanels();
     setActive('chat', open);
   }
@@ -593,6 +613,7 @@
     if (open) f.src = `https://player.twitch.tv/?channel=${TWITCH_LOGIN}&parent=localhost&muted=${S().streamMuted}`;
     else f.removeAttribute('src'), f.src = 'about:blank'; // stop playback when hidden
     p.classList.toggle('open', open);
+    if (open) front(p);
     setActive('stream', open);
     persistPanels();
   }
@@ -894,6 +915,7 @@
     if (which === 'fight' || which === 'party') { if (open) startFightTimer(); else maybeStopFightTimer(); }
     if (which === 'buffs') { clearInterval(buffsTimer); buffsTimer = open ? setInterval(renderBuffs, 1000) : null; }
     if (open) {
+      front(p);
       ({ party: renderParty, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox,
          characters: framePanel('characters', '/character.html'), fights: framePanel('fights', '/fights.html') })[which]();
       // Clamp into the viewport — a position saved on a big window must still be
