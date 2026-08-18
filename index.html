@@ -1334,6 +1334,31 @@
         parts.push('<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">The whole party\'s debuff stack on your target — the data doesn\'t tag who applied each, so it isn\'t only yours.</div>');
       }
     }
+    // Buffs on your party — the outgoing side of your kit: shields, DR and
+    // heal-power an ally can grant. Filtered to party-origin buffs (a unit's
+    // own-kit buffs aren't yours) and hedged, since the snapshot has no caster.
+    if (fight && fight.allySnaps?.length) {
+      const cursor = fightCursor();
+      const latest = {};
+      for (const s of fight.allySnaps) { if (s.at <= cursor) latest[s.unit] = s; else break; }
+      const rows = [];
+      for (const [unit, s] of Object.entries(latest)) {
+        const chips = [];
+        for (const [k, v] of s.buffs) { const b = PodFeed.buff(k); if (b.origin === 'party') chips.push([b, v]); }
+        if (chips.length) rows.push([fight.names?.[unit] || unit, chips]);
+      }
+      if (rows.length) {
+        const live = fightLive();
+        parts.push(`<div class="fhead" style="margin-bottom:2px">🤝 On your party${live ? '' : ' — last fight'}</div>`);
+        for (const [nm, chips] of rows) {
+          parts.push(`<div class="rolechips"><span class="muted" style="font-size:0.72rem;align-self:center">${esc(nm)}</span>${chips.map(([b, v]) => {
+            const tip = [b.desc, b.from ? `Comes from: ${b.from}` : '', `${b.key} = ${v}`].filter(Boolean).join('\n\n');
+            return `<span class="chip bchip ${b.kind}" data-tip="${esc(tip)}">${PodFeed.KIND_ICON[b.kind]} ${esc(b.label)}: <b>${esc(buffVal(b.key, v, b.kind))}</b></span>`;
+          }).join('')}</div>`);
+        }
+        parts.push('<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">Buffs an ally can grant your party. A snapshot has no caster, so some may be another support\'s, not only yours.</div>');
+      }
+    }
     // Channel-point events, which are party-wide rather than about you.
     const t = lastMe?.buffTable;
     if (t && t.length > 1) {
@@ -1882,12 +1907,18 @@
     // Buffs pane shows landing on you (Open Wound, Curse, Mark…). Lets the pane
     // show what's debuffing your target. In at-order (evs is sorted).
     const enemySnaps = [];
+    // Buff snapshots on your allies — the party-facing side of what you cast
+    // outward (shields, DR, heal-power). A snapshot carries no caster, so the
+    // render filters to party-origin buffs and hedges that a second support
+    // could be the source. In at-order (evs is sorted).
+    const allySnaps = [];
     const groups = new Map();
     const G = (key, mk) => { let g = groups.get(key); if (!g) { g = mk(); groups.set(key, g); } return g; };
     for (const ev of evs) {
       const b = Math.floor((ev.atMs || 0) / 1000);
       if (ev.kind === 'defeat' && players[ev.unit]) downed.add(players[ev.unit]);
       if (ev.kind === 'buffSnapshot' && enemyIds.has(ev.unit)) enemySnaps.push({ at: ev.atMs || 0, unit: ev.unit, buffs: ev.buffs || [] });
+      if (ev.kind === 'buffSnapshot' && players[ev.unit] && ev.unit !== myId) allySnaps.push({ at: ev.atMs || 0, unit: ev.unit, buffs: ev.buffs || [] });
       // absorbed/mitigated portion of a hit (armor, shields, damage-reduction buffs)
       const mit = (ev) => Math.max(0, (ev.unmitigatedDamage || 0) - (ev.damage || 0));
       if (ev.kind === 'attack' && ev.attacker === myId) {
@@ -1942,7 +1973,7 @@
     }
     fight = { t0: Date.now(), dur, maxAt, evs, idx: 0, mySnaps,
       players, feed, won: !!d.won, stage: d.stage, kind: d.kind,
-      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, vitals, downed: [...downed], enemySnaps, names };
+      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, vitals, downed: [...downed], enemySnaps, allySnaps, names };
     // A fresh fight replays from full HP for the party bars too. The timer runs
     // while EITHER the fight panel or the party panel wants it.
     startFightTimer();
