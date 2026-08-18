@@ -29,6 +29,11 @@
     border-radius: 8px; padding: 6px 10px; }
   .stat .l { font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: #8a7fb0; }
   .stat .v { font-weight: 700; }
+  /* Same affordance the live site gives its [data-tip] stat rows: the label and
+     the value carry SEPARATE hovers (what the stat is vs. its source breakdown). */
+  .stat .l[data-tip], .stat .v[data-tip] { cursor: help; width: fit-content; }
+  .stat .sub { font-size: 0.7rem; color: #b0a2d9; margin-top: 2px; }
+  .stat.elem { border-color: rgba(255,180,90,0.45); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
   .item { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 10px; }
   .item.empty { opacity: 0.45; }
@@ -140,6 +145,20 @@
       <div class="m">${(it.mods || []).map(modLine).join('')}</div>
     </div>`;
 
+  // ---- stat cards ----
+  // The site hangs TWO different hovers off one stat: the label explains what
+  // the stat is, the value carries the multi-line source breakdown (only the
+  // five capped/derived stats have one). Rendering `tip || vtip` on the card as
+  // a whole silently ate the breakdown, so each div keeps its own.
+  const statCard = (s) => `<div class="stat${s.elem ? ' elem' : ''}">
+      <div class="l"${tip(s.tip)}>${esc(s.label)}</div>
+      <div class="v"${tip(s.vtip)}>${esc(s.value)}</div>
+      ${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}
+    </div>`;
+  // Profile-card stats on the site (no hovers, above the XP bar); everything
+  // else belongs to the Combat Stats card.
+  const PROFILE = ['Level', 'Record', 'Win rate', 'Dust', 'Sand'];
+
   // ---- roster ----
   let rosterList = [];
   let current = null; // login being shown, null = roster grid
@@ -172,18 +191,21 @@
     if (c.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
     if (c.notFound || !c.name) { $('err').textContent = 'No such character.'; back(); return; }
     document.title = `${GAME_NAME} — ${c.name}`;
+    const profile = c.stats.filter(s => PROFILE.includes(s.label));
+    const combat = c.stats.filter(s => !PROFILE.includes(s.label));
+    if (c.elemental) combat.push(c.elemental);
     $('sheet').innerHTML = `
       <div class="who">
         <img src="${esc(c.sprite)}" alt="" onerror="this.style.visibility='hidden'">
         <div style="flex:1">
           <h1>${esc(c.name)} <span class="chip">${esc(c.archetype)}</span></h1>
+          <div class="stats" style="margin:8px 0">${profile.map(statCard).join('')}</div>
           <div class="muted" style="font-size:0.8rem">${esc(c.xp.label)}</div>
           <div class="xpbar"><div class="xpfill" style="width:${c.xp.pct}%"></div></div>
         </div>
       </div>
-      <h2>Stats</h2>
-      <div class="stats">${c.stats.map(s => `<div class="stat"${tip(s.tip || s.vtip)}>
-        <div class="l">${esc(s.label)}</div><div class="v">${esc(s.value)}</div></div>`).join('')}</div>
+      <h2>Combat Stats</h2>
+      <div class="stats">${combat.map(statCard).join('')}</div>
       <h2>Gear</h2>
       <div class="grid">${c.equipped.map(itemCard).join('') || '<p class="muted">Nothing equipped.</p>'}</div>
       <h2>Bag (${c.bag.length})</h2>

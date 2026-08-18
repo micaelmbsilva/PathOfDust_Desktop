@@ -4,7 +4,7 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed } from './server.mjs';
+import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed } from './server.mjs';
 import { netKey } from './actions.mjs';
 
 // Owner dossier: exact normalized login only. UI hiding is convenience; this
@@ -170,6 +170,18 @@ assert.ok(!ch.equipped[0].repair, "another player's gear is never actionable");
 assert.equal(ch.bag.length, 1, 'bag items are not mistaken for equipped');
 assert.deepEqual(ch.bag[0].durability, { pct: 35, indestructible: false });
 assert.deepEqual(characterOf('<div class="card"><h1>Not Found</h1></div>', 'nope'), { notFound: true });
+
+// --- Total elemental damage is derived from the Increased Dmg Dealt hover, not
+// re-added from gear rolls, so it can never disagree with the game's own number.
+assert.equal(elementalOf(ch.stats), null, 'no elemental rolls -> no card at all');
+const lines = (...l) => l.join('\n');
+const el = elementalOf([{ label: 'Increased Dmg Dealt', value: '340%', tip: 'x',
+  vtip: lines('Fire Damage: +12%', 'Lightning Damage: +9%', 'Gear (Increased Damage): +80%',
+    'Passive Tree: +140%', 'Total: 340%') }]);
+assert.equal(el.value, '21%', 'only the elemental lines are summed');
+assert.equal(el.vtip, lines('Fire Damage: +12%', 'Lightning Damage: +9%', 'Total: +21%'));
+assert.equal(elementalOf([{ label: 'Reduced Dmg Dealt', value: '5%', tip: 'x',
+  vtip: lines('Archetype: -5%', 'Total: -5%') }]), null, 'no elemental lines -> null');
 
 // --- Traffic counter keys. Per-player pages must collapse into one bucket, or
 // browsing the roster buries every other row under a hundred single-hit entries.

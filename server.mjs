@@ -206,6 +206,33 @@ const statsOf = (text) => [...text.matchAll(
   /class="stat-label"([^>]*)>(.*?)<\/div>\s*<div class="stat-value"([^>]*)>(.*?)<\/div>/g)]
   .map(m => ({ label: strip(m[2]), value: strip(m[4]), tip: tipOf(m[1]), vtip: tipOf(m[3]) }));
 
+// Total elemental damage — a stat the site itself never sums. It doesn't need
+// to be re-derived from gear rolls: the "Increased/Reduced Dmg Dealt" VALUE
+// tooltip already itemises every contributing source, one line per damage type
+// ("Fire Damage: +12%"), so this reads the game's own numbers and can't drift
+// from them. null when the character has no elemental rolls at all (the site
+// omits a zero source from the breakdown), so the card is simply not shown.
+// Exported for scrape smoke-tests.
+export const ELEMENTS = [['Fire', '🔥'], ['Cold', '❄️'], ['Lightning', '⚡'], ['Divine', '✨'], ['Chaos', '☠️']];
+export function elementalOf(stats) {
+  const dmg = stats.find(s => /Dmg Dealt$/.test(s.label));
+  if (!dmg || !dmg.vtip) return null;
+  const parts = [];
+  for (const [name, icon] of ELEMENTS) {
+    const m = dmg.vtip.match(new RegExp('^' + name + ' Damage: ([+-]?[\\d.]+)%', 'm'));
+    if (m && +m[1]) parts.push({ name, icon, v: +m[1] });
+  }
+  if (!parts.length) return null;
+  const total = parts.reduce((a, p) => a + p.v, 0);
+  const pct = (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`;
+  return {
+    elem: true, label: 'Elemental Damage', value: `${total.toFixed(0)}%`,
+    sub: parts.map(p => `${p.icon} ${p.v.toFixed(0)}%`).join(' · '),
+    tip: 'Your five elemental damage types added together. Each is both a flat increased-damage bonus and its own on-hit proc chance, and they all feed the Increased Dmg Dealt total.',
+    vtip: parts.map(p => `${p.name} Damage: ${pct(p.v)}`).concat(`Total: ${pct(total)}`).join('\n'),
+  };
+}
+
 // One gear/bag card. Shared by our own pages and other players' — the site
 // builds all four of its item-card variants from the same block, so one parser
 // covers them; the owner-only bits (id, protect, repair) just come back null.
@@ -306,13 +333,16 @@ async function character(login) {
 export function characterOf(text, login) { // exported for scrape smoke-tests
   if (/<h1>Not Found<\/h1>/.test(text)) return { notFound: true };
   const gearRegion = text.split(/class="bag-row/)[0];
+  const stats = statsOf(text);
   return {
     login,
     name: strip((text.match(/<h1>([^<]*)<\/h1>/) || [])[1] || ''),
     archetype: strip((text.match(/class="role-badge[^"]*"[^>]*>([^<]*)</) || [])[1] || ''),
     sprite: SITE + ((text.match(/class="sprite-avatar" src="([^"]+)"/) || [])[1] || ''),
     hasTree: /class="passives-link-btn"/.test(text), // absent for Commoner
-    stats: statsOf(text),
+    stats,
+    // Derived, not scraped — see elementalOf.
+    elemental: elementalOf(stats),
     xp: { label: strip((text.match(/xp-label">([^<]*)</) || [])[1] || ''),
           pct: +(text.match(/xp-fill" style="width:(\d+)%/) || [])[1] || 0 },
     // empty slots stay in the list (name '') so the grid keeps all five cells
