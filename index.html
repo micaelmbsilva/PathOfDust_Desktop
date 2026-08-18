@@ -891,7 +891,7 @@
       const money = f && f.parts.length
         ? ` — 💰 net ${f.dirty ? '~' : ''}${f.parts.join(' · ')}${f.dirty ? ' (mixed with crafting)' : ''}` : '';
       infoToast(`${battle.won ? '🏆 Battle Won' : '💀 Battle Lost'}${money}`);
-    }, Math.min((d.displayDurationMs || 0) + 2500, 120000)); // charge + replay + resolve
+    }, Math.min(fightTotalMs(d.displayDurationMs), 120000)); // charge + replay + resolve
   }
 
   // Next-battle countdown: the game exposes no schedule, but fights land on a
@@ -1279,10 +1279,10 @@
     // pane is knowing at a glance whether a thing is your build working or the
     // boss doing something to you.
     if (fight && fight.mySnaps?.length) {
-      const cursor = Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale);
+      const cursor = fightCursor();
       let snap = null;
       for (const s of fight.mySnaps) { if (s.at <= cursor) snap = s; else break; }
-      const live = Date.now() - fight.t0 < fight.dur;
+      const live = fightLive();
       if (snap && snap.buffs.length) {
         // Grouped by WHERE it came from, not just whether it's good. A shield
         // on you may be a Cleric's doing, and "your build working" would be a
@@ -1310,7 +1310,7 @@
     // "You" section shows landing on you. Buff entries carry no caster, so this is
     // the WHOLE party's stack on the enemy, not only what you applied.
     if (fight && fight.enemySnaps?.length) {
-      const cursor = Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale);
+      const cursor = fightCursor();
       const latest = {};
       for (const s of fight.enemySnaps) { if (s.at <= cursor) latest[s.unit] = s; else break; }
       const merged = {};
@@ -1320,7 +1320,7 @@
       }
       const chips = Object.values(merged);
       if (chips.length) {
-        const live = Date.now() - fight.t0 < fight.dur;
+        const live = fightLive();
         parts.push(`<div class="fhead" style="margin-bottom:2px">🎯 On the enemy${live ? '' : ' — last fight'}</div>`);
         parts.push(`<div class="rolechips">${chips.map(([b, v]) =>
           `<span class="chip bchip debuff" data-tip="${esc([`${b.label} on the enemy.`, `${b.key} = ${v}`].join('\n\n'))}">🔴 ${esc(b.label)}: <b>${esc(buffVal(b.key, v, 'debuff'))}</b></span>`).join('')}</div>`);
@@ -1376,7 +1376,7 @@
   // order and flags) we mutate the existing nodes instead, so the fill glide,
   // damage trail and low-HP pulse actually play. hpCache remembers each member's
   // max (persisted) so idle/between-fight bars still get correct notches.
-  let lastPartySig = null;
+  let lastPartySig = null, partyReviveT = null;
   // Persistent max-HP cache (pid -> {hp, at}) so bars never start at a default/0
   // scale on a fresh session — seeded from localStorage, kept current from live
   // fights and refreshed from the backend when stale. The build API exposes each
@@ -1434,11 +1434,16 @@
     // Only trust per-unit HP while the replay is actually playing. Once a fight
     // is over, fight.unitHp holds stale end-of-fight values (a revived member
     // would read 30% forever), so between fights everyone not Downed shows full.
-    const fightLive = fight && Date.now() - fight.t0 < fight.dur;
-    const unitOf = (c) => fightLive ? fight.unitHp[fight.nameToId[c.displayName.toLowerCase()]] : null;
+    const live = fightLive();
+    const unitOf = (c) => live ? fight.unitHp[fight.nameToId[c.displayName.toLowerCase()]] : null;
+    // downedUntilMs is a revive DEADLINE, not a flag: the server pushes no new
+    // state when a timer simply runs out (the game's own overlay ticks it off
+    // the local clock the same way), so read it as a countdown — otherwise a
+    // revived member stays greyed out until the next unrelated roster change.
+    const isDown = (c) => c.downedUntilMs != null && Date.now() < c.downedUntilMs;
     // "Out of the fight": downed (authoritative, survives between fights) or at
     // 0 HP during the live replay. These grey out and sort to the back.
-    const isOut = (c) => { if (c.downedUntilMs) return true; const u = unitOf(c); return !!(u && u.max && u.hp <= 0); };
+    const isOut = (c) => { if (isDown(c)) return true; const u = unitOf(c); return !!(u && u.max && u.hp <= 0); };
     // retreated last, then out-of-fight, then by level.
     const cs = [...lastRoster.characters].sort((a, b) =>
       (a.retreated - b.retreated) || (isOut(a) - isOut(b)) || (b.level - a.level));
@@ -1450,7 +1455,7 @@
       if (c.retreated) { retreated++; continue; }
       for (const r of kitRolesOf(c) || [of(c)]) counts[r]++;
     }
-    const status = (c) => c.downedUntilMs ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
+    const status = (c) => isDown(c) ? '⬇️ Downed' : c.retreated ? '🏳️ Retreated' : '🟢';
     // HP bar from the live/last fight replay, joined by display name (unit ids
     // aren't the roster login). Downed IS dead — a downed member always renders
     // empty/red regardless of the last HP sample. No fight data → full/neutral.
@@ -1475,7 +1480,7 @@
     // unit = a full, green, glowing bar (with notches from best-known max).
     const barState = (c) => {
       const max = maxOf(c);
-      if (c.downedUntilMs) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(refMax, max), title: '⬇️ Downed' };
+      if (isDown(c)) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(refMax, max), title: '⬇️ Downed' };
       const u = unitOf(c);
       if (!u || !u.max) return { pct: 100, lvl: 'ok', shPct: 0, tick: tickPctOf(refMax, max), title: 'Full HP' };
       const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
@@ -1510,7 +1515,7 @@
     // plain tick takes the fast path below; a member hitting 0 flips isOut and
     // forces a rebuild (which also re-sorts them to the back).
     const sig = lastRoster.stage + '|' + (partyFilter || '') + '|' + shown.map(c =>
-      c.displayName.toLowerCase() + (c.downedUntilMs ? 'D' : '') + (isOut(c) ? 'O' : '') + (c.retreated ? 'R' : '')).join(',');
+      c.displayName.toLowerCase() + (isDown(c) ? 'D' : '') + (isOut(c) ? 'O' : '') + (c.retreated ? 'R' : '')).join(',');
     if (opts.tick && sig === lastPartySig && document.querySelector('#partyBody .pgrid')) {
       const cells = {};
       document.querySelectorAll('#partyBody .pcell[data-pid]').forEach(el => cells[el.dataset.pid] = el);
@@ -1518,14 +1523,20 @@
       return;
     }
     lastPartySig = sig;
+    // Repaint when the earliest revive deadline lands — between fights nothing
+    // else wakes this pane, and no state message announces a revive.
+    clearTimeout(partyReviveT);
+    const nextRevive = Math.min(...cs.filter(isDown).map(c => c.downedUntilMs));
+    if (Number.isFinite(nextRevive)) partyReviveT = setTimeout(
+      () => rerenderIfOpen('party', renderParty), Math.max(250, nextRevive - Date.now() + 250));
     document.getElementById('partyBody').innerHTML =
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
       ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)} data-tip="Role coverage by class kit — dual-role classes (Warrior, Paladin, Druid, Monk) count in each of their roles, so the pips can sum past the party size.">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
       `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
-      `<div class="pgrid">` + shown.map(c => `<div class="pcell${c.downedUntilMs ? ' down' : ''}${isOut(c) ? ' out' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" data-pid="${esc(c.displayName.toLowerCase())}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
+      `<div class="pgrid">` + shown.map(c => `<div class="pcell${isDown(c) ? ' down' : ''}${isOut(c) ? ' out' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" data-pid="${esc(c.displayName.toLowerCase())}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
         <div class="pn">${esc(c.displayName)}</div>
-        <div class="ps">Lv ${c.level}${classOf(c) ? ` · <span class="pcls" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></span>` : ''}${c.downedUntilMs ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
+        <div class="ps">Lv ${c.level}${classOf(c) ? ` · <span class="pcls" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></span>` : ''}${isDown(c) ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
         ${hpBar(c)}
       </div>`).join('') +
       (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
@@ -1771,16 +1782,22 @@
       `\nraw ws: ${JSON.stringify({ ...w, byType: undefined })}`;
   }
 
-  // ---- Current Fight: live replay. The WS broadcasts the whole fight (events
-  // with sim-time atMs) the moment it starts; the overlay then plays it back
-  // over displayDurationMs. We replay the same log in sync: a climbing
-  // leaderboard plus a personal combat log (grouped into 1s sim-time buckets).
-  // Raw events live in memory only, for the latest fight.
+  // ---- Current Fight: live replay. The WS broadcasts the whole fight the
+  // moment it starts and the stream overlay plays it back; we replay the same
+  // log on the same clock, as a climbing leaderboard plus a personal combat log
+  // (grouped into 1s buckets). Raw events live in memory only, for the latest
+  // fight.
+  // Phase model copied from the game's own overlay (public_adventure_overlay/
+  // overlay.html): 700ms charge, then the log at 1:1 wall-clock, then 1800ms
+  // resolve. Event atMs are ALREADY display-time — compress_events rescales the
+  // whole log into displayDurationMs server-side — so the cursor is plain
+  // elapsed-minus-charge, with no rescale of our own.
+  const CHARGE_MS = 700, RESOLVE_MS = 1800;
+  const fightTotalMs = (durMs) => CHARGE_MS + (durMs || 0) + RESOLVE_MS;
   let fight = null, fightTimer = null;
   const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-  // Fight-log tick label: events carry raw simulation time; the on-screen replay
-  // compresses it to a few seconds, so display time reads 0:00 for everything.
-  // Show the sim tick instead, adaptively: ms -> s -> m:ss.
+  // Fight-log tick label: position within the compressed 6-35s replay,
+  // adaptively: ms -> s -> m:ss.
   const fmtT = (ms) => ms < 1000 ? Math.round(ms) + 'ms' : ms < 60000 ? (ms / 1000).toFixed(1) + 's' : mmss(ms);
   function startFight(d) {
     const players = {}, names = {};
@@ -1874,7 +1891,7 @@
       }
     }
     const dur = d.displayDurationMs || maxAt;
-    fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, mySnaps,
+    fight = { t0: Date.now(), dur, maxAt, evs, idx: 0, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
       thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, vitals, downed: [...downed], enemySnaps, names };
     // A fresh fight replays from full HP for the party bars too. The timer runs
@@ -1916,7 +1933,13 @@
       if (v.diedAt != null && cursor >= v.diedAt) { u.hp = 0; u.shield = 0; }
     }
   }
-  const fightCursor = () => fight ? Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale) : 0;
+  // Replay position and "is the fight still playing", both on the overlay's
+  // clock — every consumer (feed, party bars, buffs) reads these, so none of
+  // them can drift from what the stream overlay is showing.
+  // Negative during the charge phase — every consumer tests `at <= cursor`, so
+  // nothing plays until the overlay's battle phase actually starts.
+  const fightCursor = () => fight ? Math.min(fight.maxAt, Date.now() - fight.t0 - CHARGE_MS) : 0;
+  const fightLive = () => !!fight && Date.now() - fight.t0 < CHARGE_MS + fight.dur;
   const fightPanelOpen = () => document.getElementById('fightpanel')?.classList.contains('open');
   const partyPanelOpen = () => document.getElementById('partypanel')?.classList.contains('open');
   // One replay timer feeds both the Live Fight feed and the Party HP bars; each
@@ -1931,12 +1954,12 @@
   let partyRaf = null;
   function partyFrame() {
     partyRaf = null;
-    if (!(fight && Date.now() - fight.t0 < fight.dur && partyPanelOpen())) return;
+    if (!(fightLive() && partyPanelOpen())) return;
     renderParty({ tick: true });
     if (!partyRaf) partyRaf = requestAnimationFrame(partyFrame); // a structural rebuild may re-arm already
   }
   const startPartyFrames = () => {
-    if (!partyRaf && fight && Date.now() - fight.t0 < fight.dur && partyPanelOpen()) partyRaf = requestAnimationFrame(partyFrame);
+    if (!partyRaf && fightLive() && partyPanelOpen()) partyRaf = requestAnimationFrame(partyFrame);
   };
   function fightTick() {
     if (fightPanelOpen()) renderFight();
@@ -1945,7 +1968,7 @@
     clearInterval(fightTimer); fightTimer = null;
     if (fightPanelOpen()) renderFight();
     if (partyPanelOpen()) renderParty();
-    if (fight && Date.now() - fight.t0 < fight.dur) {
+    if (fightLive()) {
       if (fightPanelOpen()) fightTimer = setInterval(fightTick, 900);
       startPartyFrames();
     }
@@ -1966,15 +1989,14 @@
   function renderFight() {
     const body = document.getElementById('fightBody');
     if (!fight) return; // placeholder stays
-    const elapsed = Date.now() - fight.t0;
-    const cursor = Math.min(fight.maxAt, elapsed / fight.scale); // sim-time position
-    const over = elapsed >= fight.dur;
+    const cursor = fightCursor();
+    const over = !fightLive();
     if (over && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
     const feedShown = fight.feed.filter(g => g.at <= cursor);
     const atBottom = (el) => !el || el.scrollHeight - el.scrollTop - el.clientHeight < 30;
     const keepScroll = atBottom(body.querySelector('.ffeed'));
     body.innerHTML =
-      `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(Math.min(elapsed, fight.dur))} · Stage ${fight.stage}${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}</div>
+      `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(cursor)} · Stage ${fight.stage}${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}</div>
       ${partialNote(fight.thinned)}
       ${feedChips()}
       <div class="ffeed pod-feed">${feedLines(feedShown) || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
@@ -2069,6 +2091,7 @@
 
   // Cross-window notifications (Fight History follows fight ends off this).
   const podChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('pod') : null;
+  let encDoneT = null; // pending "the replay has finished" broadcast
 
   function watchEvents() {
     let ws, t = null;
@@ -2098,14 +2121,21 @@
             else if (sb && Date.now() - sb.at < 30 * 60000) LS.set('sinceBoss', { n: sb.n + 1, at: Date.now() });
             else if (sb) localStorage.removeItem('sinceBoss');
           }
-          // Tell the other windows a fight just resolved. The game saves its
-          // summary before broadcasting, so /fights.json already has this fight
-          // by the time anyone reacts. Same-origin channel, so it reaches the
-          // Fight History pane whether it's a panel iframe or popped out.
           try { startFight(d); } catch {} // live replay — even if we're not in it
-          // startFight first, so the broadcast can carry who went down (fight.downed)
-          // — the summary tier Fight History reads has no per-player death flag.
-          try { podChannel?.postMessage({ type: 'encounter', at: Date.now(), stage: d.stage, downed: (fight && fight.downed) || [] }); } catch {}
+          // Tell the other windows a fight resolved — held until the replay has
+          // actually finished (charge + replay + resolve, the same clock the
+          // stream overlay runs on), so Fight History doesn't reveal the result
+          // while the fight is still playing here. The game saves its summary
+          // up front, so /fights.json has it long before we ask. Same-origin
+          // channel, so it reaches the Fight History pane whether it's a panel
+          // iframe or popped out. startFight ran first, so the message can carry
+          // who went down (fight.downed) — the summary tier Fight History reads
+          // has no per-player death flag.
+          const done = { stage: d.stage, downed: (fight && fight.downed) || [] };
+          clearTimeout(encDoneT); // back-to-back fights: newest wins
+          encDoneT = setTimeout(() => {
+            try { podChannel?.postMessage({ type: 'encounter', at: Date.now(), ...done }); } catch {}
+          }, Math.min(fightTotalMs(d.displayDurationMs), 120000));
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
             armBattleToast(d);
             // fightRecord reads startFight's feed, so it has to run after it.
