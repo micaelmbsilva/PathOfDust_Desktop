@@ -146,7 +146,7 @@
       <option value="">None</option>
       <option value="slot">Slot</option>
     </select></label>
-    <button id="disAll" class="danger" title="Disenchant every bag item. 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All</button>
+    <button id="disAll" class="danger" title="Disenchant every bag item. 🔒 Keep-marked items — and anything at/above your auto-disenchant threshold — are skipped. Can't be undone.">Disenchant All</button>
   </div>
   <div id="bag"></div>
   <div id="toasts"></div>
@@ -242,6 +242,20 @@
   // reliable. New items (recombine result, unseen id) are skipped.
   function craftSummary(before, after, opts) {
     const parts = [];
+    // Recombine is the only craft that CONSUMES its sources and emits a
+    // brand-new-id item — the generic id/slot diff below skips new ids (loot
+    // noise), so it always came back empty and toasted a false "no change".
+    // Report the freshly-appeared bag item(s) directly instead.
+    if (opts && opts.recombine) {
+      const bIds = new Set((before.bag || []).map(it => it.id));
+      for (const it of (after.bag || [])) {
+        if (bIds.has(it.id)) continue;
+        const crit = (it.mods || []).find(m => m.crit);
+        parts.push(`Recombined → <b>${esc(it.name)}</b>${it.tier ? ` (T${esc(it.tier)})` : ''}` +
+          (crit ? ` <span class="mt crit">+${esc(crit.t)} ✦ crit!</span>` : ''));
+      }
+      return parts; // empty ⇒ bag was full, result lost — the "no change" toast is then correct
+    }
     if (opts && opts.currency) {
       const dust = Math.round(numCur(after.dust) - numCur(before.dust));
       const sand = Math.round(numCur(after.sand) - numCur(before.sand));
@@ -835,13 +849,14 @@
       const aDef = (lastCraft.actions || []).find(x => x.action === action);
       if ((aDef?.confirm || action === 'scour' || action === 'krangle') &&
           !confirm(`${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
-      await craftAct('craft', fields, title(action)); refresh();
+      await craftAct('craft', fields, title(action), action === 'recombine' ? { recombine: true } : undefined); refresh();
     }
   });
 
-  // Disenchant every bag item (server skips only 🔒 Keep items; Krangled included).
+  // Disenchant every bag item. Server skips 🔒 Keep items AND (when auto-disenchant
+  // is on) anything at/above the bag's threshold; Krangled items are included.
   document.getElementById('disAll').onclick = async () => {
-    if (!confirm(`Disenchant ALL bag items? 🔒 Keep-marked items are skipped (Krangled items are included). Can't be undone.`)) return;
+    if (!confirm(`Disenchant ALL bag items? 🔒 Keep-marked items — and anything at/above your auto-disenchant threshold — are skipped (Krangled items are included). Can't be undone.`)) return;
     await craftAct('disenchant-all', {}, 'Disenchant all', { currency: true });
     refresh();
   };
