@@ -34,3 +34,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      # dmg (installer) + zip (electron-updater feed) for x64 and arm64.
+      # Unsigned: users must right-click > Open on first launch, and the mac
+      # auto-updater won't install shell updates (web content still hot-updates
+      # from main via resolveAppDir).
+      - name: Build and publish
+        run: npm run release:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
