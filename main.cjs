@@ -49,7 +49,11 @@ async function resolveAppDir() {
         && Array.isArray(manifest.files) && manifest.files.every(safeFile)) {
       const files = await Promise.all(manifest.files.map(f => get(`${base}/${f}`).then(t => [f, t])));
       fs.mkdirSync(appDir, { recursive: true });
-      for (const [f, t] of files) fs.writeFileSync(path.join(appDir, f), t); // all fetched before writing
+      for (const [f, t] of files) { // all fetched before writing
+        const p = path.join(appDir, f);
+        fs.mkdirSync(path.dirname(p), { recursive: true }); // manifest may list subdir files (e.g. extension/)
+        fs.writeFileSync(p, t);
+      }
       fs.writeFileSync(path.join(appDir, 'version.json'), JSON.stringify(manifest));
       localVer = manifest.version;
     }
@@ -86,6 +90,19 @@ async function load7tv() {
   if (!ver) return;
   try { await session.defaultSession.loadExtension(path.join(base, ver), { allowFileAccess: true }); }
   catch { /* MV3 in Electron may reject it — no emotes, chat still works */ }
+}
+
+// Load the bundled Path of Dust item-link extension (extension/ — the embedded
+// copy of pod_chat_extension) into the default session, same injection route
+// as 7TV above: its content script matches *.twitch.tv/*, so hovering a
+// "#pod-item=" share link in the chat panel shows the item card. Prefers the
+// hot-updated copy when one exists.
+async function loadItemLinks(dir) {
+  const ext = [path.join(dir, 'extension'), path.join(__dirname, 'extension')]
+    .find(p => fs.existsSync(path.join(p, 'manifest.json')));
+  if (!ext) return;
+  try { await session.defaultSession.loadExtension(ext); }
+  catch { /* chat still works, just without hover cards */ }
 }
 
 // A random, anonymous per-install id (no name/PII), persisted in userData.
@@ -204,6 +221,7 @@ async function start() {
   allowTwitchFraming();
   await load7tv(); // custom emotes in chat, if 7TV is installed
   const dir = await resolveAppDir(); // bundled, or a newer set pulled from the repo
+  await loadItemLinks(dir); // hover cards for shared item links in chat
   process.env.INSTALL_ID = installId(); // anonymous, for usage stats
   global.__autoUpdate = true; // this (installer) shell self-updates; the bridge reports it so the
                               // hot-updated UI can warn old portable shells, which never set this

@@ -120,7 +120,7 @@
       <option value="">None</option>
       <option value="slot">Slot</option>
     </select></label>
-    <button id="disAll" class="danger" title="Disenchant every unlocked bag item. Krangled and 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All (Unlocked)</button>
+    <button id="disAll" class="danger" title="Disenchant every bag item. 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All</button>
   </div>
   <div id="bag"></div>
   <div id="toasts"></div>
@@ -278,6 +278,7 @@
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
     if (inv.expired || meData.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
 
+    meName = meData.name || '';
     if (meData.name) document.title = `${GAME_NAME} — Bag — ${meData.name}`;
     const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
     const ad = inv.autoDisenchant;
@@ -541,7 +542,7 @@
   const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, 500); };
 
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
-  let lastBag = [], lastCap = null;
+  let lastBag = [], lastCap = null, meName = '';
   const numTier = (i) => +(i.tier?.match(/\d+/) || [0])[0];
   const numQual = (i) => i.sacred || i.quality === 'Sacred' ? 102 : i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
   const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
@@ -559,7 +560,17 @@
     ].join('  |  ');
     return `✨ ${it.name} 【${slotOf(it.slot)} · ${t} · ${q}】${it.primary ? ` ${it.primary}` : ''}${mods ? `  ➤  ${mods}` : ''}`;
   };
-  const shareBtn = (it) => `<button data-share="${esc(shareText(it))}" title="Copy for chat">Share</button>`;
+  // Compact payload for the extension-readable item link — shape is the
+  // "#pod-item=" contract in /item-codec.mjs (canonical copy lives in
+  // pod_chat_extension/shared/).
+  const compactItem = (it) => ({
+    n: it.name, s: (it.slot || '').toLowerCase(), t: numTier(it) || undefined,
+    q: it.sacred ? 'Sacred' : it.quality || undefined, p: it.primary || undefined,
+    im: (it.implicits || []).map(i => i.t),
+    m: (it.mods || []).map(m => [m.t, rollOf(m.tip), m.crit ? 1 : 0]),
+    f: { ...(it.sacred ? { sa: 1 } : {}), ...(it.unique ? { un: 1 } : {}), ...(it.krangled ? { kr: 1 } : {}) },
+  });
+  const shareBtn = (it) => `<button data-share="${esc(shareText(it))}" data-sjson="${esc(JSON.stringify(compactItem(it)))}" title="Copy for chat">Share</button>`;
   const bagCard = (it) => itemCard(it,
     `<button data-eq="${it.id}">Equip</button>
      <button data-lock="${it.id}">${it.protected ? 'Unlock' : '🔒 Lock'}</button>
@@ -626,7 +637,21 @@
       return refresh();
     }
     if (d.share !== undefined) {
-      try { await navigator.clipboard.writeText(d.share); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
+      let text = d.share;
+      // Append the hoverable item link (pod_chat_extension reads it in Twitch
+      // chat). Cosmetic-text-only fallback if encoding is unavailable.
+      try {
+        if (d.sjson && window.PodItemCodec) {
+          const payload = await window.PodItemCodec.encodeItem(JSON.parse(d.sjson));
+          const login = /^[a-z0-9_]{1,25}$/i.test(meName) ? meName.toLowerCase() : '';
+          const link = window.PodItemCodec.itemLink(payload, login);
+          // Twitch caps messages at 500 chars — drop the cosmetic mod list
+          // before ever dropping the link.
+          if (text.length + link.length + 1 > 500) text = text.split('  ➤  ')[0];
+          text += ' ' + link;
+        }
+      } catch {}
+      try { await navigator.clipboard.writeText(text); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
       catch { $('err').textContent = 'Clipboard blocked'; }
       return;
     }
@@ -649,15 +674,16 @@
     }
   });
 
-  // Disenchant every unlocked bag item (server skips Krangled + 🔒 Keep items).
+  // Disenchant every bag item (server skips only 🔒 Keep items; Krangled included).
   document.getElementById('disAll').onclick = async () => {
-    if (!confirm(`Disenchant ALL unlocked bag items? Krangled and 🔒 Keep-marked items are skipped. Can't be undone.`)) return;
+    if (!confirm(`Disenchant ALL bag items? 🔒 Keep-marked items are skipped (Krangled items are included). Can't be undone.`)) return;
     await craftAct('disenchant-all', {}, 'Disenchant all', { currency: true });
     refresh();
   };
 
   load();
 </script>
+<script type="module">import * as codec from '/item-codec.mjs'; window.PodItemCodec = codec;</script>
 <script src="/tooltip.js"></script>
 <script src="/autoreload.js"></script>
 </body>

@@ -1,0 +1,33 @@
+/* Floating item card — palette ported from lokati_overlay bag.html /
+   tooltip.js. Everything scoped under .pod-tt / .pod-item-link so nothing
+   bleeds into Twitch's own styles. */
+.pod-item-link { text-decoration: underline dotted; cursor: help; }
+
+.pod-tt {
+  position: fixed; z-index: 99999; pointer-events: none; max-width: 320px;
+  background: rgba(20, 16, 32, 0.98); border: 1px solid rgba(160, 140, 255, 0.45);
+  color: #eae6f5; font: 12px/1.45 "Segoe UI", Arial, sans-serif;
+  padding: 8px 11px; border-radius: 8px; box-shadow: 0 8px 24px #000a;
+}
+.pod-tt-name { font-weight: 700; font-size: 13px; }
+.pod-tt-name.sa { color: #d6f0ff; text-shadow: 0 0 8px rgba(120, 200, 255, 0.6); }
+.pod-tt-name.un { color: #ffd76b; text-shadow: 0 0 6px rgba(255, 215, 107, 0.4); }
+.pod-tt-name.kr { color: #b23a3a; }
+.pod-tt-sub { font-size: 11px; color: #b0a2d9; margin-top: 2px; }
+.pod-tt-imp {
+  font-size: 11px; color: #d6f0ff; font-weight: 600; line-height: 1.35;
+  background: rgba(120, 200, 255, 0.12); border: 1px solid rgba(120, 200, 255, 0.4);
+  border-radius: 6px; padding: 3px 6px; margin-top: 6px; width: fit-content;
+}
+.pod-tt-mods { margin-top: 6px; color: #c9bdf0; }
+.pod-tt-mod { display: flex; align-items: center; gap: 6px; }
+.pod-tt-mod .crit { color: #6ee08a; font-weight: 600; }
+.pod-tt-roll {
+  font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 4px;
+  border: 1px solid currentColor; white-space: nowrap;
+}
+.pod-tt-roll.gold { color: #ffcf5a; }
+.pod-tt-roll.t1 { color: #ffcf5a; } .pod-tt-roll.t2 { color: #ffb347; }
+.pod-tt-roll.t3 { color: #c792ea; } .pod-tt-roll.t4 { color: #82aaff; }
+.pod-tt-roll.t5 { color: #7fdba3; } .pod-tt-roll.t6 { color: #5fb3b3; }
+.pod-tt-roll.t7 { color: #9aa0b5; } .pod-tt-roll.t8 { color: #6b6f80; }
