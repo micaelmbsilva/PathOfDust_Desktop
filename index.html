@@ -530,7 +530,16 @@
     if (p) front(p);
   }, true);
 
+  // Every wired panel, in wiring order — filled here rather than kept as a
+  // hand-maintained list so a new panel shows up in Settings' per-panel reset
+  // for free. `def` is the markup's OWN inline style (partypanel and friends
+  // ship a default top/left there), captured before any saved geometry is
+  // applied, which is what a reset has to put back — just clearing the
+  // attribute would drop the default position too.
+  const panes = [];
+
   function persistPanel(el, key) {
+    panes.push({ key, el, def: el.getAttribute('style') || '' });
     const s = LS.get(key, null);
     if (s) {
       if (s.left != null) { el.style.left = s.left + 'px'; el.style.right = 'auto'; }
@@ -560,6 +569,25 @@
     new ResizeObserver(save).observe(el);
     return save;
   }
+
+  // Put ONE panel back where the markup puts it, without the whole-app reload
+  // (and zoom/pan wipe) that "Reset Panels & Zoom" does. The ResizeObserver
+  // writes the default geometry straight back into the same key, which is
+  // exactly right — the panel is at its default now.
+  function resetPane(p) {
+    localStorage.removeItem(p.key);
+    p.el.setAttribute('style', p.def);
+    p.el.classList.remove('collapsed');
+    const cb = p.el.querySelector('.cbtns button[title="collapse"]');
+    if (cb) cb.textContent = '▾';
+    front(p.el);
+  }
+  // The bar's own title is the panel's name everywhere else in the app, so the
+  // reset list reads it rather than keeping a second set of labels in sync.
+  // The stats panel's bar shows the character name instead of a fixed title,
+  // so it falls back to its key.
+  const paneLabel = (p) => p.el.querySelector('.ctitle')?.textContent.trim()
+    || '📊 ' + p.key.replace(/^lay\./, '').replace(/^./, c => c.toUpperCase());
 
   // Overlay source: plain, or ?highlight=<name> to dim other players (lokati's
   // feature). Toggle persists; needs our character name (from /api/me).
@@ -1603,7 +1631,20 @@
         <button class="tbtn" id="openLogs" title="Show the saved fight-log files in Explorer">📂 Open Logs Folder</button>
         <button class="tbtn" id="resetLay" title="Puts every panel back at its default spot and resets overlay zoom/pan — reloads the app page">📐 Reset Panels &amp; Zoom</button>
         <button class="tbtn" id="resetBar" title="Restores the top toolbar's default buttons and groups">🧭 Reset Toolbar</button>
-      </div>`;
+      </div>` +
+      // Per-panel reset, for when only one panel is in a bad spot and the
+      // all-or-nothing button above is too blunt. Every panel is always
+      // listed: a saved key exists for panels sitting at their default too
+      // (the ResizeObserver writes one back the moment they settle), so it is
+      // not a usable "has this been moved" signal.
+      `<details id="paneReset"${LS.get('paneResetOpen', false) ? ' open' : ''} style="margin-top:6px">
+         <summary style="cursor:pointer;font-size:0.8rem;color:#c9bdf0">📐 Reset one panel</summary>
+         <div class="tacts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">` +
+        panes.map(p => `<button class="tbtn" data-pane="${esc(p.key)}"
+            title="Put this panel back at its default spot, size and expanded state"
+            >${esc(paneLabel(p))}</button>`).join('') +
+        `</div>
+       </details>`;
     document.querySelectorAll('#settingsBody [data-set]').forEach(el => el.onchange = () => {
       setS(el.dataset.set, el.type === 'checkbox' ? el.checked : (/^\d+$/.test(el.value) ? +el.value : el.value));
       rerenderIfOpen('party', renderParty); // role classification reads the latest report
@@ -1631,6 +1672,13 @@
     arm(document.getElementById('resetLay'), () => {
       Object.keys(localStorage).filter(k => k.startsWith('lay.')).forEach(k => localStorage.removeItem(k));
       location.reload();
+    });
+    // No two-click confirm here, unlike the resets above: one panel's position
+    // is cheap to redo, and the panel visibly jumps so the result is obvious.
+    document.getElementById('paneReset').ontoggle = (e) => LS.set('paneResetOpen', e.target.open);
+    document.querySelectorAll('#paneReset [data-pane]').forEach(b => b.onclick = () => {
+      const p = panes.find(x => x.key === b.dataset.pane);
+      if (p) resetPane(p);
     });
     arm(document.getElementById('resetBar'), () => {
       localStorage.removeItem('topbar');
