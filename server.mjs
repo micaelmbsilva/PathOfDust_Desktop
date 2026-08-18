@@ -215,7 +215,10 @@ const statsOf = (text) => [...text.matchAll(
 // Exported for scrape smoke-tests.
 export const ELEMENTS = [['Fire', '🔥'], ['Cold', '❄️'], ['Lightning', '⚡'], ['Divine', '✨'], ['Chaos', '☠️']];
 export function elementalOf(stats) {
-  const dmg = stats.find(s => /Dmg Dealt$/.test(s.label));
+  // Anchored both ends on purpose: "Increased Crit Dmg Dealt" sits right above
+  // this stat on the card and also ends in "Dmg Dealt", but carries no
+  // breakdown tooltip — a loose match found that one first and always bailed.
+  const dmg = stats.find(s => /^(Increased|Reduced) Dmg Dealt$/.test(s.label));
   if (!dmg || !dmg.vtip) return null;
   const parts = [];
   for (const [name, icon] of ELEMENTS) {

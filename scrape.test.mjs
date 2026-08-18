@@ -175,9 +175,14 @@ assert.deepEqual(characterOf('<div class="card"><h1>Not Found</h1></div>', 'nope
 // re-added from gear rolls, so it can never disagree with the game's own number.
 assert.equal(elementalOf(ch.stats), null, 'no elemental rolls -> no card at all');
 const lines = (...l) => l.join('\n');
-const el = elementalOf([{ label: 'Increased Dmg Dealt', value: '340%', tip: 'x',
-  vtip: lines('Fire Damage: +12%', 'Lightning Damage: +9%', 'Gear (Increased Damage): +80%',
-    'Passive Tree: +140%', 'Total: 340%') }]);
+// "Increased Crit Dmg Dealt" sits immediately above the stat we want and also
+// ends in "Dmg Dealt", but has no breakdown tooltip — matching it instead
+// silently killed the card on every real character.
+const el = elementalOf([
+  { label: 'Increased Crit Dmg Dealt', value: '2455%', tip: 'x', vtip: '' },
+  { label: 'Increased Dmg Dealt', value: '340%', tip: 'x',
+    vtip: lines('Fire Damage: +12%', 'Lightning Damage: +9%', 'Gear (Increased Damage): +80%',
+      'Passive Tree: +140%', 'Total: 340%') }]);
 assert.equal(el.value, '21%', 'only the elemental lines are summed');
 assert.equal(el.vtip, lines('Fire Damage: +12%', 'Lightning Damage: +9%', 'Total: +21%'));
 assert.equal(elementalOf([{ label: 'Reduced Dmg Dealt', value: '5%', tip: 'x',
