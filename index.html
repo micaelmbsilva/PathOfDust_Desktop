@@ -337,7 +337,7 @@
   <img class="dlogo" id="downLogo" alt="">
   <div class="dplate">
     <div class="dtitle" id="downTitle">💤 Path of Down is dust…</div>
-    <div class="dmsg">Waiting for it to come back — this screen clears itself.</div>
+    <div class="dmsg">The game is taking a nap — the app reconnects by itself the moment it wakes.</div>
   </div>
 </div>
 
@@ -728,12 +728,24 @@
       logo.removeAttribute('src');
     }
   }
-  function setDown(on) {
-    if (on === isDown) return;
-    isDown = on;
+  function applyDown(on) {
     document.getElementById('down').classList.toggle('open', on);
     downArt(on);
     if (!on) { const ov = document.getElementById('overlay'); ov.setAttribute('src', ov.getAttribute('src')); } // revive iframe
+  }
+  function setDown(on) {
+    if (on === isDown) return;
+    isDown = on;
+    if (!downPreview) applyDown(on); // while previewing, the preview owns the curtain
+  }
+  // Operator toolbar: show the curtain on demand (artwork, logo, text) without
+  // the game actually being down. Purely local — nothing is broadcast. On clear,
+  // fall back to the real reachability state so a genuine outage stays covered.
+  let downPreview = false;
+  function toggleDownPreview() {
+    downPreview = !downPreview;
+    applyDown(downPreview || isDown);
+    syncToolbarActive();
   }
   loadStats();
 
@@ -951,10 +963,11 @@
     inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
     fights: { label: '⚔️ Fight History', title: "Every recent fight, straight from the game's own records — exact totals, no estimates", act: () => toggleModal('fights'), isActive: panelOpen('fights') },
     builds: { label: '📐 Build Dossier', title: 'Owner only — level-119 builds under ordinary four-mod gearing', act: () => openWin('/owner/builds', 'builds', 1260, 900) },
+    downtime: { label: '💤 Preview Downtime', title: 'Operator only — show the downtime curtain without the game being down (click again to clear)', act: () => toggleDownPreview(), isActive: () => downPreview },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the
   // backend's PING_KEY (sent by the bridge) is the actual auth.
-  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'], builds: ['lokati_gaming'] };
+  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'], builds: ['lokati_gaming'], downtime: ['lokati_gaming', 'kibukah'] };
   const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
