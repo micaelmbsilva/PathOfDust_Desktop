@@ -991,7 +991,12 @@
   // Operator-only toolbar items, keyed by character name. UI gating only — the
   // backend's PING_KEY (sent by the bridge) is the actual auth.
   const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'], builds: ['lokati_gaming'], downtime: ['lokati_gaming', 'kibukah'] };
-  const itemHidden = (id) => OPERATOR_ITEMS[id] && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
+  // The operator key (surfaced as POD_OPERATOR by /config.js) overrides the
+  // name gate: with the game site down /api/me can't name the character, and
+  // the operator tools — broadcast, inbox — talk to the telemetry backend,
+  // which is up regardless. Still UI gating only; the key authenticates
+  // server-side.
+  const itemHidden = (id) => OPERATOR_ITEMS[id] && !window.POD_OPERATOR && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
     { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight'] } },

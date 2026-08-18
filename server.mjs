@@ -718,11 +718,17 @@ const srv = createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store'); // never cache app files — always serve the current (updated) version
     if (url.pathname === '/config.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
-      return res.end(`window.GAME_NAME=${JSON.stringify(GAME_NAME)};`);
+      // POD_OPERATOR: this install holds the operator key (main.cjs), so the UI
+      // can show operator controls even while the game site is unreachable and
+      // /api/me can't name the character. The key itself never leaves the bridge;
+      // broadcast/inbox still authenticate server-side with it.
+      return res.end(`window.GAME_NAME=${JSON.stringify(GAME_NAME)};window.POD_OPERATOR=${!!globalThis.__operatorKey};`);
     }
     if (url.pathname === '/owner/builds' || url.pathname === '/builds.html') {
-      const identity = await me();
-      if (!ownerBuildsAllowed(identity.name)) {
+      // Operator key bypasses the name check — me() scrapes the game site and
+      // fails during an outage, which would lock the owner out of a local page.
+      const identity = globalThis.__operatorKey ? null : await me();
+      if (identity && !ownerBuildsAllowed(identity.name)) {
         res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end('<!doctype html><html><head><meta charset="utf-8"><title>Not Found</title></head><body><h1>Not Found</h1></body></html>');
       }
