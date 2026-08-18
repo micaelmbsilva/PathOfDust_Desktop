@@ -212,7 +212,11 @@ function initWindowPersistence(win, state) {
   const raise = (w) => {
     if (w.isDestroyed()) return;
     if (w.isMinimized()) w.restore();
-    w.setAlwaysOnTop(true); w.show(); w.focus(); w.setAlwaysOnTop(false);
+    // Pin on top, raise, focus — then release on the next tick. Toggling
+    // alwaysOnTop back off in the SAME tick collapses to a no-op for an
+    // already-visible window, so the raise never commits and it stays behind.
+    w.setAlwaysOnTop(true); w.show(); w.moveTop(); w.focus();
+    setTimeout(() => { if (!w.isDestroyed()) w.setAlwaysOnTop(false); }, 200);
   };
   // Live child windows by key, so the renderer can re-focus an already-open one
   // (window.open reuse doesn't re-fire did-create-window, and the proxy focus()
