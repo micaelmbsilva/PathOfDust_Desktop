@@ -1721,7 +1721,7 @@
             {
               "name": "Doom",
               "max": "4/4",
-              "text": "Curse of Weakness detonates for a burst of damage when it expires, equal to 20% of damage dealt to the cursed target per rank (up to 60% at 3/3).",
+              "text": "Curse of Weakness detonates for a burst of damage when it expires, equal to 3% of damage dealt to the cursed target per rank (up to 9% at 3/3).",
               "modifiers": [
                 {
                   "name": "Harbinger",

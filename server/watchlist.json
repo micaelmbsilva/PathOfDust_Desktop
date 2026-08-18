@@ -106,7 +106,7 @@
    "classes": [
     "Warlock"
    ],
-   "text": "Curse of Weakness 20% + Amplify Curse 24% + Hex Mastery 24% = up to +68% damage taken by the target from EVERYONE, spread via Contagious Curse, then Doom detonates for 105% of damage dealt (with Harbinger) and Apocalypse splashes 90% of that. In a full party this is arguably the strongest force-multiplier — every ally's hit gets the amp.",
+   "text": "Curse of Weakness 20% + Amplify Curse 24% + Hex Mastery 24% = up to +68% damage taken by the target from EVERYONE, spread via Contagious Curse — still one of the strongest party force-multipliers, since every ally's hit gets the amp. Doom was gutted this patch (detonation 20/40/60% → 3/6/9%; ~13% with Harbinger, Apocalypse splashes 90% of that) — treat it as a minor rider now, not a payoff.",
    "type": "party"
   },
   {

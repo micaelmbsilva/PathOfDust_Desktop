@@ -47,13 +47,15 @@ const s1 = classScore('Commoner' in model.archetypes ? 'Commoner' : 'Berserker',
 assert.ok(Math.abs(s1.overflow - 0.15) < 1e-9, `overflow ${s1.overflow}`);
 assert.equal(s1.detail.eff.dr, 0.75);
 
-// crit EV: cc 1.5, cm 12 → factor 1 + 1.5×11×0.5 = 9.25 (uncapped past 100%)
+// crit EV: cc 1.5, cm 12 — overcrit saturating curve (combat.rs crit_stack_bonus):
+// two-point mixture of stacks 1 and 2. bonus(1) = 1×11×0.5 = 5.5,
+// bonus(2) = (1 + 1.5×1/2)×11×0.5 = 9.625 → critF = 1 + 0.5×5.5 + 0.5×9.625 = 8.5625
 {
   const g = { ...emptyBuckets(), critChance: 1.45, critMult: 10 }; // + base 0.05/2.0
   const s = classScore('Warrior', g, 0, model);
   const cc = s.detail.cc, cm = s.detail.cm;
   assert.ok(Math.abs(cc - 1.5) < 1e-9 && Math.abs(cm - 12) < 1e-9);
-  const expected = (1 + 1.5 * 11 * 0.5) / (1 + 0.05 * 1 * 0.5); // vs the 5%/2.0 baseline's own factor
+  const expected = 8.5625 / (1 + 0.05 * 1 * 0.5); // vs the 5%/2.0 baseline's own factor (sub-100% crit: unchanged by the curve)
   assert.ok(Math.abs((s.dps / classScore('Warrior', emptyBuckets(), 0, model).dps) / expected - 1) < 0.001);
 }
 

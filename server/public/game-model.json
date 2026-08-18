@@ -40,6 +40,8 @@
     "critBase": 0.05,
     "critMultBase": 2.0,
     "critBonusMult": 0.5,
+    "overcritCurveA": 1.5,
+    "overcritCurveH": 1.0,
     "attackIntervalFloorMs": 50,
     "leechCapPerSec": 0.20,
     "lingerTicks": 80,
@@ -59,7 +61,7 @@
     "pointsForLevel": "1 + floor(level/4)",
     "src": {
       "overflow": "character.rs:2440-2449 defensive_overflow — DR/block/evasion/intervene past cap feeds combat_increased_damage's gear layer 1:1",
-      "crit": "combat.rs:3301-3372 — dmg × (1 + stacks×(cm−1)×0.5), stacks = floor(chance)+Bernoulli(frac), both uncapped",
+      "crit": "combat.rs crit_stack_bonus — dmg × (1 + (min(stacks,1) + 1.5×over/(over+1))×(cm−1)×0.5), over = max(0, stacks−1); stacks = floor(chance)+Bernoulli(frac). Overcrit saturates: total bonus caps at 2.5×(cm−1)×0.5",
       "elem": "combat.rs:4626 proc chance = roll/50; same roll is flat increased damage (character.rs:2588-2593); lightning taken-source clamped −0.75 → 1.75× ceiling",
       "divineLoop": "combat.rs:4684-4696,6999 — healer divine self-buff: floor(raw%) guaranteed stacks, uncapped, 1% heal power each, 4s",
       "healToSpeed": "character.rs:2053-2071 — heal power excess over 100% divides action interval, 50ms floor",

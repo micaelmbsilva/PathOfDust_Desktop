@@ -101,7 +101,17 @@ export function classScore(cls, g, level, model) {
 
   const cc = R.critBase + g.critChance + (B.critChance || 0);
   const cm = R.critMultBase + g.critMult + (B.critMult || 0);
-  const critF = 1 + cc * (cm - 1) * R.critBonusMult; // E[stacks] = cc, uncapped
+  // Overcrit saturating curve (combat.rs crit_stack_bonus): first stack pays
+  // the flat rate, stacks past it run through A*x/(x+h). Real stacks are
+  // floor(cc) or floor(cc)+1, so the exact EV is the two-point mixture of the
+  // (nonlinear) bonus at those whole values — not the bonus at E[stacks].
+  const stackBonus = (s) => {
+    const over = Math.max(0, s - 1);
+    const curve = R.overcritCurveA * over / (over + R.overcritCurveH);
+    return (Math.min(s, 1) + curve) * (cm - 1) * R.critBonusMult;
+  };
+  const ccFloor = Math.floor(cc), ccRem = cc - ccFloor;
+  const critF = 1 + (1 - ccRem) * stackBonus(ccFloor) + ccRem * stackBonus(ccFloor + 1);
 
   const procF = 1 + ELEMS.reduce((s, e) => s + (g[e] / R.elemProcDivisor) * (model.proxies.elemProcValue[e] || 0.5), 0);
   const aoeF = 1 + (g.splash + (B.splash || 0)) * model.proxies.splashWeight;
