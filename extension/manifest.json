@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Path of Dust Item Links (embedded)",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Path of Dust item links in the chat panel become the item's name — hover for full stats. Embedded copy of pod_chat_extension — no icons (the hot-updater only carries text files) and no Firefox keys.",
   "content_scripts": [
     {
