@@ -206,12 +206,24 @@ function initWindowPersistence(win, state) {
     const bounds = s.x != null ? { x: s.x, y: s.y, width: s.width, height: s.height } : {};
     return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16', ...bounds } };
   });
+  // Foreground a window and hand it keyboard focus. focus()+moveTop() alone
+  // don't reliably win against the Windows foreground lock; a momentary
+  // alwaysOnTop flash does, without leaving the window pinned on top.
+  const raise = (w) => {
+    if (w.isDestroyed()) return;
+    if (w.isMinimized()) w.restore();
+    w.setAlwaysOnTop(true); w.show(); w.focus(); w.setAlwaysOnTop(false);
+  };
+  // Live child windows by key, so the renderer can re-focus an already-open one
+  // (window.open reuse doesn't re-fire did-create-window, and the proxy focus()
+  // it falls back to lands behind main).
+  const children = new Map();
+  global.__raiseChild = (key) => { const c = children.get(key); if (c) raise(c); };
   win.webContents.on('did-create-window', (child, { url }) => {
-    // Renderer-side window.open(...).focus() doesn't reliably raise a window
-    // reopened under a name that was just closed — the proxy focus races the
-    // new window's creation and it lands behind main. Raise it authoritatively.
-    child.once('ready-to-show', () => { if (!child.isDestroyed()) { child.show(); child.focus(); child.moveTop(); } });
+    child.once('ready-to-show', () => raise(child));
     const key = winKey(url); if (!key) return;
+    children.set(key, child);
+    child.on('closed', () => { if (children.get(key) === child) children.delete(key); });
     state[key] = { ...(state[key] || {}), url, open: true, ...child.getBounds() };
     writeWinState(state);
     const save = () => { if (!child.isDestroyed()) { state[key] = { ...state[key], ...child.getBounds() }; writeWinState(state); } };

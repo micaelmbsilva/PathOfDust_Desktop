@@ -302,10 +302,10 @@
   .fl { font-size: 0.76rem; padding: 1px 0; }
   .fl .ft { color: #8a7fb0; font-variant-numeric: tabular-nums; margin-right: 6px; }
   .fl.taken { color: #ff9d9d; } .fl.healed { color: #7fdba3; } .fl.death { color: #ff8080; font-weight: 700; }
-  .fl.healout { color: #7fdba3; }
+  .fl.healout, .fl.selfheal { color: #7fdba3; }
   .fl.myevaded, .fl.dodged { color: #9ad4d4; }
   .fchips { margin: 2px 0 4px; }
-  .fl.shielded, .fl.shieldout { color: #82aaff; }
+  .fl.shielded, .fl.shieldout, .fl.selfshield { color: #82aaff; }
   .fl.buffgain { color: #c792ea; } .fl.bufflost { color: #8a7fb0; }
   .fl .mit { color: #8a7fb0; font-size: 0.92em; }
 
@@ -483,6 +483,12 @@
   function openWin(path, name, w = 1000, h = 800) {
     // .focus(): reopening an already-open named window otherwise leaves it behind this one
     window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`)?.focus();
+    // The proxy focus() above loses to the Windows foreground lock when the
+    // window is already open behind us; the shell raises it authoritatively.
+    // No-op on old shells and while the window is first being created (then
+    // main's ready-to-show raise handles it). Key = the pathname main keys on.
+    fetch('/api/raise-window', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: new URL(path, location.href).pathname }) }).catch(() => {});
   }
 
   // ---- layout persistence (panel positions/sizes/collapse + overlay zoom) ----
@@ -1896,6 +1902,11 @@
       } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.healer === myId && ev.target !== myId) {
         const sh = ev.kind === 'shield';
         G((sh ? 'so' : 'o') + ev.target + ':' + b, () => ({ at: ev.atMs, kind: sh ? 'shieldout' : 'healout', tgt: names[ev.target], amt: 0 })).amt += ev.amount || 0;
+      } else if ((ev.kind === 'heal' || ev.kind === 'shield') && (ev.amount || 0) > 0 && ev.healer === myId && ev.target === myId) {
+        // self-heal/shield (healer === target): Monk Inner Focus evade heal,
+        // Soul Stone, etc. — matches neither of the two branches above.
+        const sh = ev.kind === 'shield';
+        G((sh ? 'ss' : 'sf') + b, () => ({ at: ev.atMs, kind: sh ? 'selfshield' : 'selfheal', amt: 0 })).amt += ev.amount || 0;
       } else if (ev.kind === 'defeat' && ev.unit === myId) {
         groups.set('d' + b, { at: ev.atMs, kind: 'death' });
       } else if (ev.kind === 'buffSnapshot' && ev.unit === myId) {

@@ -992,6 +992,13 @@ const srv = createServer(async (req, res) => {
       if (typeof globalThis.__refocus === 'function') globalThis.__refocus();
       return json(res, { ok: true });
     }
+    if (url.pathname === '/api/raise-window' && req.method === 'POST') {
+      // Bring an already-open child window (e.g. the Bag) to the front with
+      // focus (see main.cjs __raiseChild). No-op on old shells / unknown keys.
+      const { key } = await jbody(req);
+      if (typeof globalThis.__raiseChild === 'function' && key) globalThis.__raiseChild(key);
+      return json(res, { ok: true });
+    }
     if (url.pathname === '/api/action' && req.method === 'POST') {
       const { endpoint, fields } = await jbody(req);
       const r = await post(endpoint, fields || {});

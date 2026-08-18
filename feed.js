@@ -14,10 +14,10 @@
   .pod-feed .fl { font-size: 0.76rem; padding: 1px 0; }
   .pod-feed .fl .ft { color: #8a7fb0; font-variant-numeric: tabular-nums; margin-right: 6px; }
   .pod-feed .fl.taken { color: #ff9d9d; }
-  .pod-feed .fl.healed, .pod-feed .fl.healout { color: #7fdba3; }
+  .pod-feed .fl.healed, .pod-feed .fl.healout, .pod-feed .fl.selfheal { color: #7fdba3; }
   .pod-feed .fl.death { color: #ff8080; font-weight: 700; }
   .pod-feed .fl.myevaded, .pod-feed .fl.dodged { color: #9ad4d4; }
-  .pod-feed .fl.shielded, .pod-feed .fl.shieldout { color: #82aaff; }
+  .pod-feed .fl.shielded, .pod-feed .fl.shieldout, .pod-feed .fl.selfshield { color: #82aaff; }
   .pod-feed .fl.buffgain { color: #c792ea; }
   .pod-feed .fl.bufflost { color: #8a7fb0; }
   .pod-feed .fl .mit { color: #8a7fb0; font-size: 0.92em; }
@@ -55,8 +55,10 @@
     taken: (g) => `🩸 ${esc(g.src)} → you: <b>${fmtN(g.dmg)}</b>${g.n > 1 ? ` (${g.n} hits)` : ''}${mitTxt(g, 'your defenses')}`,
     healed: (g) => `💚 ${esc(g.src)} healed you <b>${fmtN(g.amt)}</b>`,
     healout: (g) => `💚 You healed ${esc(g.tgt)} <b>${fmtN(g.amt)}</b>`,
+    selfheal: (g) => `💚 You healed yourself <b>${fmtN(g.amt)}</b>`,
     shielded: (g) => `🛡️ ${esc(g.src)} shielded you <b>${fmtN(g.amt)}</b>`,
     shieldout: (g) => `🛡️ You shielded ${esc(g.tgt)} <b>${fmtN(g.amt)}</b>`,
+    selfshield: (g) => `🛡️ You shielded yourself <b>${fmtN(g.amt)}</b>`,
     buffgain: (g) => `✨ Gained: <b>${buffNames(g)}</b>`,
     bufflost: (g) => `🕯️ Wore off: ${buffNames(g)}`,
     death: () => `💀 You were defeated`,
@@ -140,7 +142,7 @@
   const rolesOf = (cls) => cls ? (CLASS_ROLES[cls] || ['dps']) : null; // null = class unknown
 
   const CATS = { dmg: ['hit', 'taken', 'myevaded', 'dodged', 'death'],
-    heals: ['healed', 'healout', 'shielded', 'shieldout'], buffs: ['buffgain', 'bufflost'] };
+    heals: ['healed', 'healout', 'selfheal', 'shielded', 'shieldout', 'selfshield'], buffs: ['buffgain', 'bufflost'] };
   const CHIPS = [['all', 'All'], ['dmg', '⚔️ Damage'], ['heals', '💚 Heals'], ['buffs', '✨ Buffs']];
   const passes = (g, cat) => !cat || cat === 'all' || (CATS[cat] || []).includes(g.kind);
 
