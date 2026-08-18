@@ -589,27 +589,32 @@
   const paneLabel = (p) => p.el.querySelector('.ctitle')?.textContent.trim()
     || '📊 ' + p.key.replace(/^lay\./, '').replace(/^./, c => c.toUpperCase());
 
-  // Overlay source: plain, or ?highlight=<name> to dim other players (lokati's
-  // feature). Toggle persists; needs our character name (from /api/me).
+  // Overlay source. The iframe URL carries every overlay display setting:
+  // embed=app always (tells the website to suppress its own settings tray),
+  // ?highlight=<name> dims other players (needs our character name, from
+  // /api/me), ?bgOpacity=<0-1> fades the overlay's backdrop, and
+  // ?bossSize=<0.5-1.5> scales real boss sprites (2026-08-18). The game
+  // clamps the numeric params; non-default-only so the URL stays minimal.
   const OVERLAY = 'https://adventure.lokati.net/overlay';
   let myName = '';
-  // ?bgOpacity=<0-1> fades the overlay's own backdrop (2026-08-18). The game
-  // clamps it; we only ever send it when it isn't the default 1, so a plain
-  // overlay URL stays plain.
   const bgOpacity = () => { const v = parseFloat(localStorage.getItem('bgOpacity')); return isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; };
-  function applyHighlight() {
+  const bossSize = () => { const v = parseFloat(localStorage.getItem('bossSize')); return isFinite(v) ? Math.min(1.5, Math.max(0.5, v)) : 1; };
+  // Builds the overlay iframe URL from ALL persisted settings and applies it -
+  // so toggling any one setting never drops the others.
+  function applyOverlaySettings() {
     const on = localStorage.getItem('highlight') === '1';
-    const q = new URLSearchParams();
+    const q = new URLSearchParams({ embed: 'app' });
     if (on && myName) q.set('highlight', myName);
     if (bgOpacity() !== 1) q.set('bgOpacity', String(bgOpacity()));
-    const src = q.toString() ? `${OVERLAY}?${q}` : OVERLAY;
+    if (bossSize() !== 1) q.set('bossSize', String(bossSize()));
+    const src = `${OVERLAY}?${q}`;
     const ov = document.getElementById('overlay');
     if (ov.getAttribute('src') !== src) ov.setAttribute('src', src); // reload only if changed
     setActive('highlight', on);
   }
   function toggleHighlight() {
     localStorage.setItem('highlight', localStorage.getItem('highlight') === '1' ? '0' : '1');
-    applyHighlight();
+    applyOverlaySettings();
   }
 
   // Auto-lock Perfect Quality drops (persisted toggle; applied in pollBag).
@@ -699,7 +704,7 @@
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
       if (r.name && r.name !== myName) { // enable highlight + operator items once we know the name
-        myName = r.name; applyHighlight(); renderToolbar(); pollFeedback();
+        myName = r.name; applyOverlaySettings(); renderToolbar(); pollFeedback();
         if (inboxWasOpen && !itemHidden('inbox')) { inboxWasOpen = false; toggleModal('inbox', true); }
       }
       // just the archetype — dust/sand already appear in the rows below
@@ -1616,6 +1621,9 @@
       row('Overlay Background', `<input type="range" id="bgOp" min="0" max="100" step="5" value="${Math.round(bgOpacity() * 100)}" style="vertical-align:middle;width:110px">
         <span id="bgOpVal" style="display:inline-block;min-width:34px;text-align:right">${Math.round(bgOpacity() * 100)}%</span>`,
         'Fades the game overlay\'s own backdrop so more of the app shows through. The overlay reloads when you let go of the slider.') +
+      row('Boss Size', `<input type="range" id="bossSz" min="50" max="150" step="5" value="${Math.round(bossSize() * 100)}" style="vertical-align:middle;width:110px">
+        <span id="bossSzVal" style="display:inline-block;min-width:34px;text-align:right">${Math.round(bossSize() * 100)}%</span>`,
+        'Scales real boss sprites in the game overlay. Basic-encounter mobs keep their own sizing. The overlay reloads when you let go of the slider.') +
       `<div class="fhead" style="margin-top:10px">⚡ Performance</div>` +
       row('Refresh Mode', sel('refresh', [['resp', 'Responsive'], ['bal', 'Balanced'], ['low', 'Low Data']]), 'How often stats and bag re-poll. Responsive: 3s (30s while live events flow). Balanced: half that. Low Data: quarter.') +
       row('Unload Chat When Hidden', chk('chatUnload'), 'Frees CPU/RAM while chat is closed; reopening reloads it.') +
@@ -1689,7 +1697,10 @@
     // change re-navigates the iframe.
     const bgOp = document.getElementById('bgOp'), bgOpVal = document.getElementById('bgOpVal');
     bgOp.oninput = () => { bgOpVal.textContent = bgOp.value + '%'; };
-    bgOp.onchange = () => { localStorage.setItem('bgOpacity', String(bgOp.value / 100)); applyHighlight(); };
+    bgOp.onchange = () => { localStorage.setItem('bgOpacity', String(bgOp.value / 100)); applyOverlaySettings(); };
+    const bossSz = document.getElementById('bossSz'), bossSzVal = document.getElementById('bossSzVal');
+    bossSz.oninput = () => { bossSzVal.textContent = bossSz.value + '%'; };
+    bossSz.onchange = () => { localStorage.setItem('bossSize', String(bossSz.value / 100)); applyOverlaySettings(); };
     renderDiag();
     document.getElementById('copyDiag').onclick = async (e) => {
       try { await navigator.clipboard.writeText(diagText()); const b = e.target, o = b.textContent;
@@ -1761,9 +1772,10 @@
   function startFight(d) {
     const players = {}, names = {};
     // Per-unit HP for the Party pane's bars. The state message the party renders
-    // has no HP; it only exists here in the encounter payload (units[].maxHp +
-    // target_hp_after on events). nameToId lets the party join by display name,
-    // the same key myId is matched on — unit ids aren't the roster login.
+    // has no HP; it only exists here in the encounter payload (units[].maxHp,
+    // plus the playerVitals timeline — or target_hp_after on events as the
+    // legacy fallback, see advanceHp). nameToId lets the party join by display
+    // name, the same key myId is matched on — unit ids aren't the roster login.
     const unitHp = {}, nameToId = {}, enemyIds = new Set();
     for (const u of d.units || []) {
       names[u.id] = u.displayName || u.id;
@@ -1774,15 +1786,38 @@
       } else enemyIds.add(u.id); // boss + adds — for the debuffs landing on them
     }
     const myId = Object.keys(players).find(id => players[id].toLowerCase() === myName.toLowerCase());
+    // Authoritative per-player HP timeline (playerVitals, 2026-08-18) — built
+    // server-side from the FULL pre-thinning event log, so party HP/death stay
+    // exact even in fights whose presentational events were thinned. Stepped
+    // samples ([atMs, hp], same display-time space as events); walked with a
+    // per-player index in advanceHp. Empty when the server predates the field —
+    // then the event-derived reconstruction below stays the (approximate) source.
+    const vitals = {};
+    let vitalsMaxAt = 0;
+    for (const v of d.playerVitals || []) {
+      if (!unitHp[v.id]) continue;
+      const samples = v.hpSamples || [];
+      vitals[v.id] = { samples, diedAt: v.diedAtMs ?? null, idx: 0 };
+      if (samples.length) vitalsMaxAt = Math.max(vitalsMaxAt, samples[samples.length - 1][0]);
+      if (v.diedAtMs != null) vitalsMaxAt = Math.max(vitalsMaxAt, v.diedAtMs);
+    }
     const evs = [...(d.events || [])].sort((a, b) => (a.atMs || 0) - (b.atMs || 0));
-    const maxAt = evs.length ? evs[evs.length - 1].atMs || 1 : 1;
+    // Thinning can drop a fight's LAST events, so the events-only maxAt could
+    // stop the cursor (fightCursor clamps to it) short of a late vitals sample
+    // or death — a player whose diedAtMs lands past the last surviving event
+    // would never render dead. Widen the bound with the vitals timeline.
+    const maxAt = Math.max(evs.length ? evs[evs.length - 1].atMs || 1 : 1, vitalsMaxAt);
     // group my events into 1s sim-time buckets so the log reads, not spams
     const mySnaps = [];
     // Every player who went down this fight (by display name). Fight History has
     // no per-player death flag from the summary, only firstToDie — so we hand it
-    // the full set, carried on the encounter broadcast. players[] is non-boss,
-    // non-enemy only, so bosses/adds never count as a death.
+    // the full set. players[] is non-boss, non-enemy only, so bosses/adds never
+    // count as a death. Seeded from vitals' diedAtMs (authoritative — a thinned
+    // event log can drop Defeat events); the event scan below still adds any it
+    // finds, which is a subset when vitals are present and the only source when
+    // they're not.
     const downed = new Set();
+    for (const id in vitals) if (vitals[id].diedAt != null && players[id]) downed.add(players[id]);
     // Buff snapshots on the enemy — the offensive side of the same effects the
     // Buffs pane shows landing on you (Open Wound, Curse, Mark…). Lets the pane
     // show what's debuffing your target. In at-order (evs is sorted).
@@ -1828,22 +1863,28 @@
     const dur = d.displayDurationMs || maxAt;
     fight = { t0: Date.now(), dur, scale: dur / Math.max(1, maxAt), maxAt, evs, idx: 0, mySnaps,
       players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
-      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, downed: [...downed], enemySnaps, names };
+      thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, vitals, downed: [...downed], enemySnaps, names };
     // A fresh fight replays from full HP for the party bars too. The timer runs
     // while EITHER the fight panel or the party panel wants it.
     startFightTimer();
     if (document.getElementById('partypanel').classList.contains('open')) renderParty();
   }
-  // Advance per-unit HP to the replay cursor: last target_hp_after wins, a defeat
-  // pins to 0. Walked incrementally (fight.hpIdx) so it's O(total events) across
-  // the fight, not O(events) per render. Shared by every party bar.
+  // Advance per-unit HP to the replay cursor. HP itself comes from the
+  // authoritative playerVitals timeline when the fight carries one (last sample
+  // with atMs <= cursor wins, a diedAtMs pins to 0) — the event walk then only
+  // feeds shields (buffSnapshot) and covers units without vitals. Without
+  // vitals (old server), the event walk is the HP source too — approximate,
+  // since thinning can drop HP-changing and Defeat events. Both walks are
+  // incremental (fight.hpIdx / per-player vitals idx) so the whole fight costs
+  // O(total events + samples), not that per render. Shared by every party bar.
   function advanceHp(cursor) {
     if (!fight || !fight.unitHp) return;
     while (fight.hpIdx < fight.evs.length && (fight.evs[fight.hpIdx].atMs || 0) <= cursor) {
       const ev = fight.evs[fight.hpIdx++];
       const u = fight.unitHp[ev.target] || fight.unitHp[ev.unit];
       if (!u) continue;
-      if (ev.kind === 'defeat') { u.hp = 0; u.shield = 0; }
+      const hasVitals = fight.vitals && (fight.vitals[ev.target] || fight.vitals[ev.unit]);
+      if (ev.kind === 'defeat') { if (!hasVitals) u.hp = 0; u.shield = 0; }
       else if (ev.kind === 'buffSnapshot') {
         // shield_hp is the remaining absorb; its absence in a later snapshot
         // means the shield is gone, so a missing key reads as 0. Only present
@@ -1851,7 +1892,15 @@
         const s = (ev.buffs || []).find(b => b[0] === 'shield_hp');
         u.shield = s ? Math.max(0, +s[1] || 0) : 0;
       }
-      else if (ev.targetHpAfter != null) u.hp = ev.targetHpAfter;
+      else if (ev.targetHpAfter != null && !hasVitals) u.hp = ev.targetHpAfter;
+    }
+    for (const id in fight.vitals || {}) {
+      const v = fight.vitals[id], u = fight.unitHp[id];
+      if (!u) continue;
+      while (v.idx < v.samples.length && v.samples[v.idx][0] <= cursor) u.hp = v.samples[v.idx++][1];
+      // Before diedAtMs the player renders alive (the fight is resolved
+      // server-side already — pinning early would spoil the replay).
+      if (v.diedAt != null && cursor >= v.diedAt) { u.hp = 0; u.shield = 0; }
     }
   }
   const fightCursor = () => fight ? Math.min(fight.maxAt, (Date.now() - fight.t0) / fight.scale) : 0;
