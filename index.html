@@ -1351,10 +1351,11 @@
   // the counts read as "role coverage", not headcount. Unknown class = dps.
   const CLASS_ROLES = PodFeed.CLASS_ROLES;
   let rosterCls = {}; // name(lower) -> { cls, level }, scraped from /characters via the bridge
+  let rosterVer = 0;  // bumped on every scrape — part of the party pane's rebuild signature
   async function loadRosterClasses() {
     try {
       const r = await fetch('/api/roster-classes').then(r => r.json());
-      if (r && typeof r === 'object' && !r.expired) rosterCls = r;
+      if (r && typeof r === 'object' && !r.expired) { rosterCls = r; rosterVer++; }
     } catch {}
     rerenderIfOpen('party', renderParty);
   }
@@ -1371,11 +1372,11 @@
   // Composition pips are filters: click DPS/Heal/Tank/Retreated to show only
   // those members, click again (or Active) to clear.
   let partyFilter = null;
-  // Fast-path bookkeeping: the fight ticks (900ms) rebuild the whole pane, which
-  // wipes CSS transitions/animations. When only the bars move (same members,
-  // order and flags) we mutate the existing nodes instead, so the fill glide,
-  // damage trail and low-HP pulse actually play. hpCache remembers each member's
-  // max (persisted) so idle/between-fight bars still get correct notches.
+  // Fast-path bookkeeping: rebuilding the pane wipes CSS transitions/animations,
+  // so it only happens when the signature below actually changed. When only the
+  // bars move we mutate the existing nodes instead, and the fill glide, damage
+  // trail and low-HP pulse play properly. hpCache remembers each member's max
+  // (persisted) so idle/between-fight bars still get correct notches.
   let lastPartySig = null, partyReviveT = null;
   // Persistent max-HP cache (pid -> {hp, at}) so bars never start at a default/0
   // scale on a fresh session — seeded from localStorage, kept current from live
@@ -1423,7 +1424,7 @@
     const count = Math.max(4, Math.min(18, Math.round(max / (refMax / 16))));
     return 100 / count;
   };
-  function renderParty(opts = {}) {
+  function renderParty() {
     if (!lastRoster) return; // placeholder stays
     // Class kit first; the WS role field is the fallback when the roster
     // scrape hasn't landed. Nothing here is inferred from fight numbers.
@@ -1510,16 +1511,31 @@
     // retreated are hidden by default; the Retreated pip is the only way to see them
     const shown = cs.filter(c => partyFilter === 'ret' ? c.retreated
       : partyFilter ? !c.retreated && (kitRolesOf(c) || [of(c)]).includes(partyFilter) : !c.retreated);
-    // Anything that needs a structural rebuild (membership, order, out/downed/
-    // retreated flags, filter, stage). A bare HP/shield change is NOT here, so a
-    // plain tick takes the fast path below; a member hitting 0 flips isOut and
-    // forces a rebuild (which also re-sorts them to the back).
-    const sig = lastRoster.stage + '|' + (partyFilter || '') + '|' + shown.map(c =>
-      c.displayName.toLowerCase() + (isDown(c) ? 'D' : '') + (isOut(c) ? 'O' : '') + (c.retreated ? 'R' : '')).join(',');
-    if (opts.tick && sig === lastPartySig && document.querySelector('#partyBody .pgrid')) {
+    // Anything that needs a structural rebuild (membership, filter, stage,
+    // retreat). While a fight plays, going down is deliberately NOT in here:
+    // in a 38-player boss fight people drop constantly, and re-sorting them to
+    // the back on each one made the whole grid jump and wiped every bar's
+    // transition mid-glide. The tick path greys them in place instead, and the
+    // sort catches up on the first render after the fight (the next state
+    // message, or the revive repaint).
+    const sig = lastRoster.stage + '|' + (partyFilter || '') + '|' + rosterVer + '|' + shown.map(c =>
+      c.displayName.toLowerCase() + c.level + (live ? '' : (isDown(c) ? 'D' : '') + (isOut(c) ? 'O' : '')) + (c.retreated ? 'R' : '')).join(',');
+    // Signature unchanged = nothing structural to redraw, whoever asked. The
+    // game pushes a `state` message on every roster change — measured at 30+ in
+    // a single second during a boss fight — and each one used to rebuild all 38
+    // cells from scratch, which restarts every bar's CSS transition and is why
+    // the HP bars snapped instead of gliding.
+    if (sig === lastPartySig && document.querySelector('#partyBody .pgrid')) {
       const cells = {};
       document.querySelectorAll('#partyBody .pcell[data-pid]').forEach(el => cells[el.dataset.pid] = el);
-      for (const c of shown) paintBar(cells[c.displayName.toLowerCase()], c);
+      for (const c of shown) {
+        const cell = cells[c.displayName.toLowerCase()];
+        if (!cell) continue;
+        cell.classList.toggle('out', isOut(c));
+        cell.classList.toggle('down', isDown(c));
+        paintBar(cell, c);
+      }
+      startPartyFrames(); // the panel may have just opened onto a live fight
       return;
     }
     lastPartySig = sig;
@@ -1793,6 +1809,13 @@
   // whole log into displayDurationMs server-side — so the cursor is plain
   // elapsed-minus-charge, with no rescale of our own.
   const CHARGE_MS = 700, RESOLVE_MS = 1800;
+  // How often the feed catches up. A stage-900 boss fight broadcasts ~1500
+  // events/second (the server's own overlay caps, saturated), which is still
+  // 7-20 of your own lines per second after grouping. Paired with the reveal
+  // spreading in startFight, this is what turns them into a stream: measured
+  // live, 5 lines per repaint instead of 13-22 arriving together. A repaint is
+  // a few hundred small divs, so three a second is cheap.
+  const FEED_TICK_MS = 300;
   const fightTotalMs = (durMs) => CHARGE_MS + (durMs || 0) + RESOLVE_MS;
   let fight = null, fightTimer = null;
   const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -1891,8 +1914,22 @@
       }
     }
     const dur = d.displayDurationMs || maxAt;
+    // Spread each second's lines across the second they belong to. The server
+    // caps how many events per second reach the overlay and keeps the EARLIEST
+    // ones, so everything that survives a given second is stamped within its
+    // first few milliseconds — measured on a stage-903 boss fight: 7-20 groups
+    // per second, all sharing one timestamp. Revealed by timestamp that is a
+    // block of lines followed by a second of nothing, no matter how often the
+    // panel repaints. The shift is under a second and stays inside its own
+    // second, so a line's time label still reads true.
+    const feed = [...groups.values()].sort((a, b) => a.at - b.at);
+    {
+      const bySec = new Map();
+      for (const g of feed) { const s = Math.floor(g.at / 1000); if (!bySec.has(s)) bySec.set(s, []); bySec.get(s).push(g); }
+      for (const [s, gs] of bySec) gs.forEach((g, i) => { g.at = s * 1000 + Math.round((i + 0.5) * 1000 / gs.length); });
+    }
     fight = { t0: Date.now(), dur, maxAt, evs, idx: 0, mySnaps,
-      players, feed: [...groups.values()].sort((a, b) => a.at - b.at), won: !!d.won, stage: d.stage, kind: d.kind,
+      players, feed, won: !!d.won, stage: d.stage, kind: d.kind,
       thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, vitals, downed: [...downed], enemySnaps, names };
     // A fresh fight replays from full HP for the party bars too. The timer runs
     // while EITHER the fight panel or the party panel wants it.
@@ -1945,18 +1982,19 @@
   // One replay timer feeds both the Live Fight feed and the Party HP bars; each
   // render is guarded by its own panel, and the timer only exists while a fight
   // is still playing and at least one consumer is open.
-  // The party HP/shield/trail wants display-rate smoothness. A full pane rebuild
-  // per frame would be wasteful, but renderParty({tick:true}) only mutates the
-  // existing bars (paintBar) when nothing structural changed — cheap enough to
-  // run every animation frame. So the party bars glide at the display refresh,
-  // while the heavier Live Fight feed stays on the 900ms interval. The loop
-  // self-stops when the fight ends or the panel closes.
+  // The party HP/shield/trail wants display-rate smoothness. renderParty only
+  // rebuilds when its signature changed and otherwise mutates the existing bars
+  // in place (paintBar) — cheap enough to run every animation frame. So the
+  // party bars glide at the display refresh, while the heavier Live Fight feed
+  // stays on its own interval. The loop self-stops when the fight ends or the
+  // panel closes; the frame that sees the fight over is also the one that
+  // settles the grid (fallen re-sorted to the back, live greys dropped).
   let partyRaf = null;
   function partyFrame() {
     partyRaf = null;
-    if (!(fightLive() && partyPanelOpen())) return;
-    renderParty({ tick: true });
-    if (!partyRaf) partyRaf = requestAnimationFrame(partyFrame); // a structural rebuild may re-arm already
+    if (!partyPanelOpen()) return;
+    renderParty();
+    if (!partyRaf && fightLive()) partyRaf = requestAnimationFrame(partyFrame); // renderParty may re-arm already
   }
   const startPartyFrames = () => {
     if (!partyRaf && fightLive() && partyPanelOpen()) partyRaf = requestAnimationFrame(partyFrame);
@@ -1969,7 +2007,7 @@
     if (fightPanelOpen()) renderFight();
     if (partyPanelOpen()) renderParty();
     if (fightLive()) {
-      if (fightPanelOpen()) fightTimer = setInterval(fightTick, 900);
+      if (fightPanelOpen()) fightTimer = setInterval(fightTick, FEED_TICK_MS);
       startPartyFrames();
     }
   }
@@ -1994,7 +2032,11 @@
     if (over && fightTimer) { clearInterval(fightTimer); fightTimer = null; }
     const feedShown = fight.feed.filter(g => g.at <= cursor);
     const atBottom = (el) => !el || el.scrollHeight - el.scrollTop - el.clientHeight < 30;
-    const keepScroll = atBottom(body.querySelector('.ffeed'));
+    // The rebuild makes a fresh scroller, so a reader who scrolled up used to be
+    // yanked back to the top on every tick. Follow the tail when they're at the
+    // bottom, otherwise hold exactly where they were.
+    const prev = body.querySelector('.ffeed');
+    const keepScroll = atBottom(prev), prevTop = prev ? prev.scrollTop : 0;
     body.innerHTML =
       `<div class="fhead">${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(cursor)} · Stage ${fight.stage}${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}</div>
       ${partialNote(fight.thinned)}
@@ -2002,7 +2044,7 @@
       <div class="ffeed pod-feed">${feedLines(feedShown) || '<p class="muted">Nothing for you yet this fight.</p>'}</div>`;
     bindFeedChips(body, renderFight);
     const fe = body.querySelector('.ffeed');
-    if (keepScroll) fe.scrollTop = fe.scrollHeight;
+    fe.scrollTop = keepScroll ? fe.scrollHeight : prevTop;
   }
 
   let bagBusy = false, bagPollAgain = false;

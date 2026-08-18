@@ -32,8 +32,8 @@
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const fmtN = (n) => n >= 1e12 ? (n / 1e12).toFixed(1) + 'T' : n >= 1e9 ? (n / 1e9).toFixed(1) + 'B'
     : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
-  // Events carry raw simulation time; the on-screen replay compresses it, so
-  // display time would read 0:00 for everything. Show the sim tick instead.
+  // Timestamps are the server's compressed replay clock (the whole fight is
+  // rescaled into a 6-35s window before broadcast), not wall time.
   const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   const fmtT = (ms) => ms < 1000 ? Math.round(ms) + 'ms' : ms < 60000 ? (ms / 1000).toFixed(1) + 's' : mmss(ms);
   const buffNames = (g) => (g.names || []).map(k => { const b = buff(k);
