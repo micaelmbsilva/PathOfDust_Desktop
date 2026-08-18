@@ -523,7 +523,7 @@
       .map(itemForOption).filter(Boolean);
     $('craftPick').innerHTML = !items.length ? '' :
       `<div class="craftpick"><div class="craftpick-h">Crafting</div>
-        <div class="grid">${items.map(it => itemCard(it, `${eqBtn(it)} ${disBtn(it)} ${shareBtn(it)}`)).join('')}</div></div>`;
+        <div class="grid">${items.map(it => itemCard(it, `${eqBtn(it)} ${lockBtn(it)} ${disBtn(it)} ${shareBtn(it)}`)).join('')}</div></div>`;
   }
 
   // ---- persisted checkbox state ----
@@ -693,14 +693,17 @@
   const eqBtn = (it) => it.id
     ? `<button data-eq="${it.id}">Equip</button>`
     : `<button data-un="${esc(it.slot)}">Unequip</button>`;
-  // Bag items only — equipped gear carries no item_id, and the site offers no
-  // disenchant for it either.
+  // Bag items only — equipped gear carries no item_id, and the site offers
+  // neither a Keep toggle nor a disenchant for it.
+  const lockBtn = (it) => it.id
+    ? `<button data-lock="${it.id}">${it.protected ? 'Unlock' : '🔒 Lock'}</button>`
+    : '';
   const disBtn = (it) => it.id
     ? `<button class="danger" data-dis="${it.id}" data-name="${esc(it.name)}"${it.dust ? ` data-dmin="${it.dust.min}" data-dmax="${it.dust.max}"` : ''}>Disenchant</button>`
     : '';
   const bagCard = (it) => itemCard(it,
     `${eqBtn(it)}
-     <button data-lock="${it.id}">${it.protected ? 'Unlock' : '🔒 Lock'}</button>
+     ${lockBtn(it)}
      ${disBtn(it)}
      ${repairBtn(it)} ${shareBtn(it)}`);
   function renderBag() {

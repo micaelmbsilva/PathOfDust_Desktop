@@ -67,7 +67,10 @@ async function resolveAppDir() {
 // prompts to restart once staged. Only meaningful in a packaged install.
 function initAutoUpdate() {
   if (!app.isPackaged) return; // `electron .` dev runs have no update feed
-  global.__applyUpdate = () => autoUpdater.quitAndInstall(); // called by /api/apply-update
+  // Silent + relaunch: the installer is the assisted (directory-picking) one, so
+  // the default would pop its full wizard on every auto-update. NSIS remembers
+  // the directory the user chose, so a silent run still lands there.
+  global.__applyUpdate = () => autoUpdater.quitAndInstall(true, true); // called by /api/apply-update
   global.__checkUpdate = () => autoUpdater.checkForUpdates().catch(() => {}); // called by /api/check-update
   autoUpdater.autoDownload = true;
   // Publish update state on the global so the bridge can report it and the UI can
