@@ -408,6 +408,7 @@
         <span class="muted">Polish / Reforge batch:</span>
         <label class="hint" title="Run Polishing/Reforge 5 times in one go"><input type="checkbox" class="batchx" value="5"${cbGet('batch') === 5 ? ' checked' : ''}> ×5</label>
         <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"${cbGet('batch') === 10 ? ' checked' : ''}> ×10</label>
+        <label class="hint" title="Run Polishing/Reforge 50 times in one go — the site's cap. It stops early if you run out of sand/dust and reports how many landed"><input type="checkbox" class="batchx" value="50"${cbGet('batch') === 50 ? ' checked' : ''}> ×50</label>
       </div>
       <div id="craftSections"></div>`;
     renderSections(inv.craft.actions);
