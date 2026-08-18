@@ -59,7 +59,7 @@ which is where the ×50 batch cap comes from). Never edit it.
 ## Tests
 
 ```bash
-npm test        # advisor-core.test.mjs + scrape.test.mjs
+npm test        # advisor-core.test.mjs + scrape.test.mjs + codec.test.mjs
 ```
 
 Both run in CI's `verify` job before anything publishes.

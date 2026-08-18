@@ -666,6 +666,22 @@
   const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
   // chat-ready one-liner, e.g.
   // "✨ Ascended Hood 【Helm · T17 · ⭐92%】 +80 dps ➤ +50% dmg dealt (T5·45%)"
+  // The two separators are also how the share handler splits the line back into
+  // a header and its droppable mod list, so they live here as constants.
+  const CHAT_LIMIT = 500, SHARE_ARROW = '  ➤  ', SHARE_SEP = '  |  ';
+  // Header, then as many mods as fit alongside the (never-trimmed) link.
+  const fitChat = (head, parts, link) => {
+    const room = CHAT_LIMIT - (link ? link.length + 1 : 0);
+    // No real item name gets near the budget on its own; clamp by code point
+    // rather than by unit so the guard can't leave half a surrogate pair behind.
+    let text = head.length <= room ? head : [...head].slice(0, room).join('');
+    for (let i = 0; i < parts.length; i++) {
+      const next = text + (i ? SHARE_SEP : SHARE_ARROW) + parts[i];
+      if (next.length > room) break;
+      text = next;
+    }
+    return link ? text + ' ' + link : text;
+  };
   const shareText = (it) => {
     const t = (it.tier || '').replace('Tier ', 'T');
     const q = it.sacred ? '✦Sacred' : it.quality?.includes('Perfect') ? '🌟Perfect' : `⭐${(it.quality || '').replace('Quality ', '')}`;
@@ -675,8 +691,8 @@
         const r = rollOf(m.tip);
         return r != null ? `${m.t} (T${tierOf(r)}·${r}%)` : m.t;
       }),
-    ].join('  |  ');
-    return `✨ ${it.name} 【${slotOf(it.slot)} · ${t} · ${q}】${it.primary ? ` ${it.primary}` : ''}${mods ? `  ➤  ${mods}` : ''}`;
+    ].join(SHARE_SEP);
+    return `✨ ${it.name} 【${slotOf(it.slot)} · ${t} · ${q}】${it.primary ? ` ${it.primary}` : ''}${mods ? `${SHARE_ARROW}${mods}` : ''}`;
   };
   // Compact payload for the extension-readable item link — shape is the
   // "#pod-item=" contract in /item-codec.mjs (canonical copy lives in
@@ -768,20 +784,32 @@
       return refresh();
     }
     if (d.share !== undefined) {
-      let text = d.share;
-      // Append the hoverable item link (pod_chat_extension reads it in Twitch
-      // chat). Cosmetic-text-only fallback if encoding is unavailable.
+      // Twitch caps a message at 500 characters, and a fully loaded item's
+      // prose alone can pass that. The link is the item's only complete,
+      // self-contained copy (the extension rebuilds the whole card from it), so
+      // it is built first and never trimmed — the prose is a preview that fills
+      // whatever budget is left, losing mods off its tail one at a time.
+      const [head, tail] = d.share.split(SHARE_ARROW);
+      const parts = tail ? tail.split(SHARE_SEP) : [];
+      let link = '';
+      // Cosmetic-text-only fallback if encoding is unavailable.
       try {
         if (d.sjson && window.PodItemCodec) {
-          const payload = await window.PodItemCodec.encodeItem(JSON.parse(d.sjson));
+          const item = JSON.parse(d.sjson);
           const login = /^[a-z0-9_]{1,25}$/i.test(meName) ? meName.toLowerCase() : '';
-          const link = window.PodItemCodec.itemLink(payload, login);
-          // Twitch caps messages at 500 chars — drop the cosmetic mod list
-          // before ever dropping the link.
-          if (text.length + link.length + 1 > 500) text = text.split('  ➤  ')[0];
-          text += ' ' + link;
+          const { encodeItem, itemLink } = window.PodItemCodec;
+          link = itemLink(await encodeItem(item), login);
+          // Published extensions only match "1." links, so stay on version 1
+          // while it fits and step down to the compact version 2 shape (and
+          // then to the shorter site-root link) only when it doesn't.
+          if (head.length + link.length + 1 > CHAT_LIMIT) {
+            const p2 = await encodeItem(item, 2);
+            link = itemLink(p2, login);
+            if (head.length + link.length + 1 > CHAT_LIMIT) link = itemLink(p2, '');
+          }
         }
       } catch {}
+      const text = fitChat(head, parts, link);
       try { await navigator.clipboard.writeText(text); const o = b.textContent; b.textContent = 'Copied!'; setTimeout(() => b.textContent = o, 1200); }
       catch { $('err').textContent = 'Clipboard blocked'; }
       return;

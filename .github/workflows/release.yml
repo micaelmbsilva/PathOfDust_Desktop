@@ -38,6 +38,7 @@ jobs:
         run: |
           node advisor-core.test.mjs
           node scrape.test.mjs
+          node codec.test.mjs
 
   build:
     needs: verify
