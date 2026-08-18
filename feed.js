@@ -20,7 +20,13 @@
   .pod-feed .fl.shielded, .pod-feed .fl.shieldout { color: #82aaff; }
   .pod-feed .fl.buffgain { color: #c792ea; }
   .pod-feed .fl.bufflost { color: #8a7fb0; }
-  .pod-feed .fl .mit { color: #8a7fb0; font-size: 0.92em; }`;
+  .pod-feed .fl .mit { color: #8a7fb0; font-size: 0.92em; }
+  /* Live panels add .stream: lines are appended one at a time there, so each
+     one eases in instead of the block appearing at once. A batch view (history,
+     a saved log) renders everything in one go and gets no animation. */
+  .pod-feed.stream .fl { animation: pod-fl-in 150ms ease-out; }
+  @keyframes pod-fl-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .pod-feed.stream .fl { animation: none; } }`;
   if (!document.getElementById('pod-feed-css')) {
     const s = document.createElement('style');
     s.id = 'pod-feed-css';
@@ -141,23 +147,33 @@
   const chips = (cat) => `<div class="rolechips fchips">` + CHIPS.map(([v, l]) =>
     `<span class="chip pf${(cat || 'all') === v ? ' on' : ''}" data-fcat="${v}">${esc(l)}</span>`).join('') + '</div>';
 
-  // filter -> collapse identical consecutive lines -> render
-  function lines(groups, cat) {
+  // filter -> collapse identical consecutive lines. Split from rendering so a
+  // live panel can append one group at a time (and re-render just the line it
+  // collapsed into) instead of rebuilding the whole list per repaint.
+  const COLLAPSE_MS = 2000; // a repeat minutes later is its own event, not a ×N
+  function entries(groups, cat) {
     const out = [];
     for (const g of groups || []) {
       if (!passes(g, cat) || !FLINE[g.kind]) continue;
       const txt = FLINE[g.kind](g);
       const prev = out[out.length - 1];
-      // Collapse only near-adjacent repeats (<=2s apart) — a repeat minutes
-      // later is its own event and keeps its own timestamp.
-      if (prev && prev.txt === txt && (g.at || 0) - (prev.lastAt || 0) <= 2000) { prev.n++; prev.lastAt = g.at; continue; }
+      if (prev && prev.txt === txt && (g.at || 0) - (prev.lastAt || 0) <= COLLAPSE_MS) { prev.n++; prev.lastAt = g.at; continue; }
       out.push({ at: g.at, lastAt: g.at, kind: g.kind, txt, n: 1 });
     }
-    return out.map(l => `<div class="fl ${l.kind}"><span class="ft">${fmtT(l.at)}</span>${l.txt}${l.n > 1 ? ` <b>×${l.n}</b>` : ''}</div>`).join('');
+    return out;
   }
+  // True when `e` should fold into the already-rendered line `prev` — the same
+  // test entries() applies inside a batch, exposed for the incremental path.
+  const folds = (prev, e) => !!prev && prev.txt === e.txt && (e.at || 0) - (prev.lastAt || 0) <= COLLAPSE_MS;
+  // The repeat count is its own node (.fn) so a live panel can bump it in place
+  // — re-rendering the whole line would replay its enter animation on every
+  // repeat, which flickers.
+  const render = (es) => es.map(l =>
+    `<div class="fl ${l.kind}"><span class="ft">${fmtT(l.at)}</span>${l.txt}${l.n > 1 ? ` <b class="fn">×${l.n}</b>` : ''}</div>`).join('');
+  const lines = (groups, cat) => render(entries(groups, cat));
 
   const bindChips = (root, onPick) => root.querySelectorAll('[data-fcat]').forEach(el =>
     el.onclick = () => onPick(el.dataset.fcat));
 
-  window.PodFeed = { lines, chips, bindChips, fmtT, fmtN, buff, KIND_ICON, ROLE_ICON, CLASS_ROLES, rolesOf };
+  window.PodFeed = { lines, entries, render, folds, chips, bindChips, fmtT, fmtN, buff, KIND_ICON, ROLE_ICON, CLASS_ROLES, rolesOf };
 })();
