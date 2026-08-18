@@ -992,12 +992,15 @@ const srv = createServer(async (req, res) => {
       if (typeof globalThis.__refocus === 'function') globalThis.__refocus();
       return json(res, { ok: true });
     }
-    if (url.pathname === '/api/raise-window' && req.method === 'POST') {
-      // Bring an already-open child window (e.g. the Bag) to the front with
-      // focus (see main.cjs __raiseChild). No-op on old shells / unknown keys.
+    if (url.pathname === '/api/toggle-window' && req.method === 'POST') {
+      // Taskbar toggle for a child window (e.g. the Bag): raise it if buried,
+      // close it if it was in front (see main.cjs __toggleChild). Returns the
+      // action so the renderer opens the window when it isn't there yet.
+      // 'none' on old shells / unknown keys, so the renderer still opens it.
       const { key } = await jbody(req);
-      if (typeof globalThis.__raiseChild === 'function' && key) globalThis.__raiseChild(key);
-      return json(res, { ok: true });
+      const action = typeof globalThis.__toggleChild === 'function' && key
+        ? globalThis.__toggleChild(key) : 'none';
+      return json(res, { ok: true, action });
     }
     if (url.pathname === '/api/action' && req.method === 'POST') {
       const { endpoint, fields } = await jbody(req);

@@ -218,16 +218,31 @@ function initWindowPersistence(win, state) {
     w.setAlwaysOnTop(true); w.show(); w.moveTop(); w.focus();
     setTimeout(() => { if (!w.isDestroyed()) w.setAlwaysOnTop(false); }, 200);
   };
-  // Live child windows by key, so the renderer can re-focus an already-open one
+  // Live child windows by key, so the renderer can toggle an already-open one
   // (window.open reuse doesn't re-fire did-create-window, and the proxy focus()
   // it falls back to lands behind main).
   const children = new Map();
-  global.__raiseChild = (key) => { const c = children.get(key); if (c) raise(c); };
+  // When a child last lost focus. Clicking a launcher button focuses main and
+  // blurs whatever child was in front, so at toggle time the child is never
+  // still focused — a very recent blur is how we tell "was in front" from
+  // "was buried". ponytail: 600ms heuristic, not a real z-order query.
+  const lastBlur = new Map();
+  // Taskbar-style toggle: buried/hidden window comes to the front; a window
+  // that was in front gets closed. Returns what happened so the renderer knows
+  // whether it still needs to open the window (not open yet, or old shell).
+  global.__toggleChild = (key) => {
+    const c = children.get(key);
+    if (!c || c.isDestroyed()) return 'none';
+    const wasFront = c.isFocused() || Date.now() - (lastBlur.get(key) || 0) < 600;
+    if (wasFront) { c.close(); return 'closed'; }
+    raise(c); return 'raised';
+  };
   win.webContents.on('did-create-window', (child, { url }) => {
     child.once('ready-to-show', () => raise(child));
     const key = winKey(url); if (!key) return;
     children.set(key, child);
-    child.on('closed', () => { if (children.get(key) === child) children.delete(key); });
+    child.on('blur', () => lastBlur.set(key, Date.now()));
+    child.on('closed', () => { if (children.get(key) === child) { children.delete(key); lastBlur.delete(key); } });
     state[key] = { ...(state[key] || {}), url, open: true, ...child.getBounds() };
     writeWinState(state);
     const save = () => { if (!child.isDestroyed()) { state[key] = { ...state[key], ...child.getBounds() }; writeWinState(state); } };

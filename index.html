@@ -480,15 +480,19 @@
   setTitle();
 
   // open a custom page in its own app-style window
-  function openWin(path, name, w = 1000, h = 800) {
-    // .focus(): reopening an already-open named window otherwise leaves it behind this one
-    window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`)?.focus();
-    // The proxy focus() above loses to the Windows foreground lock when the
-    // window is already open behind us; the shell raises it authoritatively.
-    // No-op on old shells and while the window is first being created (then
-    // main's ready-to-show raise handles it). Key = the pathname main keys on.
-    fetch('/api/raise-window', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: new URL(path, location.href).pathname }) }).catch(() => {});
+  // Taskbar toggle: let the shell raise the window if it's buried, or close it
+  // if it was in front. It answers 'none' when the window isn't open (or on an
+  // old shell that lacks the handler) — then we open it ourselves.
+  async function openWin(path, name, w = 1000, h = 800) {
+    const key = new URL(path, location.href).pathname; // what main keys the window on
+    let action = 'none';
+    try {
+      const r = await fetch('/api/toggle-window', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+      action = (await r.json()).action;
+    } catch {}
+    if (action === 'none') // not open yet (main raises it on ready-to-show)
+      window.open(path, name, `width=${w},height=${h},menubar=no,toolbar=no`)?.focus();
   }
 
   // ---- layout persistence (panel positions/sizes/collapse + overlay zoom) ----
