@@ -207,6 +207,10 @@ function initWindowPersistence(win, state) {
     return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, backgroundColor: '#0c0a16', ...bounds } };
   });
   win.webContents.on('did-create-window', (child, { url }) => {
+    // Renderer-side window.open(...).focus() doesn't reliably raise a window
+    // reopened under a name that was just closed — the proxy focus races the
+    // new window's creation and it lands behind main. Raise it authoritatively.
+    child.once('ready-to-show', () => { if (!child.isDestroyed()) { child.show(); child.focus(); child.moveTop(); } });
     const key = winKey(url); if (!key) return;
     state[key] = { ...(state[key] || {}), url, open: true, ...child.getBounds() };
     writeWinState(state);

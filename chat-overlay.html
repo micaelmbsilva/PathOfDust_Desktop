@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Twitch Chat Overlay</title>
+<link rel="stylesheet" href="extension/tooltip.css">
+<style>
+  /* OBS browser source: transparent background, styled chat. */
+  :root{
+    --font: 'Segoe UI', system-ui, sans-serif;
+    --size: 22px;          /* message text size */
+    --name-weight: 700;
+    --msg-color: #fff;
+    --shadow: 0 0 2px #000, 0 0 4px #000, 1px 1px 3px #000; /* keeps text readable over any scene */
+    --row-bg: rgba(0,0,0,.35);
+    --pad: 6px 12px;
+    --gap: 6px;
+    --fade-after: 0s;      /* set e.g. 60s via ?fade=60 to auto-hide old lines; 0 = never */
+  }
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;}
+  #chat{
+    position:absolute; left:0; right:0; bottom:0;
+    display:flex; flex-direction:column; justify-content:flex-end;
+    gap:var(--gap); padding:14px; box-sizing:border-box;
+    font-family:var(--font); font-size:var(--size); line-height:1.35;
+  }
+  .msg{
+    background:var(--row-bg); border-radius:8px; padding:var(--pad);
+    color:var(--msg-color); text-shadow:var(--shadow);
+    width:fit-content; max-width:100%; word-wrap:break-word; overflow-wrap:anywhere;
+    animation:in .18s ease-out;
+  }
+  @keyframes in{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
+  .msg.leaving{animation:out .4s ease-in forwards;}
+  @keyframes out{to{opacity:0; transform:translateX(-12px); height:0; margin:0; padding-top:0; padding-bottom:0;}}
+  .name{font-weight:var(--name-weight); margin-right:.4em;}
+  .name::after{content:':';}
+  .emote{height:1.4em; vertical-align:middle; margin:0 1px;}
+  .badge{height:1em; vertical-align:middle; margin-right:3px;}
+</style>
+</head>
+<body>
+<div id="chat" role="log" aria-live="polite"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const CHANNEL = (P.get('channel') || 'kibukah').toLowerCase().replace(/^#/, '');
+const MAX = +(P.get('max') || 20);              // messages kept on screen
+const FADE = +(P.get('fade') || 0) * 1000;      // ms before a line auto-removes (0 = never)
+const chat = document.getElementById('chat');
+
+// --- IRCv3 tag/line parsing -------------------------------------------------
+function parseTags(raw){
+  const t = {};
+  for (const kv of raw.split(';')){
+    const i = kv.indexOf('=');
+    t[kv.slice(0, i)] = kv.slice(i + 1)
+      .replace(/\\s/g,' ').replace(/\\:/g,';').replace(/\\\\/g,'\\');
+  }
+  return t;
+}
+function parseLine(line){
+  let tags = {}, rest = line;
+  if (rest[0] === '@'){ const sp = rest.indexOf(' '); tags = parseTags(rest.slice(1, sp)); rest = rest.slice(sp + 1); }
+  let prefix = '';
+  if (rest[0] === ':'){ const sp = rest.indexOf(' '); prefix = rest.slice(1, sp); rest = rest.slice(sp + 1); }
+  const sp = rest.indexOf(' ');
+  const cmd = sp === -1 ? rest : rest.slice(0, sp);
+  const params = sp === -1 ? '' : rest.slice(sp + 1);
+  return { tags, prefix, cmd, params };
+}
+
+// --- render -----------------------------------------------------------------
+function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// Escape, and wrap http(s) URLs in real anchors so the pod-item extension
+// (extension/content.js) can find, rename, and card them like it does in chat.
+function linkify(s){
+  return s.split(/(https?:\/\/\S+)/g)
+    .map((p, i) => i % 2 ? `<a href="${esc(p)}" target="_blank" rel="noopener">${esc(p)}</a>` : esc(p))
+    .join('');
+}
+
+// Twitch emote ranges index by unicode codepoint, so split on codepoints.
+function renderMessage(text, emoteTag){
+  const chars = Array.from(text);
+  if (!emoteTag) return linkify(text);
+  const spans = [];
+  for (const e of emoteTag.split('/')){
+    const [id, ranges] = e.split(':');
+    for (const r of ranges.split(',')){
+      const [a, b] = r.split('-').map(Number);
+      spans.push({ a, b, id });
+    }
+  }
+  spans.sort((x, y) => x.a - y.a);
+  let out = '', cur = 0;
+  for (const s of spans){
+    out += linkify(chars.slice(cur, s.a).join(''));
+    out += `<img class="emote" src="https://static-cdn.jtvnw.net/emoticons/v2/${s.id}/default/dark/2.0" alt="">`;
+    cur = s.b + 1;
+  }
+  out += linkify(chars.slice(cur).join(''));
+  return out;
+}
+
+function addMessage(tags, text){
+  const row = document.createElement('div');
+  row.className = 'msg';
+  const name = tags['display-name'] || 'anon';
+  const color = tags.color || '#c9a2ff';
+  row.innerHTML =
+    `<span class="name" style="color:${esc(color)}">${esc(name)}</span>` +
+    `<span class="text">${renderMessage(text, tags.emotes)}</span>`;
+  chat.appendChild(row);
+
+  while (chat.children.length > MAX) chat.firstChild.remove();
+  if (FADE) setTimeout(() => {
+    row.classList.add('leaving');
+    setTimeout(() => row.remove(), 400);
+  }, FADE);
+}
+
+// --- connection (anonymous, read-only) --------------------------------------
+let ws, backoff = 1000;
+function connect(){
+  ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+  ws.onopen = () => {
+    ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+    ws.send('NICK justinfan' + Math.floor(Math.random() * 1e5));
+    ws.send('JOIN #' + CHANNEL);
+    backoff = 1000;
+  };
+  ws.onmessage = (ev) => {
+    for (const line of ev.data.split('\r\n')){
+      if (!line) continue;
+      if (line.startsWith('PING')){ ws.send('PONG' + line.slice(4)); continue; }
+      const m = parseLine(line);
+      if (m.cmd === 'PRIVMSG'){
+        const text = m.params.slice(m.params.indexOf(' :') + 2);
+        addMessage(m.tags, text);
+      } else if (m.cmd === 'CLEARCHAT' || m.cmd === 'CLEARMSG'){
+        // moderation: simplest correct behavior is to drop everything on a channel clear
+        if (m.cmd === 'CLEARCHAT' && !m.params.includes(' :')) chat.replaceChildren();
+      }
+    }
+  };
+  ws.onclose = () => { setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 30000); };
+  ws.onerror = () => ws.close();
+}
+connect();
+</script>
+<!-- Path of Dust item-link extension, reused verbatim: renames #pod-item=
+     links to the colored item name (hover shows the full card in a real
+     browser / interactive source). Same files the desktop app ships. -->
+<script src="extension/shared/item-codec.js"></script>
+<script src="extension/card.js"></script>
+<script src="extension/content.js"></script>
+</body>
+</html>

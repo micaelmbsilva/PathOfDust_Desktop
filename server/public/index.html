@@ -284,14 +284,19 @@ function advStats(players, passives) {
     el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:14px 16px' }, cards));
 }
 
-// Rare gear a player has equipped. Sacred/unique/krangled counts come from
-// /api/ladder; total is what the rare-gear board ranks on.
+// Rare gear = items carrying a unique affix (Celestial Shard → Celestial
+// Conversion, Unique Shard → Split Personality), equipped or in the bag — both
+// are public on the game's own character page. Sacred and krangled bases are
+// craftable, so they aren't rare. `shards` are unspent shard tokens, which only
+// app-reporting players expose. /api/ladder sends both.
 const rareOf = (p) => {
-  const n = (k) => Math.max(0, +(p && p[k]) || 0);
-  return { sacred: n('sacred'), unique: n('unique'), krangled: n('krangled'),
-    tier: n('top_tier'), total: n('sacred') + n('unique') + n('krangled') };
+  const list = arr(p && p.uniques).map(u => ({ affix: str(u && u.affix), n: Math.max(1, +(u && u.n) || 1) }))
+    .filter(u => u.affix).sort((a, b) => b.n - a.n || a.affix.localeCompare(b.affix));
+  const pills = arr(p && p.shards).map(str).filter(Boolean);
+  return { list, pills,
+    total: list.reduce((a, u) => a + u.n, 0),
+    tokens: pills.reduce((a, t) => a + (+(t.match(/[×x]\s*(\d+)/) || [])[1] || 1), 0) };
 };
-const RARITIES = [['sacred', '✦ Sacred'], ['unique', 'Unique'], ['krangled', 'Krangled']];
 
 // Column set shared by both player tables — the rare-gear board is the same
 // rows with different columns, so it reuses the sorting/filtering below.
@@ -305,19 +310,16 @@ const COLS = {
   power: { label: 'Power', right: true, get: r => r.pw.val,
     cell: r => el('td', { class: 'r', title: r.pw.why }, r.pw.val ? fmt(r.pw.val) + ' ' + r.pw.unit : '—') },
   seen: { label: 'Last seen', get: r => str(r.p.last_seen), cell: r => el('td', null, seenDay(r.p.last_seen)) },
-  rare: { label: 'Rare items', right: true, get: r => r.rare.total,
+  rare: { label: 'Uniques', right: true, get: r => r.rare.total,
     cell: r => el('td', { class: 'r' }, r.rare.total || '—') },
-  sacred: { label: 'Sacred', right: true, get: r => r.rare.sacred,
-    cell: r => el('td', { class: 'r' }, r.rare.sacred ? el('span', { class: 'badge sacred' }, r.rare.sacred) : '—') },
-  unique: { label: 'Unique', right: true, get: r => r.rare.unique,
-    cell: r => el('td', { class: 'r' }, r.rare.unique ? el('span', { class: 'badge unique' }, r.rare.unique) : '—') },
-  krangled: { label: 'Krangled', right: true, get: r => r.rare.krangled,
-    cell: r => el('td', { class: 'r' }, r.rare.krangled ? el('span', { class: 'badge krangled' }, r.rare.krangled) : '—') },
-  tier: { label: 'Top tier', right: true, get: r => r.rare.tier,
-    cell: r => el('td', { class: 'r' }, r.rare.tier ? 'T' + r.rare.tier : '—') },
+  items: { label: 'Unique affixes', get: r => r.rare.list.map(u => u.affix).join(', '),
+    cell: r => el('td', null, r.rare.list.length
+      ? r.rare.list.map(u => el('span', { class: 'badge unique' }, u.affix + (u.n > 1 ? ' ×' + u.n : ''))) : '—') },
+  shards: { label: 'Unspent shards', right: true, get: r => r.rare.tokens,
+    cell: r => el('td', { class: 'r', title: r.rare.pills.join(' · ') || null }, r.rare.tokens || '—') },
 };
 
-// opts: cols (COLS keys), sort (default sort key), rarity (adds the rarity chips).
+// opts: cols (COLS keys), sort (default sort key), rarity ([{label, test}] filter chips).
 function playersTable(players, passives, opts) {
   const o = opts || {};
   const cols = o.cols || ['name', 'class', 'level', 'power', 'seen'];
@@ -330,7 +332,7 @@ function playersTable(players, passives, opts) {
   function render() {
     const shown = rows.filter(r => (!cls || str(r.p.archetype) === cls)
         && (!roleF || rolesOf(r.p.archetype, passives).includes(roleF))
-        && (!rareF || r.rare[rareF] > 0))
+        && (!rareF || rareF.test(r)))
       .sort((a, b) => (get(a, sortKey) > get(b, sortKey) ? 1 : get(a, sortKey) < get(b, sortKey) ? -1 : 0) * dir);
     const chip = (label, on, click) => { const e = el('span', { class: 'chip' + (on ? ' on' : '') }, label); e.onclick = click; return e; };
     const th = (key) => {
@@ -345,8 +347,8 @@ function playersTable(players, passives, opts) {
         ...[[null, 'All'], ...ROLES].map(([r, label]) =>
           chip(label, r === roleF && (r || !cls), () => { roleF = r; if (!r) cls = null; render(); })),
         ...classes.map(c => chip(c, c === cls, () => { cls = c === cls ? null : c; render(); }))]),
-      o.rarity ? el('div', { class: 'chips', style: 'margin:0 0 10px' },
-        RARITIES.map(([k, label]) => chip(label, k === rareF, () => { rareF = k === rareF ? null : k; render(); }))) : null,
+      o.rarity && o.rarity.length ? el('div', { class: 'chips', style: 'margin:0 0 10px' },
+        o.rarity.map(f => chip(f.label, f === rareF, () => { rareF = f === rareF ? null : f; render(); }))) : null,
       el('table', null,
         el('thead', null, el('tr', null, cols.map(th))),
         el('tbody', null, shown.map(r => el('tr', null, cols.map(k => COLS[k].cell(r)))))),
@@ -366,7 +368,7 @@ function agoText(iso) {
 }
 // Just the relative half — what a stat tile has room for.
 const agoShort = (iso) => agoText(iso).replace(/^.*\((.*)\)$/, '$1');
-const plural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
+const plural = (n, one, suffix) => `${n} ${one}${n === 1 ? '' : (suffix || 's')}`;
 
 // Watermark footer on every page: deploy rev, app interface rev, and data freshness.
 let META = null;
@@ -378,18 +380,26 @@ async function renderFoot() {
     ` · site updated ${agoText(META.deployed)} · data fetched ${agoText(META.lastScrape || META.dbLatest)}`;
 }
 
-// Who owns the most rare gear. Equipped items only — bags never leave the DB.
+// Who owns the most rare gear — unique affixes worn or banked, plus the unspent
+// shard tokens that turn into one. Bag included: the game's character page shows
+// it publicly. Dust and sand stay out, as everywhere else on the site.
 function rareBoard(players, passives) {
-  const owners = players.filter(p => rareOf(p).total > 0);
+  const owners = players.filter(p => { const r = rareOf(p); return r.total || r.tokens; });
   if (!owners.length) return null;
-  const tally = (k) => owners.reduce((a, p) => a + rareOf(p)[k], 0);
+  const affixes = [...new Set(owners.flatMap(p => rareOf(p).list.map(u => u.affix)))].sort();
+  const items = owners.reduce((a, p) => a + rareOf(p).total, 0);
+  const tokens = owners.reduce((a, p) => a + rareOf(p).tokens, 0);
+  const filters = affixes.map(n => ({ label: n, test: r => r.rare.list.some(u => u.affix === n) }));
+  if (tokens) filters.push({ label: '🎫 Holds shards', test: r => r.rare.tokens > 0 });
   return [
     el('h2', null, 'Rare gear'),
-    el('p', { class: 'sub' }, `${plural(owners.length, 'player')} wearing rare gear · `
-      + RARITIES.map(([k, label]) => `${tally(k)} ${label.replace(/^\S+ /, '').toLowerCase()}`).join(' · ')
-      + '. Equipped items only — bag contents stay private. Click headers to sort, chips to filter.'),
-    playersTable(owners, passives, { rarity: true, sort: 'rare',
-      cols: ['name', 'class', 'level', 'rare', 'sacred', 'unique', 'krangled', 'tier', 'seen'] }),
+    el('p', { class: 'sub' }, `${plural(owners.length, 'player')} · ${plural(items, 'unique item')} across `
+      + `${plural(affixes.length, 'affix', 'es')}${tokens ? ` · ${plural(tokens, 'unspent shard token')}` : ''}. `
+      + 'Uniques come from the Celestial and Unique Shard crafts — sacred and krangled bases are craftable, so they do not count. '
+      + 'Worn and bagged items both count; unspent tokens are only visible for players running the app. '
+      + 'Click headers to sort, chips to filter.'),
+    playersTable(owners, passives, { rarity: filters, sort: 'rare',
+      cols: ['name', 'class', 'level', 'rare', 'items', 'shards', 'seen'] }),
   ];
 }
 

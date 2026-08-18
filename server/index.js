@@ -191,16 +191,28 @@ const PUB = `FROM installs WHERE name IS NOT NULL AND data ? 'equipped'`;
 app.get('/api/ladder', h(async (_req, res) => {
   if (!pool) return res.sendStatus(503);
   const [players, byClass, levels, total] = await Promise.all([
-    // Rare-gear counts ride along with the ladder rows (the board is the same
-    // players, different columns). Equipped only — the bag stays private.
-    // Compared as jsonb rather than cast to bool: client-supplied values that
-    // aren't booleans would error the whole query on a cast.
+    // Rare gear rides along with the ladder rows (the board is the same players,
+    // different columns). "Rare" = a unique affix from the Celestial/Unique Shard
+    // crafts, read off the gold implicit line rather than the item's name class:
+    // the game's item_name_class picks locked > sacred > unique, so a Sacred or
+    // Krangled item carrying one never gets the gear-name-unique class. Sacred and
+    // krangled bases themselves are craftable, so they don't count as rare.
+    // Equipped + bag — both are public on the game's own character page. Held
+    // shard tokens (unspent uniques) come from app pings only; the game shows them
+    // on the owner's dashboard, not on public pages. jsonb_typeof guards every
+    // array: one row with the wrong shape would otherwise error the whole query.
     pool.query(`SELECT name, archetype, level, date_trunc('day', last_seen) AS last_seen, data->'stats' AS stats,
-                  (SELECT count(*) FROM jsonb_array_elements(data->'equipped') it WHERE it->'sacred' = 'true'::jsonb)::int AS sacred,
-                  (SELECT count(*) FROM jsonb_array_elements(data->'equipped') it WHERE it->'unique' = 'true'::jsonb)::int AS "unique",
-                  (SELECT count(*) FROM jsonb_array_elements(data->'equipped') it WHERE it->'krangled' = 'true'::jsonb)::int AS krangled,
-                  (SELECT max((substring(it->>'tier' from '\\d+'))::int) FROM jsonb_array_elements(data->'equipped') it
-                    WHERE it->>'tier' ~ '\\d') AS top_tier
+                  (SELECT jsonb_agg(u) FROM (
+                     SELECT split_part(regexp_replace(im->>'t', '^[^A-Za-z]+', ''), ':', 1) AS affix, count(*)::int AS n
+                     FROM jsonb_array_elements(
+                            (CASE WHEN jsonb_typeof(data->'equipped') = 'array' THEN data->'equipped' ELSE '[]'::jsonb END) ||
+                            (CASE WHEN jsonb_typeof(data->'bag') = 'array' THEN data->'bag' ELSE '[]'::jsonb END)) it,
+                          jsonb_array_elements(CASE WHEN jsonb_typeof(it->'implicits') = 'array' THEN it->'implicits' ELSE '[]'::jsonb END) im
+                     WHERE im->'gold' = 'true'::jsonb AND im->>'t' ~ '[A-Za-z]'
+                     GROUP BY 1) u) AS uniques,
+                  (SELECT jsonb_agg(t) FROM jsonb_array_elements(
+                            CASE WHEN jsonb_typeof(data->'tokens') = 'array' THEN data->'tokens' ELSE '[]'::jsonb END) t
+                    WHERE t #>> '{}' ~ 'Shard') AS shards
                 ${PUB}
                 ORDER BY level DESC NULLS LAST, last_seen DESC LIMIT 200`),
     pool.query(`SELECT archetype, count(*)::int ${PUB} GROUP BY archetype ORDER BY 2 DESC`),
@@ -218,6 +230,9 @@ app.get('/api/ladder', h(async (_req, res) => {
 app.get('/api/class/:archetype', h(async (req, res) => {
   if (!pool) return res.sendStatus(503);
   const a = String(req.params.archetype).slice(0, 64);
+  // No recency filter: the game roster gives no last-seen, and most players don't
+  // run the app, so we have no reliable activity signal for them — assume alive
+  // rather than drop a possibly-active player from the meta.
   const W = `${PUB} AND archetype = $1`;
   const [meta, passives, mods] = await Promise.all([
     pool.query(`SELECT count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level ${W}`, [a]),
@@ -520,9 +535,10 @@ app.use(express.static(require('path').join(__dirname, 'public')));
 // ---- Periodic roster scrape --------------------------------------------------
 // The game's /characters pages are public; every 30 min we refresh each roster
 // character into installs, keyed by name. Freshest writer wins: a scrape merges
-// its keys (stats/equipped/level) over the row's data, a later app ping replaces
-// the row wholesale — so passives/currency from pings survive scrapes, and both
-// paths keep the row current. SCRAPE=off disables.
+// its keys (stats/equipped/level/passives) over the row's data, a later app ping
+// replaces the row wholesale — currency/tokens (ping-only keys the scrape never
+// sets) survive the merge. A scrape whose passives sub-page parses empty leaves
+// passives unset, so the row keeps its previous passives. SCRAPE=off disables.
 const GAME_URL = process.env.GAME_URL || 'https://adventure.lokati.net';
 const strip = (s) => String(s).replace(/<[^>]*>/g, '').replace(/&middot;/g, '·').replace(/&amp;/g, '&')
   .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#?\w+;/g, '').trim();
@@ -537,6 +553,8 @@ const getPage = async (p) => {
   return r.text();
 };
 
+const grabIn = (chunk, cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
+
 function parseCharacter(text) {
   const name = strip((text.match(/<h1>([^<]*)<\/h1>/) || [])[1] || '');
   const archetype = strip((text.match(/class="role-badge[^"]*"[^>]*>([^<]*)</) || [])[1] || '');
@@ -546,25 +564,31 @@ function parseCharacter(text) {
     if (k && !/^(Dust|Sand)$/i.test(k)) stats[k] = strip(m[2]); // currency stays out of public stats
   }
   const level = +String(stats.Level || '').replace(/\D/g, '') || null;
-  const equipped = [];
-  for (const chunk of text.split(/class="bag-row/)[0].split('class="gear-slot"').slice(1)) {
-    const grab = (cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
-    equipped.push({
-      slot: grab('gear-slot-label'), name: grab('gear-name'), tier: grab('gear-tier'),
-      quality: grab('gear-quality'), primary: grab('gear-primary'),
-      mods: [...chunk.matchAll(/class="mod-roll"([^>]*)>([^<]*)</g)]
-        .map(m => ({ t: strip(m[2]), tip: strip((m[1].match(/data-tip="([^"]*)"/) || [])[1] || '') })),
-      sacred: /gear-name-sacred/.test(chunk), krangled: /gear-name-locked/.test(chunk),
-      unique: /gear-name-unique/.test(chunk),
-      // Sacred and unique (Celestial Shard) implicits can BOTH be on one item —
-      // the old single-match regex dropped the unique line. Same parse as
-      // implicitsOf in ../server.mjs (separate deploy, so a duplicated one-liner
-      // rather than an ESM import of a module that opens the bridge listener).
-      implicits: [...chunk.matchAll(/class="gear-(sacred|unique)"[^>]*>([^<]*)</g)]
-        .map(m => ({ t: strip(m[2]), gold: m[1] === 'unique' })).filter(x => x.t),
-    });
-  }
-  return { name, archetype, level, stats, equipped };
+  // The character page draws Gear and Bag with identical gear-slot markup; the
+  // bag-row wrapper is the divider. Bag items are public on the game site, and
+  // uniques sitting unworn still count as owned on the ladder's rare-gear board.
+  const itemOf = (chunk) => ({
+    slot: grabIn(chunk, 'gear-slot-label'), name: grabIn(chunk, 'gear-name'), tier: grabIn(chunk, 'gear-tier'),
+    quality: grabIn(chunk, 'gear-quality'), primary: grabIn(chunk, 'gear-primary'),
+    mods: [...chunk.matchAll(/class="mod-roll"([^>]*)>([^<]*)</g)]
+      .map(m => ({ t: strip(m[2]), tip: strip((m[1].match(/data-tip="([^"]*)"/) || [])[1] || '') })),
+    sacred: /gear-name-sacred/.test(chunk), krangled: /gear-name-locked/.test(chunk),
+    // The site's item_name_class picks locked > sacred > unique, so a Sacred or
+    // Krangled item with a Celestial/Unique Shard affix carries no
+    // gear-name-unique class — the affix line is the only reliable marker.
+    unique: /class="gear-unique"/.test(chunk),
+    // Sacred and unique (Celestial Shard) implicits can BOTH be on one item —
+    // the old single-match regex dropped the unique line. Same parse as
+    // implicitsOf in ../server.mjs (separate deploy, so a duplicated one-liner
+    // rather than an ESM import of a module that opens the bridge listener).
+    implicits: [...chunk.matchAll(/class="gear-(sacred|unique)"[^>]*>([^<]*)</g)]
+      .map(m => ({ t: strip(m[2]), gold: m[1] === 'unique' })).filter(x => x.t),
+  });
+  const chunks = (region) => region.split('class="gear-slot"').slice(1).map(itemOf);
+  const [gearRegion, ...bagRegions] = text.split(/class="bag-row/);
+  const equipped = chunks(gearRegion);
+  const bag = bagRegions.flatMap(chunks);
+  return { name, archetype, level, stats, equipped, bag };
 }
 
 // Public read-only tree page: nodes have no node_key, so key stays null; rank
@@ -633,10 +657,15 @@ async function scrapeRoster() {
         // Not a character sheet (onboarding/banner pages have an h1 too) — skip.
         if (!c.name || (!c.archetype && !c.level) || /^welcome\b/i.test(c.name)) continue;
         const id = 'web:' + slug.slice(0, 60);
-        const data = { scraped: new Date().toISOString(), name: c.name, stats: c.stats, equipped: c.equipped };
+        const data = { scraped: new Date().toISOString(), name: c.name, stats: c.stats, equipped: c.equipped, bag: c.bag };
         try {
           const p = parsePassives(await getPage('/characters/' + encodeURIComponent(slug) + '/passives'));
-          if (p.nodes.length) {
+          if (!p.nodes.length) {
+            // Main page scraped fine but the passives sub-page parsed empty — the
+            // merge below keeps this char's OLD passives, so the popular-passives
+            // meta lags for them until a good parse lands. Surface it, don't hide it.
+            console.error('scrape passives', slug + ': 0 nodes parsed — keeping stale passives');
+          } else {
             data.passives = { points: p.points, nodes: p.nodes };
             // Keep the richest SINGLE page per class. Never merge coordinates
             // across pages — the game re-lays the canvas out per reveal state,
