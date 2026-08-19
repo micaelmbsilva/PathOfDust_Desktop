@@ -1584,7 +1584,13 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     // state when a timer simply runs out (the game's own overlay ticks it off
     // the local clock the same way), so read it as a countdown — otherwise a
     // revived member stays greyed out until the next unrelated roster change.
-    const isDown = (c) => c.downedUntilMs != null && Date.now() < c.downedUntilMs;
+    // downedUntilMs is REAL time — at a slowed replay it greys a member out (and
+    // sorts them to the back) minutes before their death plays in the feed, which
+    // is the pane running ahead of its own fight. While a slowed replay is live
+    // the replay's own vitals are the only death source; the flag returns as
+    // soon as it ends, so between fights it is still authoritative.
+    const isDown = (c) => c.downedUntilMs != null && Date.now() < c.downedUntilMs
+      && !(live && fight.sp < 1);
     // "Out of the fight": downed (authoritative, survives between fights) or at
     // 0 HP during the live replay. These grey out and sort to the back.
     const isOut = (c) => { if (isDown(c)) return true; const u = unitOf(c); return !!(u && u.max && u.hp <= 0); };
@@ -1883,7 +1889,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       row('Operator Broadcasts', chk('showBroadcasts'), 'Announcements from the app operator. Restart and update warnings always show.') +
       row('Stream Starts Muted', chk('streamMuted'), 'Unmuted autoplay may still be blocked by the player.') +
       row('Replay Speed', sel('replaySpeed', [[100, '1× (in sync)'], [50, '0.5×'], [33, '0.33×'], [25, '0.25×']]),
-        'Slows this app\'s replay of a fight — the Live Fight feed, Party HP bars and Buffs pane. The game\'s own overlay keeps the server\'s pace, so the two drift apart. Applies to the next fight; the battle-result toast waits for the slower replay to finish.') +
+        'Slows this app\'s replay of a fight — the Live Fight feed, Party HP bars and Buffs pane. The game\'s own overlay keeps the server\'s pace, so the two drift apart. Takes effect at once, mid-fight too; the battle-result toast waits for the slower replay to finish.') +
       row('Overlay Background', `<input type="range" id="bgOp" min="0" max="100" step="5" value="${Math.round(bgOpacity() * 100)}" style="vertical-align:middle;width:110px">
         <span id="bgOpVal" style="display:inline-block;min-width:34px;text-align:right">${Math.round(bgOpacity() * 100)}%</span>`,
         'Fades the game overlay\'s own backdrop so more of the app shows through. The overlay reloads when you let go of the slider.') +
@@ -1923,6 +1929,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       setS(el.dataset.set, el.type === 'checkbox' ? el.checked : (/^\d+$/.test(el.value) ? +el.value : el.value));
       rerenderIfOpen('party', renderParty); // role classification reads the latest report
       if (el.dataset.set === 'passiveRemind') reconcilePassives(); // apply now, not on next poll
+      if (el.dataset.set === 'replaySpeed') applyReplaySpeed();
       if (el.dataset.set === 'notifySnd' || el.dataset.set === 'notifyVol')
         playSound(S().notifySnd, +S().notifyVol / 100); // preview, bypassing ding's throttle
       renderSettings(); // refresh counts (keeps focus loss acceptable — selects just changed)
@@ -2221,6 +2228,21 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // nothing plays until the overlay's battle phase actually starts.
   const fightCursor = () => fight ? Math.min(fight.maxAt, (Date.now() - fight.t0 - CHARGE_MS) * fight.sp) : 0;
   const fightLive = () => !!fight && Date.now() - fight.t0 < CHARGE_MS + fight.dur / fight.sp;
+  // Speed changed while a replay is running: re-anchor t0 so the cursor stays
+  // exactly where it is and only its rate changes — recomputing from the raw
+  // elapsed time would teleport the feed. A finished replay stays finished
+  // (elapsed is already past the new end), so slowing down can't resurrect one.
+  function applyReplaySpeed() {
+    if (!fight) return;
+    const at = fightCursor(), sp = replaySpeed();
+    fight.sp = sp;
+    fight.t0 = Date.now() - CHARGE_MS - at / sp;
+    startFightTimer();
+  }
+  // Panes are separate windows with their own copy of the fight; the settings
+  // panel lives in only one of them. `storage` fires in every OTHER window of
+  // the origin, which is exactly the set that needs the new rate.
+  addEventListener('storage', (e) => { if (e.key === 'settings') applyReplaySpeed(); });
   const fightPanelOpen = () => document.getElementById('fightpanel')?.classList.contains('open');
   const partyPanelOpen = () => document.getElementById('partypanel')?.classList.contains('open');
   // One replay timer feeds both the Live Fight feed and the Party HP bars; each
@@ -2303,7 +2325,10 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     }
     body.querySelector('.fhead').textContent =
       `${over ? (fight.won ? '🏆 Won' : '💀 Lost') : '⏱ ' + mmss(cursor)} · Stage ${fight.stage}` +
-      `${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}`;
+      `${fight.kind && fight.kind !== 'basic' ? ' · 💀 BOSS' : ''}${over ? '' : ' · live'}` +
+      // Says the rate out loud: a replay that looks server-paced is either at 1x
+      // or not honouring the setting, and this is the difference.
+      `${fight.sp !== 1 ? ` · ${+fight.sp.toFixed(2)}×` : ''}`;
     // Follow the tail only when the reader is already at it — someone scrolled
     // up reading an earlier moment stays where they are.
     const follow = fe.scrollHeight - fe.scrollTop - fe.clientHeight < 30;
