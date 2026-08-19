@@ -126,7 +126,11 @@
   .recombnote { font-size: 0.85rem; color: #cdbdf5; margin: -2px 0 8px; }
   /* drag-to-arrange craft sections */
   .csec { border: 1px solid rgba(160,140,255,0.18); border-radius: 9px; padding: 6px 8px 8px; margin-top: 8px; }
+  .csec.secover { outline: 2px dashed rgba(160,140,255,0.6); outline-offset: 2px; }
   .csec-h { display: flex; align-items: center; gap: 6px; }
+  .csec-drag { cursor: grab; color: #8a7fb0; padding: 0 2px; user-select: none; font-size: 0.9rem; line-height: 1; }
+  .csec-drag:active { cursor: grabbing; }
+  .csec-drag:hover { color: #c9bdf0; }
   .csec-name { flex: 1; background: none; border: 1px solid transparent; border-radius: 6px;
     color: #b0a2d9; font: inherit; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 5px; }
   .csec-name:hover, .csec-name:focus { border-color: rgba(160,140,255,0.3); background: #1c1830; color: #eae6f5; outline: none; }
@@ -724,6 +728,7 @@
   const saveSections = (s) => localStorage.setItem(SEC, JSON.stringify(s));
   let sections = loadSections() || JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
   let dragging = null, didDragCraft = false; // didDragCraft swallows the click a drag leaves behind
+  let dragSec = null; // index of the section being dragged by its ⠿ handle (whole-section reorder)
 
   function renderSections(actions) {
     const byAction = Object.fromEntries(actions.map(a => [a.action, a]));
@@ -746,7 +751,7 @@
     // saved layout for when the item makes them valid again.
     $('craftSections').innerHTML = sections.map((s, i) => `
       <div class="csec" data-sec="${i}">
-        <div class="csec-h"><input class="csec-name" data-sec="${i}" value="${esc(s.name)}" maxlength="24"
+        <div class="csec-h"><span class="csec-drag" draggable="true" title="Drag to reorder sections">⠿</span><input class="csec-name" data-sec="${i}" value="${esc(s.name)}" maxlength="24"
           title="Rename this section"><button class="csec-del" data-del="${i}" title="Remove section (its buttons move to the one before)">✕</button></div>
         <div class="acts csec-body" data-sec="${i}">
           ${s.items.filter(id => byAction[id]).map(id => { const a = byAction[id];
@@ -762,8 +767,34 @@
   function wireSections(actions) {
     const commit = () => { saveSections(sections); renderSections(actions); updateCosts(); };
     $('craftSections').querySelectorAll('.csec-name').forEach(el => {
-      el.onchange = () => { sections[+el.dataset.sec].name = el.value.trim() || 'Section'; saveSections(sections); };
+      const idx = () => +el.closest('.csec').dataset.sec; // live index — survives a reorder
+      el.oninput = () => { const s = sections[idx()]; if (s) s.name = el.value; }; // keep model current even without blur
+      el.onchange = () => { const s = sections[idx()]; if (s) s.name = el.value.trim() || 'Section'; saveSections(sections); };
       el.onkeydown = (e) => { if (e.key === 'Enter') el.blur(); };
+    });
+    // Whole-section reorder via the ⠿ handle. Kept distinct from button drags
+    // (dragging) so the two never cross wires.
+    $('craftSections').querySelectorAll('.csec-drag').forEach(h => {
+      const sec = h.closest('.csec');
+      h.ondragstart = (e) => { dragSec = +sec.dataset.sec; e.dataTransfer.effectAllowed = 'move'; };
+      h.ondragend = () => { dragSec = null; $('craftSections').querySelectorAll('.secover').forEach(c => c.classList.remove('secover')); };
+    });
+    $('craftSections').querySelectorAll('.csec').forEach(csec => {
+      csec.ondragover = (e) => { if (dragSec == null) return; e.preventDefault(); csec.classList.add('secover'); };
+      csec.ondragleave = () => csec.classList.remove('secover');
+      csec.ondrop = (e) => {
+        if (dragSec == null) return;                          // a button drop — handled by .csec-body
+        e.preventDefault(); csec.classList.remove('secover');
+        const from = dragSec, to = +csec.dataset.sec;
+        if (from === to) return;
+        const r = csec.getBoundingClientRect();
+        const after = e.clientY > r.top + r.height / 2;        // drop above the target's midline = before it
+        const moved = sections[from], rest = sections.filter((_, k) => k !== from);
+        let at = rest.indexOf(sections[to]); if (after) at += 1;
+        rest.splice(at, 0, moved);
+        sections = rest;
+        commit();
+      };
     });
     $('craftSections').querySelectorAll('[data-del]').forEach(el => el.onclick = () => {
       const i = +el.dataset.del;
@@ -781,11 +812,11 @@
       btn.ondragend = () => { dragging = null; btn.style.opacity = ''; setTimeout(() => { didDragCraft = false; }, 0); };
     });
     $('craftSections').querySelectorAll('.csec-body').forEach(body => {
-      body.ondragover = (e) => { e.preventDefault(); body.classList.add('over'); };
+      body.ondragover = (e) => { if (!dragging) return; e.preventDefault(); body.classList.add('over'); }; // ignore section drags
       body.ondragleave = () => body.classList.remove('over');
       body.ondrop = (e) => {
+        if (!dragging) return;                                 // section drag — let it bubble to .csec
         e.preventDefault(); body.classList.remove('over');
-        if (!dragging) return;
         for (const s of sections) { const k = s.items.indexOf(dragging); if (k >= 0) s.items.splice(k, 1); }
         const target = sections[+body.dataset.sec];
         // Dropped onto a specific button: land before it, so order is editable
