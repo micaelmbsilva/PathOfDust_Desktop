@@ -66,6 +66,10 @@
     ? `<ul>${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`
     : `<p class="muted">${empty}</p>`;
   const fmtN = PodFeed.fmtN;
+  // Fight length, minutes:seconds. Sub-minute fights (most basic encounters)
+  // read as bare seconds.
+  const fmtDur = (ms) => { const s = Math.round((ms || 0) / 1000);
+    return s >= 60 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`; };
   // Loot outcomes arrive as Rust's Debug formatting — "AutoDisenchanted { dust:
   // 1665 }" — because the page prints the enum with {:?}. Read it as English.
   const prettyLoot = (s) => String(s).replace(
@@ -206,7 +210,7 @@
       const wentFirst = (name) => f.firstToDie && (name || '').toLowerCase() === f.firstToDie.toLowerCase();
       const died = (name) => wentFirst(name) || !!(dset && dset.has((name || '').toLowerCase()));
       return `<details class="fight" data-fid="${esc(f.startedAtUnixMs || i)}">
-        <summary><span class="${f.won ? 'won' : 'lost'}">${f.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(f.stage)}${f.kind === 'boss' ? ' 💀 Boss' : ''}</span>
+        <summary><span class="${f.won ? 'won' : 'lost'}">${f.won ? '🏆 Won' : '💀 Lost'} — Stage ${esc(f.stage)}${f.kind === 'boss' ? ' 💀 Boss' : ''}</span> <span class="muted">⏱ ${esc(fmtDur(f.displayDurationMs))}</span>
           <div class="when">${esc(when(f.startedAtUnixMs))} · ${esc(f.participants)} in the party${
             mine ? ` · you dealt ${fmtN(mine.damageDealt || 0)}${total ? ` (${((mine.damageDealt || 0) / total * 100).toFixed(1)}%)` : ''}${died(myName) ? (wentFirst(myName) ? ' · 💀 you went down first' : ' · 💀 you went down') : ''}` : ' · you sat this one out'}</div></summary>
         <h3>Party${role === 'all' ? '' : ` — ${PodFeed.ROLE_ICON[role]} ${role}`} (${rows.length})</h3>
