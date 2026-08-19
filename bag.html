@@ -334,20 +334,28 @@
   // actions (reforge) reflect a beat after the POST returns, so if the first diff
   // is empty we retry once; a successful action always toasts something.
   async function craftAct(endpoint, fields, label, opts) {
-    let before = null;
-    try { before = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); } catch {}
+    // The last load()'s inventory is already the "before" for a craft: mods,
+    // tier and tokens only move via crafts, which are user-initiated, so nothing
+    // can have shifted them since. Dust/sand and durability DO drift constantly
+    // from auto-battle, so a currency report still pays for a fresh read.
+    let before = lastInv;
+    if (opts && opts.currency) {
+      try { before = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); } catch {}
+    }
     const r = await api(endpoint, fields);
     if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
     if (before) {
       let parts = [];
-      for (let i = 0; i < 5; i++) { // read-after-write lag — up to ~3.2s before calling it rejected
-        if (i) await new Promise(z => setTimeout(z, 800));
+      for (let i = 0; i < 5; i++) { // read-after-write lag — ~3.0s before calling it rejected
+        // Front-loaded backoff: the typical craft settles in one short beat, so
+        // don't make every action wait a flat 800ms to find that out.
+        if (i) await new Promise(z => setTimeout(z, 200 * 2 ** (i - 1))); // 200,400,800,1600
         let after; try { after = await fetch('/api/inventory', { cache: 'no-store' }).then(x => x.json()); } catch { continue; }
         // A veiled/token craft doesn't change the inventory — it parks a pending
         // 3-outcome choice. Don't sit in the retry loop: render it right away.
         if (after.veil && !before.veil) { toast('🔮 Veiled — pick your outcome below'); load(); return r; }
         parts = craftSummary(before, after, opts);
-        if (parts.length) break;
+        if (parts.length) { lastInv = after; break; } // chain back-to-back crafts without waiting for refresh()
       }
       // Empty diff is NOT success: the site 303s on business failures too (e.g.
       // not enough dust), so nothing changing usually means it was rejected.
@@ -445,6 +453,7 @@
 
     lastCap = inv.bagCap;
     lastBag = inv.bag;
+    lastInv = inv; // craftAct's "before" snapshot — saves a round trip per craft
     renderBag();
 
     // Divine Dust recipe: a pure dust+sand -> ✨ conversion, so it stands apart
@@ -917,6 +926,7 @@
 
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
   let lastBag = [], lastEquipped = [], lastCap = null, meName = '';
+  let lastInv = null; // whole /api/inventory body from the last load — craftAct's "before"
   const numTier = (i) => +(i.tier?.match(/\d+/) || [0])[0];
   const numQual = (i) => i.sacred || i.quality === 'Sacred' ? 102 : i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
   const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
