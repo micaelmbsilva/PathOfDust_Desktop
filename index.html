@@ -377,6 +377,20 @@
   #settingsBody .srow { align-items: center; }
   #settingsBody .fhead { margin-bottom: 4px; }
 
+/* Pane-mode (?pane=X) — this window IS one pane, popped out. The page runs in
+   full (own feed, own timers) but shows only the target pane, stretched to the
+   window; the native window frame replaces drag/resize/collapse/close, so the
+   bar buttons hide. Kept as separate rules, not :is() — :is would give the
+   .apanel hide id-level specificity and beat .panewin-target below. */
+body.panewin { overflow: hidden; } /* no page scrollbar — the pane scrolls its own .abody */
+body.panewin :is(#topbar, #zoomcapture, #overlay, #toasts) { display: none !important; }
+body.panewin .apanel { display: none !important; }
+body.panewin .apanel.panewin-target { display: flex !important; position: fixed; inset: 0 !important;
+  width: auto !important; height: auto !important;
+  max-width: none !important; max-height: none !important;
+  border-radius: 0; resize: none; }
+body.panewin .apanel.panewin-target .cbtns { display: none; }
+
 /* Legacy (pre-4.0.0) shell lockdown — only Twitch chat and the update banner
    remain; the bridge 410s every game API anyway, this just hides the wreckage. */
 body.legacy .apanel:not(#chatpanel), body.legacy #toolbarItems,
@@ -420,6 +434,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   <div class="cbar" id="streambar">
     <span class="ctitle">📺 Stream</span>
     <span class="cbtns">
+      <button id="streamPop" title="pop out to its own window">⧉</button>
       <button id="streamCollapse" title="collapse">▾</button>
       <button title="close" onclick="toggleStream(false)">✕</button>
     </span>
@@ -430,7 +445,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 <div class="apanel" id="partypanel" style="top:60px;left:300px">
   <div class="cbar" id="partybar">
     <span class="ctitle">👥 Party</span>
-    <span class="cbtns"><button id="partyCollapse" title="collapse">▾</button>
+    <span class="cbtns"><button id="partyPop" title="pop out to its own window">⧉</button>
+      <button id="partyCollapse" title="collapse">▾</button>
       <button title="close" onclick="toggleModal('party', false)">✕</button></span>
   </div>
   <div class="abody" id="partyBody"><p class="muted">Waiting for battle data…</p></div>
@@ -439,7 +455,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 <div class="apanel" id="inboxpanel" style="top:80px;left:340px;width:460px">
   <div class="cbar" id="inboxbar">
     <span class="ctitle">📬 Feedback Inbox</span>
-    <span class="cbtns"><button id="inboxCollapse" title="collapse">▾</button>
+    <span class="cbtns"><button id="inboxPop" title="pop out to its own window">⧉</button>
+      <button id="inboxCollapse" title="collapse">▾</button>
       <button title="close" onclick="toggleModal('inbox', false)">✕</button></span>
   </div>
   <div class="abody" id="inboxBody"><p class="muted">Loading…</p></div>
@@ -472,7 +489,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 <div class="apanel" id="buffspanel" style="bottom:14px;left:16px;width:620px;height:150px">
   <div class="cbar" id="buffsbar">
     <span class="ctitle">✨ Buffs &amp; Debuffs</span>
-    <span class="cbtns"><button id="buffsCollapse" title="collapse">▾</button>
+    <span class="cbtns"><button id="buffsPop" title="pop out to its own window">⧉</button>
+      <button id="buffsCollapse" title="collapse">▾</button>
       <button title="close" onclick="toggleModal('buffs', false)">✕</button></span>
   </div>
   <div class="abody" id="buffsBody"><p class="muted">Nothing active.</p></div>
@@ -481,7 +499,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 <div class="apanel" id="settingspanel" style="top:70px;left:200px;width:380px;height:520px">
   <div class="cbar" id="settingsbar">
     <span class="ctitle">⚙️ Settings</span>
-    <span class="cbtns"><button id="settingsCollapse" title="collapse">▾</button>
+    <span class="cbtns"><button id="settingsPop" title="pop out to its own window">⧉</button>
+      <button id="settingsCollapse" title="collapse">▾</button>
       <button title="close" onclick="toggleModal('settings', false)">✕</button></span>
   </div>
   <div class="abody" id="settingsBody"></div>
@@ -490,7 +509,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 <div class="apanel" id="fightpanel" style="top:90px;left:60px;width:440px;height:540px">
   <div class="cbar" id="fightbar">
     <span class="ctitle">🗡️ Live Fight</span>
-    <span class="cbtns"><button id="fightCollapse" title="collapse">▾</button>
+    <span class="cbtns"><button id="fightPop" title="pop out to its own window">⧉</button>
+      <button id="fightCollapse" title="collapse">▾</button>
       <button title="close" onclick="toggleModal('fight', false)">✕</button></span>
   </div>
   <div class="abody" id="fightBody" style="display:flex;flex-direction:column;gap:6px">
@@ -502,7 +522,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   <div class="cbar" id="statsbar">
     <span class="hname" id="hname">Character</span>
     <span class="hsub" id="hsub"></span>
-    <span class="cbtns"><button id="toggle" title="collapse">▾</button></span>
+    <span class="cbtns"><button id="statsPop" title="pop out to its own window">⧉</button>
+      <button id="toggle" title="collapse">▾</button></span>
   </div>
   <div class="abody" id="rows"><p class="muted">Loading…</p></div>
 </div>
@@ -513,8 +534,14 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 <script>
   const TITLE = GAME_NAME + ' — ALPHA'; // ALPHA is a display-only label, never in the semver
   document.getElementById('appTitle').textContent = TITLE;
+  // ?pane=X — this window is a single pane popped out into its own window (see
+  // enterPaneMode). The page runs in full, so the pane gets live data from its
+  // own feed; body.panewin hides everything else.
+  const PANE = new URLSearchParams(location.search).get('pane');
+  if (PANE) document.body.classList.add('panewin');
   let appVersion = '';
   const setTitle = (name) => {
+    if (PANE) return; // pane windows keep the pane's own title (set in enterPaneMode)
     document.title = TITLE + (appVersion ? ` v${appVersion}` : '') + (name ? ` — ${name}` : '');
   };
   setTitle();
@@ -524,7 +551,11 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // if it was in front. It answers 'none' when the window isn't open (or on an
   // old shell that lacks the handler) — then we open it ourselves.
   async function openWin(path, name, w = 1000, h = 800) {
-    const key = new URL(path, location.href).pathname; // what main keys the window on
+    // What main keys the window on (winKey in main.cjs mirrors this). Pane
+    // popouts all live on '/', so there the query is the identity; page
+    // popouts keep pathname-only so /character.html?login=X stays ONE window.
+    const u = new URL(path, location.href);
+    const key = u.pathname === '/' ? u.pathname + u.search : u.pathname;
     let action = 'none';
     try {
       const r = await fetch('/api/toggle-window', { method: 'POST',
@@ -588,6 +619,9 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const panes = [];
 
   function persistPanel(el, key) {
+    // Pane window: geometry belongs to the native window (main.cjs persists its
+    // bounds); reading or writing lay.* here would fight the main window's layout.
+    if (PANE) return () => {};
     panes.push({ key, el, def: el.getAttribute('style') || '' });
     const s = LS.get(key, null);
     if (s) {
@@ -1009,8 +1043,9 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // Panels open at close reopen next launch (positions already persist via lay.*)
   const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
   let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
-  const persistPanels = () => LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
-    document.getElementById(w + 'panel')?.classList.contains('open')));
+  const persistPanels = () => { if (PANE) return; // pane window: only its pane is open — don't clobber main's list
+    LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
+      document.getElementById(w + 'panel')?.classList.contains('open'))); };
   function toggleModal(which, show) {
     const p = document.getElementById(which + 'panel');
     const open = show === undefined ? !p.classList.contains('open') : show;
@@ -1050,6 +1085,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     };
     let drag = false, dx = 0, dy = 0;
     bar.addEventListener('pointerdown', (e) => {
+      if (PANE) return; // pane window: the pane is pinned full-window, the OS moves the window
       if (e.target.closest('button')) return; // any bar button (collapse/close/pop) — not a drag
       drag = true; bar.classList.add('grabbing'); bar.setPointerCapture(e.pointerId);
       const r = panel.getBoundingClientRect();
@@ -1080,6 +1116,18 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     document.getElementById(which + 'Pop').onclick = () => {
       openWin(document.getElementById(which + 'Frame').getAttribute('src') || path, which, w, h);
       toggleModal(which, false);
+    };
+  // Every other pane pops out as this same page in ?pane=X mode (see
+  // enterPaneMode) — same code, its own live feed, sized to the pane it
+  // replaces. The in-app pane closes; stats has no close, so it stays.
+  for (const which of ['party', 'buffs', 'fight', 'settings', 'inbox', 'stream', 'stats'])
+    document.getElementById(which + 'Pop').onclick = () => {
+      const el = document.getElementById(which === 'stats' ? 'stats' : which + 'panel');
+      const r = el.getBoundingClientRect();
+      openWin('/?pane=' + which, 'pane_' + which,
+        Math.max(320, Math.round(r.width)), Math.max(240, Math.round(r.height) + 20));
+      if (which === 'stream') toggleStream(false);
+      else if (which !== 'stats') toggleModal(which, false);
     };
   // Open the Characters panel straight onto someone (party cell click).
   function showCharacter(login) {
@@ -2674,7 +2722,22 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     // already keeps the ResizeObserver from overwriting geometry mid-restore.
     requestAnimationFrame(() => requestAnimationFrame(restorePanels));
   }
-  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', scheduleRestore, { once: true });
+  // Pane window: skip the openPanels restore entirely — show ONLY the target
+  // pane, stretched to the window (body.panewin CSS). The overlay iframe is
+  // blanked so each popout doesn't also run the game board.
+  function enterPaneMode() {
+    const el = document.getElementById(PANE === 'stats' ? 'stats' : PANE + 'panel');
+    if (!el) return;
+    el.classList.add('panewin-target');
+    el.classList.remove('collapsed');
+    document.getElementById('overlay').src = 'about:blank';
+    document.title = (el.querySelector('.ctitle')?.textContent.trim() || '📊 Stats') + ' — ' + TITLE;
+    if (PANE === 'chat') toggleChat(true);
+    else if (PANE === 'stream') toggleStream(true);
+    else if (PANE !== 'stats') toggleModal(PANE, true);
+  }
+  if (PANE) enterPaneMode();
+  else if (document.readyState === 'loading') addEventListener('DOMContentLoaded', scheduleRestore, { once: true });
   else scheduleRestore();
 
   // Persist on the way out as well as on interaction. autoreload.js reloads the
@@ -2769,6 +2832,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const ding = (() => {
     let last = 0;
     return () => {
+      if (PANE) return; // pane windows would double every chime the main window plays
       const vol = +S().notifyVol; // 0 = off
       if (!vol || Date.now() - last < 800) return; // one bag poll can pop several toasts at once
       last = Date.now();

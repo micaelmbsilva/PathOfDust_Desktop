@@ -181,7 +181,10 @@ const writeWinState = (s) => { try { fs.writeFileSync(winStateFile(), JSON.strin
 function winKey(url) {
   try {
     const u = new URL(url);
-    if (u.hostname === 'localhost') return u.pathname;   // /bag.html, /passives.html
+    // /bag.html, /passives.html — and pane popouts, which all live on '/' so
+    // there the query IS the identity (/?pane=party vs /?pane=buffs). Mirrors
+    // the key openWin (index.html) sends to /api/toggle-window.
+    if (u.hostname === 'localhost') return u.pathname === '/' ? u.pathname + u.search : u.pathname;
     if (u.hostname.endsWith('twitch.tv')) return 'twitch-chat';
   } catch {}
   return null; // anything else isn't a window we manage
