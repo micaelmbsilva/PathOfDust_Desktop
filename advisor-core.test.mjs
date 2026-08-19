@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseMod, parseItem, sumBuckets, classScore, bestLoadout, rollTargets, trimOrder, emptyBuckets,
-  treeLayer, bestTree, pointsForLevel, searchBuild, nodeScored, MODELED_SPECIAL_KEYS, statPriority } from './server/public/advisor-core.mjs';
+  treeLayer, bestTree, pointsForLevel, searchBuild, nodeScored, MODELED_SPECIAL_KEYS, statPriority,
+  nodeMagnitude } from './server/public/advisor-core.mjs';
 
 const model = JSON.parse(readFileSync(new URL('./server/public/game-model.json', import.meta.url)));
 
@@ -132,13 +133,33 @@ assert.equal(pointsForLevel(0), 1);
 assert.equal(pointsForLevel(119), 30);
 
 // FlatStat pooling + Colossus's cross-node special case: Juggernaut 3/3 is
-// 24% max hp, Colossus 3/3 doubles it (adds another 24%).
+// 24% max hp and Colossus scales it by its own magnitude on top. That magnitude
+// is NOT a constant — the streamer can retune any node live and the export
+// carries the tuned triplet — so derive the expectation instead of pinning a
+// number that changes out from under the suite (it did: Colossus went from
+// 0.5/0.75/1 to 1/2/3, turning "doubles" into "quadruples").
 {
+  const colossus = warrior.find((n) => n.key === 'colossus');
+  const expected = 0.24 * (1 + nodeMagnitude(colossus, 3));
   const t = treeLayer(warrior, { juggernaut: 3, colossus: 3 }, {}, model);
-  assert.ok(Math.abs(t.get('incLife') - 0.48) < 1e-9, `incLife ${t.get('incLife')}`);
+  assert.ok(Math.abs(t.get('incLife') - expected) < 1e-9, `incLife ${t.get('incLife')}, expected ${expected}`);
   // A spec's 4th point unlocks children only — it must not grow the stat.
   const t4 = treeLayer(warrior, { juggernaut: 3, colossus: 4 }, {}, model);
-  assert.ok(Math.abs(t4.get('incLife') - 0.48) < 1e-9);
+  assert.ok(Math.abs(t4.get('incLife') - expected) < 1e-9);
+}
+
+// A live override (`effect.ranks`) is what the running game uses, so it must
+// win over the source's own r1/per line — including the non-linear and
+// non-monotonic shapes real overrides actually take, which no line can fit.
+{
+  const src = { magnitudeCap: 3, effect: { kind: 'flatStat', stat: 'CritMultiplier', r1: 0.03, per: 0.03 } };
+  assert.ok(Math.abs(nodeMagnitude(src, 3) - 0.09) < 1e-9, 'no override: the r1/per line still applies');
+  const tuned = { ...src, effect: { ...src.effect, ranks: [0.15, 0.3, 0.45] } };
+  assert.deepEqual([1, 2, 3].map((r) => nodeMagnitude(tuned, r)), [0.15, 0.3, 0.45]);
+  assert.equal(nodeMagnitude(tuned, 4), 0.45, "a spec's 4th point still does not grow the stat");
+  assert.equal(nodeMagnitude(tuned, 0), 0, 'an unallocated node contributes nothing');
+  const jagged = { magnitudeCap: 3, effect: { kind: 'special', r1: 4, per: -1, ranks: [1, 0.75, 0.5] } };
+  assert.deepEqual([1, 2, 3].map((r) => nodeMagnitude(jagged, r)), [1, 0.75, 0.5], 'a descending override is used verbatim');
 }
 
 // OverflowConversion draws on COMBINED gear+tree overflow and is hard-capped

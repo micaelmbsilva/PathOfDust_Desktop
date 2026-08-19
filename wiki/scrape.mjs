@@ -3,17 +3,24 @@
 // Run: node wiki/scrape.mjs   -> writes wiki/wiki.json + wiki/wiki.html
 import { writeFile } from 'node:fs/promises';
 
-const URL_ = 'https://adventure.lokati.net/wiki';
+// The wiki became a multi-page docs site on 2026-08-19 — /wiki is now an index
+// of links with no content of its own, so both sections moved to their own page.
+// Scraping /wiki alone silently produced 0 bosses and 0 classes.
+const ORIGIN = 'https://adventure.lokati.net';
+const URL_ = `${ORIGIN}/wiki`;
 const strip = (s) => (s || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&#?\w+;/g, '')
   .replace(/\s+/g, ' ').trim();
 const paras = (html) => [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/g)].map(m => strip(m[1]));
 
-const res = await fetch(URL_);
-if (!res.ok) throw new Error(`wiki fetch failed: ${res.status}`);
-const t = await res.text();
+const page = async (path) => {
+  const res = await fetch(ORIGIN + path);
+  if (!res.ok) throw new Error(`wiki fetch failed: ${path} ${res.status}`);
+  return res.text();
+};
+const [bossPage, t] = await Promise.all([page('/wiki/bosses'), page('/wiki/passives')]);
 
-// ---- Bosses: h3 blocks between the two h2 sections ----
-const bossRegion = (t.split(/<h2[^>]*>Bosses<\/h2>/)[1] || '').split(/<h2/)[0];
+// ---- Bosses: one h3 per boss, inside the page's content column ----
+const bossRegion = (bossPage.split('class="wiki-content"')[1] || bossPage).split('<footer')[0];
 const bossIntro = paras(bossRegion.split('<h3')[0]);
 const bosses = bossRegion.split('<h3').slice(1).map(chunk => ({
   name: strip(chunk.slice(chunk.indexOf('>') + 1, chunk.indexOf('</h3>'))),
@@ -49,12 +56,24 @@ const classes = t.split(/<details class="[^"]*wiki-archetype[^"]*">/).slice(1).m
 });
 
 const out = {
-  source: URL_,
+  source: `${URL_}/{bosses,passives}`,
   scraped: new Date().toISOString(),
   bossIntro: bossIntro.join('\n\n'),
   bosses,
   classes,
 };
+// A section that comes back empty means the markup moved, not that the game
+// lost its bosses — write nothing rather than overwrite a good snapshot with
+// zeros. That silent-zeros failure is exactly what left server/index.js's own
+// wiki scrape pointed at a page with no classes on it for days.
+const skills = classes.reduce((n, c) => n + c.skills.length, 0);
+if (!bosses.length || !classes.length) {
+  throw new Error(`wiki markup changed: ${bosses.length} bosses, ${classes.length} classes — snapshot left untouched`);
+}
 await writeFile(new URL('./wiki.html', import.meta.url), t);
 await writeFile(new URL('./wiki.json', import.meta.url), JSON.stringify(out, null, 2));
-console.log(`bosses: ${bosses.length}, classes: ${classes.length}, skills: ${classes.reduce((n, c) => n + c.skills.length, 0)}`);
+console.log(`bosses: ${bosses.length}, classes: ${classes.length}, skills: ${skills}`);
+// Per-skill prose stopped existing when the wiki switched to node graphs
+// (2026-08-17). The structured node data now comes from parseWikiNodes in
+// server/index.js, which feeds server/public/passives.json — not from here.
+if (!skills) console.log('note: 0 skills is expected — the wiki renders node graphs now, see server/index.js parseWikiNodes');

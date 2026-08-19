@@ -594,7 +594,15 @@ export function treeOf(html, secondary = false) { // exported for scrape smoke-t
       key: (head.match(/name="node_key"\s+value="([^"]+)"/) || [])[1] || null,
       secondary, name,
       tier: grab('node-kind'), rank: grab('node-rank'),
-      desc: strip((head.match(/data-tip="([^"]*)"/) || [])[1] || ''),
+      desc: strip((head.match(/data-tip="([^"]*)"/) || [])[1] || '').replace(/\s*<?span class=$/, ''),
+      // The streamer can retune a node's real numbers live (the site's passive
+      // override store). Descriptions are hardcoded prose and never rewritten,
+      // so the site appends a "Tuned: A / B / C (default X / Y / Z)" span —
+      // absent unless an override exists. It is appended to data-tip UNESCAPED,
+      // so its own class quote closes the attribute early: the span ends up as
+      // sibling markup and `desc` above stops at "… <span class=". Match the
+      // raw span wherever it landed, and repair the truncated desc below.
+      tuned: strip((head.match(/passive-tuned[^>]*>([^<]*)</) || [])[1] || '') || null,
       cls: head.slice(0, head.indexOf('"')),
       x: +(head.match(/left:\s*([\d.]+)px/) || [])[1] || 0, // tree column position
       y: +(head.match(/top:\s*([\d.]+)px/) || [])[1] || 0,  // tree row position
@@ -630,6 +638,21 @@ export function memoriesOf(html) { // exported for scrape smoke-tests
   });
 }
 
+// Golem slots (Elementalist only, and only once Golem Master is ranked). One
+// form per unlocked slot; the site's own `slot` field is the identity, same
+// rule memoriesOf follows above. `type` is the currently-assigned option.
+export function golemsOf(html) { // exported for scrape smoke-tests
+  return html.split('class="golem-slot-picker"').slice(1).map((chunk, i) => {
+    const form = chunk.split('</form>')[0];
+    return {
+      slot: +((form.match(/name="slot" value="(\d+)"/) || [])[1] ?? i),
+      label: strip((form.match(/<label[^>]*>([^<]*)</) || [])[1] || `Golem ${i + 1}`),
+      options: [...form.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)</g)]
+        .map(m => ({ value: m[1], selected: /\bselected\b/.test(m[2]), label: strip(m[3]) })),
+    };
+  }).map(g => ({ ...g, type: (g.options.find(o => o.selected) || g.options[0] || {}).value || 'basic' }));
+}
+
 // Passive tree: points chip, respec/save availability, memory slots, and every
 // node. When Split Personality is equipped the page carries a SECOND tree below
 // the first; both are parsed separately so their nodes and canvases never get
@@ -646,6 +669,7 @@ export function passivesOf(text) { // exported for scrape smoke-tests
   const canReset = /action="\/passives\/reset">\s*<button(?![^>]*disabled)/.test(text);
   const dirty = /preview-note dirty/.test(text);            // site's "Unsaved changes." flag
   const memories = memoriesOf(primaryHtml);
+  const golems = golemsOf(primaryHtml);
 
   // 2nd class picker — only rendered while the Split Personality unique is
   // equipped. Its tree section stays empty until a class is actually chosen.
@@ -660,7 +684,7 @@ export function passivesOf(text) { // exported for scrape smoke-tests
       ...treeOf(secHtml, true),
     };
   }
-  return { points, respecLabel, canSave, canReset, dirty, memories, ...treeOf(primaryHtml), secondary };
+  return { points, respecLabel, canSave, canReset, dirty, memories, golems, ...treeOf(primaryHtml), secondary };
 }
 async function passives() { return passivesOf((await getAuthed('/passives')).text); }
 

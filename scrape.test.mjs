@@ -4,7 +4,7 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf, craftFormsOf } from './server.mjs';
+import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf, craftFormsOf, golemsOf } from './server.mjs';
 import { netKey, firstBody, redirectNote } from './actions.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -255,9 +255,6 @@ for (const f of ['authed/characters.html', 'authed/characters_afrosenbo.html']) 
   assert.equal(firstBody(twice(single)), single, `${f}: the second copy is cut off`);
 }
 
-console.log('ok');
-process.exit(0); // importing server.mjs opens the bridge listener
-
 // --- /passives, as the site renders it since Memories (2026-08-19): a Memory
 // slot card above the tree, and — with Split Personality equipped — a whole
 // second tree below it. Markup copied from render_memories_section /
@@ -331,6 +328,8 @@ assert.deepEqual(pv.memories.map(m => [m.slot, m.filled, m.name]),
   [[0, true, 'Fire & Fury'], [1, false, ``], [2, false, ``]]);
 assert.equal(pv.memories[0].meta, 'Warrior & Druid · 12 points spent');
 assert.equal(pv.memories[1].placeholder, 'Memories of an Elementalist');
+// No golem picker unless the character is an Elementalist with Golem Master.
+assert.deepEqual(pv.golems, []);
 // Two trees, never mixed: the primary canvas must not pick up the 2nd class's
 // nodes, and the 2nd class's must not pick up the primary's.
 assert.deepEqual(pv.nodes.map(n => n.name), ['WARRIOR', 'cleave']);
@@ -390,3 +389,37 @@ assert.equal(craftFormsOf(inventoryPage(true)).divineDustRecipe.affordable, fals
 const old = craftFormsOf('<form method="post" action="/craft"><select name="item_a"></select></form>');
 assert.equal(old.divineDustRecipe, null);
 assert.match(old.craftForm, /name="item_a"/);
+
+// --- Golem slots (render_golem_slots): Elementalist only, one form per slot
+// Golem Master unlocked. Slot identity is the site's own number, so a picker
+// list must never be re-indexed from its position.
+const golemPage = `<div class="golem-slots"><div class="masthead"><h1>Golem Slots</h1></div>` +
+  [0, 1].map(i => `<form method="post" action="/passives/set-golem-type" class="golem-slot-picker">` +
+    `<input type="hidden" name="slot" value="${i}">` +
+    `<label>Golem ${i + 1}</label>` +
+    `<select name="golem_type">` +
+    `<option value="basic"${i ? ' selected' : ''}>Basic</option>` +
+    `<option value="thunder"${i ? '' : ' selected'}>Thunder</option>` +
+    `<option value="flame">Flame</option><option value="water">Water</option></select>` +
+    `<button class="btn-sm" type="submit">Set</button></form>`).join('') + `</div>`;
+const gs = golemsOf(golemPage);
+assert.equal(gs.length, 2);
+assert.deepEqual(gs.map(g => [g.slot, g.label, g.type]), [[0, 'Golem 1', 'thunder'], [1, 'Golem 2', 'basic']]);
+assert.deepEqual(gs[0].options.map(o => o.value), ['basic', 'thunder', 'flame', 'water']);
+assert.equal(gs[0].options[1].label, 'Thunder', 'option values are lowercase, labels are not');
+assert.deepEqual(golemsOf('<div class="ptree-page"></div>'), [], 'no picker for a non-Elementalist');
+
+// --- A live-retuned node. The site appends its "Tuned:" span to data-tip
+// UNESCAPED, so the span's own class quote closes the attribute early and the
+// span lands as sibling markup — the description must not keep the fragment.
+const tunedNode = `<svg class="connectors" width="900" height="400"></svg>` +
+  `<div class="node node-skill" style="left:120px;top:58px;width:140px;" data-tip="Hits harder. <span class="passive-tuned">Tuned: 0.2 / 0.4 / 0.6 (default 0.1 / 0.2 / 0.3)</span>">` +
+  `<div class="node-kind">Tier 1</div><div class="node-name">Cleave</div>` +
+  `<div class="node-buttons"><span class="node-rank">1/3</span></div></div>`;
+const tn = treeOf(tunedNode).nodes[0];
+assert.equal(tn.tuned, 'Tuned: 0.2 / 0.4 / 0.6 (default 0.1 / 0.2 / 0.3)');
+assert.equal(tn.desc, 'Hits harder.', 'the truncated attribute tail is not part of the description');
+assert.equal(treeOf(roNode).nodes[0].tuned, null, 'an untuned node carries no note');
+
+console.log('ok');
+process.exit(0); // importing server.mjs opens the bridge listener

@@ -134,11 +134,18 @@ function archBonus(cls, level, model) {
 
 // magnitude_at_rank (passive_tree.rs): a Specialization's 4th point only
 // unlocks its children, it never grows the node's own stat.
-function nodeMagnitude(node, rank) {
+export function nodeMagnitude(node, rank) {
   if (!node || !rank) return 0;
   const e = node.effect;
   if (!e || e.kind === 'none') return 0;
-  return e.r1 + e.per * (Math.min(rank, node.magnitudeCap) - 1);
+  const r = Math.min(rank, node.magnitudeCap);
+  // `ranks` is present only on a node the streamer has retuned live (see
+  // passive_overrides.rs; the export tool reads the published triplet off
+  // /wiki/passives). It wins over r1/per because the running game uses it, and
+  // it is an explicit per-rank list rather than a line: several live overrides
+  // are not linear at all, and one is not even monotonic.
+  if (e.ranks) return e.ranks[r - 1] ?? e.ranks[e.ranks.length - 1];
+  return e.r1 + e.per * (r - 1);
 }
 
 // The tree's own two layers for one allocation: `flat` (pooled FlatStat

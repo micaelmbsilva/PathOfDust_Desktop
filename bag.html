@@ -491,7 +491,7 @@
       </div>
       <div class="craft-pips" id="craftPips" title="Sort and filter the Item A / Item B pickers"></div>`;
     renderSections(inv.craft.actions);
-    // x5/x10 are mutually exclusive, like the site's batch-check boxes
+    // x5/x10 are mutually exclusive — the site uses a radio group for the same job
     document.querySelectorAll('.batchx').forEach(b => b.onchange = () => {
       if (b.checked) document.querySelectorAll('.batchx').forEach(o => { if (o !== b) o.checked = false; });
       cbSet('batch', b.checked ? +b.value : 0);

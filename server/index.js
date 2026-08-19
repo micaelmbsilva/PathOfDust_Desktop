@@ -778,7 +778,11 @@ function parseWiki(t) {
 }
 async function scrapeWiki() {
   try {
-    const out = parseWiki(await getPage('/wiki'));
+    // The wiki became a multi-page docs site on 2026-08-19: /wiki is now just an
+    // index of links and carries no class markup at all, so this scrape had been
+    // silently parsing zero classes and falling back to the static passives.json
+    // on every run. The trees live on their own page now.
+    const out = parseWiki(await getPage('/wiki/passives'));
     const n = Object.keys(out).length;
     // Counting classes alone is not enough: the 2026-08-17 redesign swapped the
     // bullet-list markup for node graphs, so every class still parsed — with

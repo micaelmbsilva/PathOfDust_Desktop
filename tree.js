@@ -266,8 +266,8 @@
       const kind = root || n.cls.includes('node-skill') ? (n.tier || '') : '';  // site hides the label on spec/mod
       return `<div class="node ${maxed ? 'maxed' : ''} ${specialized ? 'specialized' : ''} ${locked ? 'locked' : ''} ${invested ? 'invested' : ''} ${inactive ? 'inactive' : ''} ${root ? 'root' : ''}"
         style="left:${n.x * S}px;top:${(n.y - offY) * S}px;width:${n.w * S}px;height:${NODE_H}px;"
-        data-tip="${esc(n.desc)}">
-        <div class="nm">${esc(n.name)}</div>
+        data-tip="${esc(n.desc)}${n.tuned ? ` — ⚙ ${esc(n.tuned)} (retuned live; the description above is stale)` : ''}">
+        <div class="nm">${esc(n.name)}${n.tuned ? ' ⚙' : ''}</div>
         ${kind ? `<div class="tr">${esc(kind)}</div>` : ''}
         <div class="acts">${root ? `<span class="tr">${esc(n.desc)}</span>` : pips(n, i)}</div>
       </div>`;
