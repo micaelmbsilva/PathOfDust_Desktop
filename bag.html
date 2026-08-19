@@ -449,7 +449,7 @@
     // batch — the site treats them as separate radio groups.
     const ddRecipeHtml = (r) => !r ? '' : `
       <div class="acts" style="align-items:center;margin:4px 0 8px"${tip(r.tip)}>
-        <span class="muted">✨ Craft Divine Dust (${r.dustCost}d + ${r.sandCost}s → ${r.output}):</span>
+        <span class="muted" id="ddCost">✨ Craft Divine Dust (${r.dustCost}d + ${r.sandCost}s → ${r.output}):</span>
         ${[1, 10, 50].map(n => `<label class="hint"><input type="radio" name="ddtimes" class="ddx" value="${n}"${n === (cbGet('ddtimes') || 1) ? ' checked' : ''}> ×${n}</label>`).join('')}
         <button id="ddCraft"${r.affordable ? '' : ' disabled'}>Craft</button>
       </div>`;
@@ -493,7 +493,7 @@
       cbSet('batch', b.checked ? +b.value : 0);
       updateCosts();
     });
-    document.querySelectorAll('.ddx').forEach(b => b.onchange = () => cbSet('ddtimes', +b.value));
+    document.querySelectorAll('.ddx').forEach(b => b.onchange = () => { cbSet('ddtimes', +b.value); updateDD(); });
     const ddBtn = $('ddCraft');
     if (ddBtn) ddBtn.onclick = async () => {
       const times = +([...document.querySelectorAll('.ddx')].find(b => b.checked)?.value || 1);
@@ -507,7 +507,9 @@
     keep($('itemA'), prevA); keep($('itemB'), prevB);
 
     lastCraft = inv.craft;
+    lastDD = inv.craft.divineDustRecipe; lastDustN = numCur(inv.dust); lastSandN = numCur(inv.sand);
     updateCosts();
+    updateDD(); // reflect a stored ×10/×50 pick on first render
     $('itemA').onchange = () => {
       localStorage.setItem('craftItemA', $('itemA').value);
       const b = $('itemB');
@@ -800,8 +802,19 @@
   // for the selected item (base + 3*tier; veil extras; reforge 30*tier; polish
   // by quality). Token-based buttons (Regal/Krangle) keep the server label.
   let lastCraft = { options: [], actions: [] };
+  let lastDD = null, lastDustN = 0, lastSandN = 0; // Divine Dust recipe + numeric balances for its ×N redraw
   let pendChoices = null; // pending-card choices, indexed by data-veilpick
   const batchTimes = () => +([...document.querySelectorAll('.batchx')].find(b => b.checked)?.value || 1);
+  // Divine Dust's per-craft cost is fixed, so scaling by the selected ×N is
+  // exact (unlike polish/reforge, whose per-cast cost climbs mid-batch). Redraw
+  // the cost line and re-check affordability whenever the ×N radio changes.
+  function updateDD() {
+    const r = lastDD, span = document.getElementById('ddCost'); if (!r || !span) return;
+    const n = +([...document.querySelectorAll('.ddx')].find(b => b.checked)?.value || 1);
+    const d = r.dustCost * n, s = r.sandCost * n, o = r.output * n;
+    span.textContent = `✨ Craft Divine Dust (${d.toLocaleString()}d + ${s.toLocaleString()}s → ${o}):`;
+    const btn = $('ddCraft'); if (btn) btn.disabled = !(lastDustN >= d && lastSandN >= s);
+  }
   function updateCosts() {
     const byId = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
     const A = byId[$('itemA')?.value], B = byId[$('itemB')?.value];
