@@ -528,6 +528,7 @@
     if (hk) hk.onchange = () => cbSet('hideoutK', hk.checked);
 
     pipTargets = []; // fresh DOM each load — drop stale picker re-render closures
+    itemForCache.clear(); // lastBag/lastEquipped/lastCraft are all assigned by now
     dropdown($('itemA')); dropdown($('itemB'), () => $('itemA').value);
     renderPips();
 
@@ -544,15 +545,23 @@
   // An option id is the item id, which bag items carry directly. Equipped items
   // never print their item_id in the gear slot, so those match on the option
   // label's leading name ("Crude Blade (Weapon, T1, 1 mod)").
+  // Up to four linear scans per call, and the hover preview and renderPick call
+  // it per row / per render — memoized because it's pure over lastBag,
+  // lastEquipped and lastCraft, which only move in load(). itemForCache is
+  // cleared there; don't mutate those three anywhere else.
+  let itemForCache = new Map();
   const itemForOption = (id) => {
     if (!id) return null;
-    const inBag = lastBag.find(i => i.id === id);
-    if (inBag) return inBag;
-    const o = (lastCraft.options || []).find(x => x.id === id);
-    if (!o) return null;
-    const name = o.label.replace(/\s*\(.*$/, '').replace(/[🔒✦]/g, '').trim();
-    return lastEquipped.find(i => i.name === name)
-        || lastEquipped.find(i => name.startsWith(i.name)) || null;
+    if (itemForCache.has(id)) return itemForCache.get(id);
+    let v = lastBag.find(i => i.id === id) || null;
+    const o = v ? null : (lastCraft.options || []).find(x => x.id === id);
+    if (o) {
+      const name = o.label.replace(/\s*\(.*$/, '').replace(/[🔒✦]/g, '').trim();
+      v = lastEquipped.find(i => i.name === name)
+       || lastEquipped.find(i => name.startsWith(i.name)) || null;
+    }
+    itemForCache.set(id, v);
+    return v;
   };
 
   let previewEl = null;
