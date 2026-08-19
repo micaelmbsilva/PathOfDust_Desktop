@@ -6,13 +6,18 @@
 //
 // Run: node tools/passive-tree-export.mjs [path/to/PathofDust]
 //   -> writes server/public/passive-tree.json
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(process.argv[2] || join(here, '..', '..', 'PathofDust'));
-const src = readFileSync(join(root, 'src', 'passive_tree.rs'), 'utf8');
+// The source tree was reorganized under game/ in Aug '26; keep the old path as
+// a fallback for older checkouts.
+const srcPath = [join(root, 'game', 'src', 'passive_tree.rs'), join(root, 'src', 'passive_tree.rs')]
+  .find(existsSync);
+if (!srcPath) throw new Error('passive_tree.rs not found under ' + root);
+const src = readFileSync(srcPath, 'utf8');
 
 // Strip whole-line `//` comments only — descriptions are ordinary string
 // literals on the same line as their node, so a naive comment strip that
@@ -53,9 +58,16 @@ const str = (a) => { const m = a.match(/^"([\s\S]*)"$/); return m ? m[1] : null;
 // `1.0 / 3.0` is the one arithmetic literal in the table (Titan's Grip).
 const num = (a) => { const m = a.match(/^([\d.]+)\s*\/\s*([\d.]+)$/); return m ? +m[1] / +m[2] : +a; };
 
+// Aug '26 rewrite qualifies the enum paths: `PassiveEffect::FlatStat { stat:
+// PassiveStat::DamageReduction, .. }` where it used to be bare `FlatStat { stat:
+// DamageReduction }`. Strip an optional `Path::` prefix off both the variant and
+// the stat/input/output values so the output stays bare (the advisor's TREE_STAT
+// keys on bare `DamageReduction`).
+const bare = (a) => a.replace(/^\w+::/, '');
 function parseEffect(expr) {
-  if (/^NotYetImplemented$/.test(expr.trim())) return { kind: 'none' };
-  const m = expr.match(/^(FlatStat|OverflowConversion|Special)\s*\{([\s\S]*)\}$/);
+  const e0 = expr.trim();
+  if (/^(?:\w+::)?NotYetImplemented$/.test(e0)) return { kind: 'none' };
+  const m = e0.match(/^(?:\w+::)?(FlatStat|OverflowConversion|Special)\s*\{([\s\S]*)\}$/);
   if (!m) throw new Error('unparsed effect: ' + expr.slice(0, 80));
   const fields = {};
   for (const f of splitArgs(m[2])) {
@@ -63,8 +75,8 @@ function parseEffect(expr) {
     fields[k.trim()] = v.join(':').trim();
   }
   const e = { kind: m[1][0].toLowerCase() + m[1].slice(1), r1: num(fields.at_rank_1), per: num(fields.per_additional_rank) };
-  if (fields.stat) e.stat = fields.stat;
-  if (fields.input) { e.input = fields.input; e.output = fields.output; }
+  if (fields.stat) e.stat = bare(fields.stat);
+  if (fields.input) { e.input = bare(fields.input); e.output = bare(fields.output); }
   return e;
 }
 

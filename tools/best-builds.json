@@ -2,7 +2,7 @@
  "level": 119,
  "tier": 119,
  "points": 30,
- "ruleset": "Source-derived constants from PathofDust (Rust). Per-tier affix values are the code defaults from affix_def() (src/adventure/affix.rs:184-240); the live game server may override them via a gitignored adventure-item-balance.toml — the advisor cross-checks api/affix-rates and prefers empirical values when they disagree by >20%. Ruleset modeled: max 4 crafted mods per item + 1 Sacred, no unique affixes/shards, no krangle/reforge-crit/recombine-crit extras. Passive-tree magnitudes live in passive-tree.json (generated from src/passive_tree.rs by tools/passive-tree-export.mjs).",
+ "ruleset": "Source-derived constants from PathofDust (Rust). Per-tier affix values are the code defaults from affix_def() (src/adventure/affix.rs:184-240); the live game server may override them via a gitignored adventure-item-balance.toml — the advisor cross-checks api/affix-rates and prefers empirical values when they disagree by >20%. Ruleset modeled: max 4 crafted mods per item + 1 Sacred, no unique affixes/shards, no krangle/reforge-crit/recombine-crit extras. Passive-tree magnitudes live in passive-tree.json (generated from game/src/passive_tree.rs by tools/passive-tree-export.mjs).",
  "results": {
   "damage": [
    {
@@ -313,6 +313,67 @@
       "dmg dealt",
       "crit dmg dealt",
       "dmg dealt"
+     ]
+    },
+    "sacred": "lightning damage"
+   },
+   {
+    "cls": "Elementalist",
+    "dps": 165526826.18788522,
+    "hps": 0,
+    "ehp": 2671.3199999999997,
+    "hp": 2671.3199999999997,
+    "inc": 45.57104999999999,
+    "critChance": 4.334719999999998,
+    "critMult": 98.66869999999999,
+    "eff": {
+     "dr": 0,
+     "block": 0,
+     "evasion": 0,
+     "intervene": 0
+    },
+    "taken": 1,
+    "healPower": 0,
+    "intervalMs": 354.01850336710936,
+    "splash": 1.935,
+    "linger": 0,
+    "tree": {
+     "Electrical Overload": 3,
+     "Shocking Focus": 4,
+     "Elemental Focus": 1,
+     "Blizzard": 3,
+     "Chilling Focus": 4
+    },
+    "gear": {
+     "weapon": [
+      "dmg dealt",
+      "crit chance",
+      "crit dmg dealt",
+      "dmg dealt"
+     ],
+     "helm": [
+      "crit dmg dealt",
+      "lightning damage",
+      "crit dmg dealt",
+      "lightning damage"
+     ],
+     "body": [
+      "crit dmg dealt",
+      "dmg dealt",
+      "crit dmg dealt",
+      "dmg dealt"
+     ],
+     "gloves": [
+      "crit chance",
+      "crit dmg dealt",
+      "dmg dealt",
+      "crit dmg dealt"
+     ],
+     "boots": [
+      "dmg dealt",
+      "crit dmg dealt",
+      "dmg dealt",
+      "crit dmg dealt"
      ]
     },
     "sacred": "lightning damage"
@@ -1255,6 +1316,61 @@
      ]
     },
     "sacred": "max hp %"
+   },
+   {
+    "cls": "Elementalist",
+    "dps": 204955.10506151288,
+    "hps": 0,
+    "ehp": 11895490.6432512,
+    "hp": 464667.603252,
+    "inc": 6.946319999999998,
+    "critChance": 0.05,
+    "critMult": 2,
+    "eff": {
+     "dr": 0.75,
+     "block": 0.75,
+     "evasion": 0.75,
+     "intervene": 0
+    },
+    "taken": 0.0390625,
+    "healPower": 0,
+    "intervalMs": 354.01850336710936,
+    "splash": 1.935,
+    "linger": 0,
+    "tree": {},
+    "gear": {
+     "weapon": [
+      "max hp %",
+      "dmg taken reduction",
+      "evasion",
+      "max hp %"
+     ],
+     "helm": [
+      "block chance",
+      "max hp %",
+      "max hp %",
+      "max hp flat"
+     ],
+     "body": [
+      "max hp %",
+      "max hp flat",
+      "max hp flat",
+      "max hp %"
+     ],
+     "gloves": [
+      "max hp %",
+      "max hp flat",
+      "max hp %",
+      "max hp flat"
+     ],
+     "boots": [
+      "max hp %",
+      "max hp flat",
+      "max hp %",
+      "max hp flat"
+     ]
+    },
+    "sacred": "max hp %"
    }
   ],
   "healing": [
@@ -1663,6 +1779,36 @@
     "healPower": 0,
     "intervalMs": 550.6954496821702,
     "splash": 0,
+    "linger": 0,
+    "tree": {},
+    "gear": {
+     "weapon": [],
+     "helm": [],
+     "body": [],
+     "gloves": [],
+     "boots": []
+    },
+    "sacred": "cold damage"
+   },
+   {
+    "cls": "Elementalist",
+    "dps": 125568.66242384595,
+    "hps": 0,
+    "ehp": 2671.3199999999997,
+    "hp": 2671.3199999999997,
+    "inc": 3.6949499999999986,
+    "critChance": 0.05,
+    "critMult": 2,
+    "eff": {
+     "dr": 0,
+     "block": 0,
+     "evasion": 0,
+     "intervene": 0
+    },
+    "taken": 1,
+    "healPower": 0,
+    "intervalMs": 354.01850336710936,
+    "splash": 1.935,
     "linger": 0,
     "tree": {},
     "gear": {
@@ -2288,6 +2434,67 @@
      ],
      "boots": [
       "max hp %",
+      "crit dmg dealt",
+      "dmg dealt",
+      "crit dmg dealt"
+     ]
+    },
+    "sacred": "lightning damage"
+   },
+   {
+    "cls": "Elementalist",
+    "dps": 84207721.26058565,
+    "hps": 0,
+    "ehp": 1079114.1206015996,
+    "hp": 42152.89533599999,
+    "inc": 35.274269999999994,
+    "critChance": 4.334719999999998,
+    "critMult": 77.32009999999998,
+    "eff": {
+     "dr": 0.75,
+     "block": 0.75,
+     "evasion": 0.75,
+     "intervene": 0
+    },
+    "taken": 0.0390625,
+    "healPower": 0,
+    "intervalMs": 354.01850336710936,
+    "splash": 1.935,
+    "linger": 0,
+    "tree": {
+     "Electrical Overload": 3,
+     "Shocking Focus": 4,
+     "Elemental Focus": 1,
+     "Blizzard": 3,
+     "Chilling Focus": 4
+    },
+    "gear": {
+     "weapon": [
+      "dmg taken reduction",
+      "evasion",
+      "max hp %",
+      "crit chance"
+     ],
+     "helm": [
+      "crit dmg dealt",
+      "dmg dealt",
+      "crit dmg dealt",
+      "block chance"
+     ],
+     "body": [
+      "crit dmg dealt",
+      "dmg dealt",
+      "max hp %",
+      "crit dmg dealt"
+     ],
+     "gloves": [
+      "dmg dealt",
+      "crit dmg dealt",
+      "dmg dealt",
+      "max hp %"
+     ],
+     "boots": [
+      "crit chance",
       "crit dmg dealt",
       "dmg dealt",
       "crit dmg dealt"

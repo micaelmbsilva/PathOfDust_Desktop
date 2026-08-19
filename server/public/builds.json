@@ -649,6 +649,60 @@
      ]
     }
    ]
+  },
+  "Elementalist": {
+   "builds": [
+    {
+     "name": "Golem Vanguard",
+     "tagline": "A summoned wall that eats the party's damage; elemental procs scale with level",
+     "why": "Ranged splash caster with NO baseline healing — all of it is earned in the tree. Elemental Focus adds 5% additive lightning/cold/fire damage per character level, and Scorching Flames stacks another 10%/level of fire on top. Golem Master summons up to 3 golems; Thunder Golem absorbs all externally-sourced party damage until it dies, then redistributes 50% of what it ate as a short party DoT. Healing Flames is the only self-sustain (up to 10% HP/sec). Almost all of this is per-fight simulation the closed-form advisor cannot score, so its rank here understates the class — treat the golem and proc kit as upside.",
+     "order": [
+      {
+       "n": "Elemental Focus",
+       "r": 3
+      },
+      {
+       "n": "Scorching Flames",
+       "r": 4
+      },
+      {
+       "n": "Golem Master",
+       "r": 3
+      },
+      {
+       "n": "Thunder Golem",
+       "r": 4
+      },
+      {
+       "n": "Righteous Fire",
+       "r": 3
+      },
+      {
+       "n": "Healing Flames",
+       "r": 4
+      }
+     ],
+     "rolls": [
+      {
+       "s": "Splash",
+       "top": true,
+       "why": "Righteous Fire and golem attacks hit more targets with splash; it is the root archetype bonus too"
+      },
+      {
+       "s": "Increased Dmg Dealt",
+       "why": "Multiplies every elemental hit"
+      },
+      {
+       "s": "Lightning Damage",
+       "why": "Weapon/Helm elemental roll — flat increased damage plus the debuff proc Shocking Focus applies more often"
+      },
+      {
+       "s": "Max HP",
+       "why": "Righteous Fire deals 10% of max HP and Healing Flames regens a % of it — HP is offense and sustain here"
+      }
+     ]
+    }
+   ]
   }
  }
 }

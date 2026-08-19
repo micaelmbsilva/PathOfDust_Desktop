@@ -1,6 +1,6 @@
 {
   "note": "Source-derived constants from PathofDust (Rust). Per-tier affix values are the code defaults from affix_def() (src/adventure/affix.rs:184-240); the live game server may override them via a gitignored adventure-item-balance.toml — the advisor cross-checks api/affix-rates and prefers empirical values when they disagree by >20%. Ruleset modeled: max 4 crafted mods per item + 1 Sacred, no unique affixes/shards, no krangle/reforge-crit/recombine-crit extras. Passive-tree magnitudes live in passive-tree.json (generated from game/src/passive_tree.rs by tools/passive-tree-export.mjs).",
-  "audited": "2026-08-18 against PathofDust game/src/{adventure/character.rs,adventure/combat.rs,adventure/affix.rs,adventure/item.rs,passive_tree.rs} at commit 14751fd — re-audit vs 07221d7 found only pub(crate)->pub visibility changes and one new real-boss-only resolve_hit param (boss_pierce_pct, 0.0 for players); every modeled formula and constant unchanged.",
+  "audited": "2026-08-19 against PathofDust game/src/{adventure/character.rs,adventure/combat.rs,adventure/affix.rs,adventure/item.rs,passive_tree.rs} at commit 9c3bafa — re-audit vs 14751fd: added the new 12th archetype Elementalist (ranged, root splash 0.15, no baseline heal; passive-tree.json regenerated, +39 nodes, mostly unscored specials). All existing archetypes, modeled formulas and constants unchanged; combat.rs growth is Elementalist/Thunder-Golem sim (unmodeled). Effect exprs are now enum-qualified (PassiveEffect::/PassiveStat::) — export tool updated to strip the prefix.",
   "archetypeLevelMult": 0.1,
   "archetypes": {
     "Commoner": {
@@ -62,6 +62,11 @@
       "role": "melee",
       "leech": 0.001,
       "src": "character.rs:145"
+    },
+    "Elementalist": {
+      "role": "ranged",
+      "splash": 0.15,
+      "src": "character.rs (2026-08-19) — ranged; root splash 0.15×(1+0.1×level) like Ranger, no baseline heal_power (healing earned through the Healing Flames tree). Most of its kit (Righteous Fire, elemental procs, golem summons) is per-fight sim, unscored here."
     }
   },
   "affixes": [

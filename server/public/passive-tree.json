@@ -4,8 +4,8 @@
  "pointsForLevel": "1 + floor(level / 4)",
  "overflowConversionCapPerRank": 0.1,
  "counts": {
-  "nodes": 432,
-  "withEffect": 431
+  "nodes": 471,
+  "withEffect": 468
  },
  "classes": {
   "Warrior": [
@@ -6578,6 +6578,591 @@
      "kind": "special",
      "r1": 0.33,
      "per": 0.335
+    }
+   }
+  ],
+  "Elementalist": [
+   {
+    "key": "righteousfire",
+    "name": "Righteous Fire",
+    "description": "Deals damage equal to 10% of your maximum health to a number of enemies based on splash, at rank 1 - +10% per additional rank (30% at 3/3). While active, you take 10% of your health as damage per second at rank 1 - +10% per additional rank (30% at 3/3).",
+    "parent": null,
+    "tier": "skill",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.1,
+     "per": 0.1
+    }
+   },
+   {
+    "key": "elementalfocus",
+    "name": "Elemental Focus",
+    "description": "Gain 5% additive elemental damage (lightning/cold/fire) × your character level, at rank 1 - +5% per additional rank (15% at 3/3). Applies in full to each element separately.",
+    "parent": null,
+    "tier": "skill",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.05,
+     "per": 0.05
+    }
+   },
+   {
+    "key": "golemmaster",
+    "name": "Golem Master",
+    "description": "Grants the ability to summon 1 golem at rank 1 - +1 per additional rank (3 golems at 3/3). Golems have 33% of your stats; you deal 33% less damage per summoned golem, additive (1% of normal damage at 3 golems).",
+    "parent": null,
+    "tier": "skill",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 1,
+     "per": 1
+    }
+   },
+   {
+    "key": "healingflames",
+    "name": "Healing Flames",
+    "description": "Regenerate 3% of your health per second at rank 1, 6% at rank 2, 10% at rank 3 (irregular scaling - see this file's own note above).",
+    "parent": "righteousfire",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.03,
+     "per": 0.035
+    }
+   },
+   {
+    "key": "cleansingflames",
+    "name": "Cleansing Flames",
+    "description": "33% chance every 4 seconds to remove all debuffs from yourself and nearby allies at rank 1, 66% at rank 2, 100% at rank 3 - target count based on splash.",
+    "parent": "righteousfire",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "scorchingflames",
+    "name": "Scorching Flames",
+    "description": "Gain 10% additive fire damage × your character level, at rank 1 - +10% per additional rank (30% at 3/3).",
+    "parent": "righteousfire",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.1,
+     "per": 0.1
+    }
+   },
+   {
+    "key": "shockingfocus",
+    "name": "Shocking Focus",
+    "description": "You apply lightning damage debuffs 33% more frequently at rank 1, 66% at rank 2, 100% at rank 3.",
+    "parent": "elementalfocus",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "chillingfocus",
+    "name": "Chilling Focus",
+    "description": "You apply cold damage debuffs 33% more frequently at rank 1, 66% at rank 2, 100% at rank 3.",
+    "parent": "elementalfocus",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "scorchingfocus",
+    "name": "Scorching Focus",
+    "description": "You apply fire damage debuffs 33% more frequently at rank 1, 66% at rank 2, 100% at rank 3.",
+    "parent": "elementalfocus",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "thundergolem",
+    "name": "Thunder Golem",
+    "description": "Absorbs all externally-sourced damage the party would take until it dies (cannot be shielded or healed by any means) - reforms 4 seconds after dying at rank 1, 3 seconds at rank 2, 2 seconds at rank 3, then rejoins combat.",
+    "parent": "golemmaster",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "special",
+     "r1": 4,
+     "per": -1
+    }
+   },
+   {
+    "key": "flamegolem",
+    "name": "Flame Golem",
+    "description": "Base golem behavior - this golem type's real identity is its 3 modifiers below.",
+    "parent": "golemmaster",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "none"
+    }
+   },
+   {
+    "key": "watergolem",
+    "name": "Water Golem",
+    "description": "Base golem behavior - this golem type's real identity is its 3 modifiers below.",
+    "parent": "golemmaster",
+    "tier": "spec",
+    "max": 4,
+    "magnitudeCap": 3,
+    "unlockAt": null,
+    "effect": {
+     "kind": "none"
+    }
+   },
+   {
+    "key": "fanningflames",
+    "name": "Fanning Flames",
+    "description": "Share 33% of your Healing Flames regeneration with nearby allies at rank 1, 66% at rank 2, 100% at rank 3 - target count based on splash.",
+    "parent": "healingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "risingphoenix",
+    "name": "Rising Phoenix",
+    "description": "When nearby allies die, up to 1 of them revives and rejoins the battle 1 second after death at rank 1 - +1 per additional rank (3 at 3/3, a per-combat limit). Only applies to allies that had survived at least 3 seconds.",
+    "parent": "healingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 1,
+     "per": 1
+    }
+   },
+   {
+    "key": "shieldingflames",
+    "name": "Shielding Flames",
+    "description": "33% of your Healing Flames regeneration is also added as a shield on you at rank 1, 66% at rank 2, 100% at rank 3 - in addition to the healing.",
+    "parent": "healingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "enshroudedfire",
+    "name": "Enshrouded Fire",
+    "description": "Grants a number of allies (based on splash) 3% multiplicative evasion at rank 1 - +3% per additional rank (9% at 3/3).",
+    "parent": "cleansingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.03,
+     "per": 0.03
+    }
+   },
+   {
+    "key": "guardianfire",
+    "name": "Guardian Fire",
+    "description": "Grants a number of allies (based on splash) 3% multiplicative reduced damage taken at rank 1 - +3% per additional rank (9% at 3/3).",
+    "parent": "cleansingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.03,
+     "per": 0.03
+    }
+   },
+   {
+    "key": "shieldingfire",
+    "name": "Shielding Fire",
+    "description": "Grants a number of allies (based on splash) improved block: blocked attacks reduce damage by 55% at rank 1, 60% at rank 2, 65% at rank 3, instead of the standard 50%.",
+    "parent": "cleansingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.55,
+     "per": 0.05
+    }
+   },
+   {
+    "key": "relentlessflames",
+    "name": "Relentless Flames",
+    "description": "A number of nearby enemies (based on splash) take 1% increased damage per second for every second they remain in your presence at rank 1 - +1% per additional rank (3% at 3/3), stacking.",
+    "parent": "scorchingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.01,
+     "per": 0.01
+    }
+   },
+   {
+    "key": "cauterizingflames",
+    "name": "Cauterizing Flames",
+    "description": "A number of nearby enemies (based on splash) receive 5% multiplicative reduced healing at rank 1 - +5% per additional rank (15% at 3/3).",
+    "parent": "scorchingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.05,
+     "per": 0.05
+    }
+   },
+   {
+    "key": "ashestoashes",
+    "name": "Ashes to Ashes, Dust to Dust",
+    "description": "Any enemy in range, including bosses, instantly bursts into flame and dies when its health drops below 100% of your health at rank 1 - +100% per additional rank (300% at 3/3).",
+    "parent": "scorchingflames",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 1,
+     "per": 1
+    }
+   },
+   {
+    "key": "overshock",
+    "name": "Overshock",
+    "description": "15% more lightning damage at rank 1 - +15% per additional rank (45% at 3/3), scaling from lightning damage on your gear.",
+    "parent": "shockingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.15,
+     "per": 0.15
+    }
+   },
+   {
+    "key": "electricaloverload",
+    "name": "Electrical Overload",
+    "description": "Gain 10% more critical strike damage at rank 1 - +10% per additional rank (30% at 3/3).",
+    "parent": "shockingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "flatStat",
+     "r1": 0.1,
+     "per": 0.1,
+     "stat": "CritMultiplier"
+    }
+   },
+   {
+    "key": "lightningaegis",
+    "name": "Lightning Aegis",
+    "description": "Gain 1% of your health as shield every time you apply a lightning debuff at rank 1 - +1% per additional rank (3% at 3/3).",
+    "parent": "shockingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.01,
+     "per": 0.01
+    }
+   },
+   {
+    "key": "polarflux",
+    "name": "Polar Flux",
+    "description": "15% more cold damage at rank 1 - +15% per additional rank (45% at 3/3), scaling from cold damage on your gear.",
+    "parent": "chillingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.15,
+     "per": 0.15
+    }
+   },
+   {
+    "key": "hoarfrost",
+    "name": "Blizzard",
+    "description": "Gain 10% more critical strike chance at rank 1 - +10% per additional rank (30% at 3/3).",
+    "parent": "chillingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "flatStat",
+     "r1": 0.1,
+     "per": 0.1,
+     "stat": "CritChance"
+    }
+   },
+   {
+    "key": "chillingaegis",
+    "name": "Chilling Aegis",
+    "description": "Gain 1% of your health as shield every time you apply a cold debuff at rank 1 - +1% per additional rank (3% at 3/3).",
+    "parent": "chillingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.01,
+     "per": 0.01
+    }
+   },
+   {
+    "key": "incinerate",
+    "name": "Incinerate",
+    "description": "15% more fire damage at rank 1 - +15% per additional rank (45% at 3/3), scaling from fire damage on your gear.",
+    "parent": "scorchingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.15,
+     "per": 0.15
+    }
+   },
+   {
+    "key": "pyroclasm",
+    "name": "Conflagration",
+    "description": "Gain 10% multiplicative increased damage at rank 1 - +10% per additional rank (30% at 3/3).",
+    "parent": "scorchingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.1,
+     "per": 0.1
+    }
+   },
+   {
+    "key": "scorchingaegis",
+    "name": "Scorching Aegis",
+    "description": "Gain 1% of your health as shield every time you apply a fire debuff at rank 1 - +1% per additional rank (3% at 3/3).",
+    "parent": "scorchingfocus",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.01,
+     "per": 0.01
+    }
+   },
+   {
+    "key": "gigantify",
+    "name": "Gigantify",
+    "description": "Thunder Golems get 100% more contribution from your health pool at rank 1 - +100% per additional rank (300% at 3/3) - base 33% of your health becomes 66/99/132%.",
+    "parent": "thundergolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 1,
+     "per": 1
+    }
+   },
+   {
+    "key": "growing",
+    "name": "Growing",
+    "description": "Thunder Golems gain 33% more maximum health each time they reform at rank 1, 66% at rank 2, 100% at rank 3 - stacking within a combat.",
+    "parent": "thundergolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "terrifying",
+    "name": "Terrifying",
+    "description": "When a Thunder Golem dies, it explodes dealing 33% of its health as damage to enemies at rank 1, 66% at rank 2, 100% at rank 3.",
+    "parent": "thundergolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "volcanicash",
+    "name": "Volcanic Ash",
+    "description": "Flame Golems inherit 33% of your multiplicative increased fire damage at rank 1, 66% at rank 2, 100% at rank 3.",
+    "parent": "flamegolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.33,
+     "per": 0.335
+    }
+   },
+   {
+    "key": "blazing",
+    "name": "Blazing",
+    "description": "Flame Golems gain 6% multiplicative attack speed at rank 1, 9% at rank 2, 18% at rank 3 (irregular scaling - see this file's own note above).",
+    "parent": "flamegolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.06,
+     "per": 0.06
+    }
+   },
+   {
+    "key": "surging",
+    "name": "Surging",
+    "description": "Flame Golems deal 10% multiplicative damage at rank 1 - +10% per additional rank (30% at 3/3).",
+    "parent": "flamegolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.1,
+     "per": 0.1
+    }
+   },
+   {
+    "key": "replenishing",
+    "name": "Replenishing",
+    "description": "Water Golems convert all damage they deal into healing for the party at a 100% rate at rank 1 - +100% per additional rank (300% at 3/3).",
+    "parent": "watergolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 1,
+     "per": 1
+    }
+   },
+   {
+    "key": "singing",
+    "name": "Singing",
+    "description": "All allies gain 10% more effect from shields and heals applied to them at rank 1 - +10% per additional rank (30% at 3/3).",
+    "parent": "watergolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 0.1,
+     "per": 0.1
+    }
+   },
+   {
+    "key": "shattering",
+    "name": "Shattering",
+    "description": "When an enemy dies in the Water Golem's presence, it explodes, sending icicles at (splash + 1) nearby enemies at rank 1 - +1 per additional rank (splash + 3 at 3/3), each dealing damage equal to 1% of the dead enemy's health.",
+    "parent": "watergolem",
+    "tier": "modifier",
+    "max": 3,
+    "magnitudeCap": 3,
+    "unlockAt": 4,
+    "effect": {
+     "kind": "special",
+     "r1": 1,
+     "per": 1
     }
    }
   ]
