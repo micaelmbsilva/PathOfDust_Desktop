@@ -198,7 +198,7 @@
       <div class="who">
         <img src="${esc(c.sprite)}" alt="" onerror="this.style.visibility='hidden'">
         <div style="flex:1">
-          <h1>${esc(c.name)} <span class="chip">${esc(c.archetype)}</span></h1>
+          <h1>${esc(c.name)} <span class="chip">${esc(c.archetype)}</span><span class="chip" id="subChip" hidden></span></h1>
           <div class="stats" style="margin:8px 0">${profile.map(statCard).join('')}</div>
           <div class="muted" style="font-size:0.8rem">${esc(c.xp.label)}</div>
           <div class="xpbar"><div class="xpfill" style="width:${c.xp.pct}%"></div></div>
@@ -231,7 +231,13 @@
     $('legend').innerHTML = PodTree.legend;
     PodTree.render($('stage'), p);          // no onAllocate = read-only
     if (p.secondary && (p.secondary.nodes || []).length) {
-      $('secBar').innerHTML = '<span class="chip">🧠 2nd Class (Split Personality)</span>';
+      // The 2nd class name is only known here (root node of the secondary
+      // tree), so the sheet header's subclass chip is filled in late.
+      const root = p.secondary.nodes.find(n => (n.cls || '').startsWith('node-root')) || p.secondary.nodes[0];
+      const sub = root.name ? root.name[0] + root.name.slice(1).toLowerCase() : '';
+      $('secBar').innerHTML = `<span class="chip">🧠 ${esc(sub || '2nd Class')} (Split Personality)</span>`;
+      const chip = $('subChip');
+      if (chip && sub) { chip.textContent = `🧠 ${sub}`; chip.hidden = false; chip.title = '2nd class (Split Personality)'; }
       PodTree.render($('secStage'), p.secondary);
     } else {
       $('secBar').innerHTML = '';
