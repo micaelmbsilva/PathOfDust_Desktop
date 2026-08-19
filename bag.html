@@ -81,21 +81,20 @@
   .isel-btn { width: 100%; text-align: left; padding: 6px; font-size: 0.85rem;
     background: #1c1830; border: 1px solid rgba(160,140,255,0.3); border-radius: 6px; }
   /* narrower than the form so the hover preview has room beside it */
-  /* Outer container = one popup holding two cards: the option list (left) and
-     the sort/filter pip panel (right). */
   .isel-list { display: none; position: absolute; z-index: 40; left: 0; top: 100%; margin-top: 2px;
-    width: min(100%, 520px); gap: 6px; background: #17132a; border: 1px solid rgba(160,140,255,0.35);
-    border-radius: 8px; padding: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.55); }
-  .isel.open .isel-list { display: flex; }
-  .isel-opts { flex: 1 1 auto; min-width: 0; max-height: 280px; overflow-y: auto;
-    border: 1px solid rgba(160,140,255,0.18); border-radius: 6px; padding: 3px; }
+    width: min(100%, 420px); max-height: 280px; overflow-y: auto; background: #17132a;
+    border: 1px solid rgba(160,140,255,0.35); border-radius: 8px; padding: 3px; box-shadow: 0 6px 18px rgba(0,0,0,0.55); }
+  .isel.open .isel-list { display: block; }
   .isel-opt { padding: 4px 7px; border-radius: 5px; font-size: 0.82rem; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .isel-opt:hover { background: rgba(120,90,255,0.28); }
-  /* sort/filter pip card — itemA/itemB pickers only, its own card on the right */
-  .isel-tools { flex: 0 0 auto; align-self: flex-start; display: flex; flex-direction: column; gap: 6px;
-    background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 6px; padding: 6px; }
-  .pipgrp { display: flex; flex-wrap: wrap; gap: 3px; }
+  /* Craft form + its sort/filter pip card sit side by side. */
+  .craft { display: flex; align-items: flex-start; gap: 14px; }
+  .craft-main { flex: 1 1 auto; min-width: 0; }
+  .craft-pips { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px;
+    background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 10px; }
+  .pip-h { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: #b0a2d9; margin-bottom: 2px; }
+  .pipgrp { display: flex; flex-wrap: wrap; gap: 4px; max-width: 190px; }
   .pip { font-size: 0.68rem; padding: 2px 6px; border-radius: 999px; line-height: 1.2; white-space: nowrap;
     border: 1px solid rgba(160,140,255,0.3); background: #1c1830; color: #b0a2d9; cursor: pointer; }
   .pip:hover { background: rgba(120,90,255,0.28); color: #eae6f5; }
@@ -443,6 +442,7 @@
       return out + (group ? '</optgroup>' : '');
     };
     $('craft').innerHTML = `
+      <div class="craft-main">
       <label>Item A <select id="itemA">${opts(inv.craft.options)}</select></label>
       <label>Item B (Recombine) <select id="itemB">${opts(inv.craft.options, '<option value="">None</option>')}</select></label>
       <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"${cbGet('veil') ? ' checked' : ''}> Veil This Craft (+500 dust; Recombine also +500 per combined modifier)</label>
@@ -453,7 +453,9 @@
         <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"${cbGet('batch') === 10 ? ' checked' : ''}> ×10</label>
         <label class="hint" title="Run Polishing/Reforge 50 times in one go — the site's cap. It stops early if you run out of sand/dust and reports how many landed"><input type="checkbox" class="batchx" value="50"${cbGet('batch') === 50 ? ' checked' : ''}> ×50</label>
       </div>
-      <div id="craftSections"></div>`;
+      <div id="craftSections"></div>
+      </div>
+      <div class="craft-pips" id="craftPips" title="Sort and filter the Item A / Item B pickers"></div>`;
     renderSections(inv.craft.actions);
     // x5/x10 are mutually exclusive, like the site's batch-check boxes
     document.querySelectorAll('.batchx').forEach(b => b.onchange = () => {
@@ -479,7 +481,9 @@
     const hk = $('hideoutK');
     if (hk) hk.onchange = () => cbSet('hideoutK', hk.checked);
 
+    pipTargets = []; // fresh DOM each load — drop stale picker re-render closures
     dropdown($('itemA')); dropdown($('itemB'), () => $('itemA').value);
+    renderPips();
 
     // While a choice is pending the site rejects every craft — lock the form so
     // "nothing happened" clicks can't pile up, and point at the pending card.
@@ -531,57 +535,68 @@
   // Slot parsed from an option label like "Crude Blade (Weapon, T3, 2 mods)".
   const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
   const slotFromLabel = (l) => ((l || '').match(/\(([^,)]+)/) || [])[1]?.trim().toLowerCase() || '';
+  const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
+  const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'], ['plain', '◦', 'Plain (not sacred/perfect)']];
+  // sacred (from the resolved item) / perfect (item or craft-option meta) / plain
+  const rarityOf = (o, m) => { const it = itemForOption(o.value);
+    if (it && (it.sacred || it.quality === 'Sacred')) return 'sacred';
+    if ((it && (it.quality || '').includes('Perfect')) || m[o.value]?.perfect) return 'perfect';
+    return 'plain'; };
+
+  // Shared sort/filter state driving BOTH item pickers, edited from the pip card
+  // beside the craft form. Session-scoped (persists across reloads like the
+  // craft selection does). pipTargets holds each live picker's re-render fn.
+  const pipState = { sort: '', dir: 1, slots: new Set(), quals: new Set() }; // sort '' = grouped order; empty sets = all
+  let pipTargets = [];
+  function renderPips() {
+    const el = document.getElementById('craftPips'); if (!el) return;
+    const pip = (on, attr, txt, ttl) => `<button type="button" class="pip${on ? ' on' : ''}" ${attr} title="${esc(ttl || '')}">${txt}</button>`;
+    el.innerHTML = '<div class="pip-h">Sort · Filter</div>' +
+      '<span class="pipgrp">' + SORTS.map(([k, lbl]) =>
+        pip(pipState.sort === k, `data-sort="${k}"`, lbl + (pipState.sort === k ? (pipState.dir > 0 ? ' ▼' : ' ▲') : ''))).join('') + '</span>' +
+      '<span class="pipgrp">' + QUALS.map(([k, em, t]) =>
+        pip(pipState.quals.has(k), `data-qual="${k}"`, em, t)).join('') + '</span>' +
+      '<span class="pipgrp">' + SLOTS.map(s =>
+        pip(pipState.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s))).join('') + '</span>';
+    el.onclick = (e) => {
+      const sb = e.target.closest('[data-sort]'), fb = e.target.closest('[data-slot]'), qb = e.target.closest('[data-qual]');
+      if (sb) { const k = sb.dataset.sort; if (pipState.sort === k) pipState.dir = -pipState.dir; else { pipState.sort = k; pipState.dir = 1; } }
+      else if (fb) { const s = fb.dataset.slot; pipState.slots.has(s) ? pipState.slots.delete(s) : pipState.slots.add(s); }
+      else if (qb) { const q = qb.dataset.qual; pipState.quals.has(q) ? pipState.quals.delete(q) : pipState.quals.add(q); }
+      else return;
+      renderPips(); pipTargets.forEach(fn => fn());
+    };
+  }
 
   // exclude: optional () => a value to hide from this list (itemB hides itemA).
   function dropdown(sel, exclude) {
     const wrap = document.createElement('div');
     wrap.className = 'isel';
-    wrap.innerHTML = '<button type="button" class="isel-btn"></button>' +
-      '<div class="isel-list"><div class="isel-opts"></div><div class="isel-tools"></div></div>';
+    wrap.innerHTML = '<button type="button" class="isel-btn"></button><div class="isel-list"></div>';
     sel.after(wrap);
     sel.style.display = 'none';
-    const btn = wrap.querySelector('.isel-btn'), list = wrap.querySelector('.isel-list');
-    const tools = wrap.querySelector('.isel-tools'), opts = wrap.querySelector('.isel-opts');
+    const btn = wrap.querySelector('.isel-btn'), list = wrap.querySelector('.isel-list'), opts = list;
     const sync = () => { btn.textContent = (sel.selectedOptions[0] || {}).textContent || 'None'; };
-    const state = { sort: '', dir: 1, slots: new Set(), quals: new Set() }; // sort '' = grouped order; empty sets = all
-
-    const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
-    const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'], ['plain', '◦', 'Plain (not sacred/perfect)']];
-    function renderTools() {
-      const pip = (on, attr, txt, title) => `<button type="button" class="pip${on ? ' on' : ''}" ${attr} title="${esc(title || '')}">${txt}</button>`;
-      tools.innerHTML =
-        '<span class="pipgrp">' + SORTS.map(([k, lbl]) =>
-          pip(state.sort === k, `data-sort="${k}"`, lbl + (state.sort === k ? (state.dir > 0 ? ' ▼' : ' ▲') : ''))).join('') + '</span>' +
-        '<span class="pipgrp">' + QUALS.map(([k, em, t]) =>
-          pip(state.quals.has(k), `data-qual="${k}"`, em, t)).join('') + '</span>' +
-        '<span class="pipgrp">' + SLOTS.map(s =>
-          pip(state.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s))).join('') + '</span>';
-    }
-    // sacred (from the resolved item) / perfect (item or craft-option meta) / plain
-    const rarityOf = (o, m) => { const it = itemForOption(o.value);
-      if (it && (it.sacred || it.quality === 'Sacred')) return 'sacred';
-      if ((it && (it.quality || '').includes('Perfect')) || m[o.value]?.perfect) return 'perfect';
-      return 'plain'; };
     function renderOpts() {
       const m = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
       const ex = exclude ? exclude() : null;
       const rows = [...sel.options].filter(o => {
         if (!o.value) return true;                              // keep "None" always
         if (ex && o.value === ex) return false;
-        if (state.slots.size) {
+        if (pipState.slots.size) {
           const sl = slotFromLabel((m[o.value] || {}).label || o.textContent);
-          if (!state.slots.has(sl)) return false;
+          if (!pipState.slots.has(sl)) return false;
         }
-        if (state.quals.size && !state.quals.has(rarityOf(o, m))) return false;
+        if (pipState.quals.size && !pipState.quals.has(rarityOf(o, m))) return false;
         return true;
       });
-      if (state.sort) {
+      if (pipState.sort) {
         const val = (o) => { const md = m[o.value] || {};
-          return state.sort === 'tier' ? (md.tier || 0) : state.sort === 'quality' ? (md.quality || 0)
-            : state.sort === 'mods' ? (md.affixes || 0) : 0; };
+          return pipState.sort === 'tier' ? (md.tier || 0) : pipState.sort === 'quality' ? (md.quality || 0)
+            : pipState.sort === 'mods' ? (md.affixes || 0) : 0; };
         rows.sort((a, b) => {
           if (!a.value) return -1; if (!b.value) return 1;      // "None" stays first
-          return state.dir * (state.sort === 'name' ? a.textContent.localeCompare(b.textContent) : val(b) - val(a));
+          return pipState.dir * (pipState.sort === 'name' ? a.textContent.localeCompare(b.textContent) : val(b) - val(a));
         });
         opts.innerHTML = rows.map(o => `<div class="isel-opt" data-v="${esc(o.value)}">${esc(o.textContent)}</div>`).join('');
       } else {
@@ -592,17 +607,10 @@
         opts.innerHTML = html;
       }
     }
-    const rerender = () => { renderTools(); renderOpts(); sync(); };
+    const rerender = () => { renderOpts(); sync(); };
     sel._rerender = rerender;                                   // itemA change re-filters itemB
+    pipTargets.push(rerender);                                  // pip edits re-render this list
     rerender();
-    tools.onclick = (e) => {
-      const sb = e.target.closest('[data-sort]'), fb = e.target.closest('[data-slot]'), qb = e.target.closest('[data-qual]');
-      if (sb) { const k = sb.dataset.sort; if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = 1; } }
-      else if (fb) { const s = fb.dataset.slot; state.slots.has(s) ? state.slots.delete(s) : state.slots.add(s); }
-      else if (qb) { const q = qb.dataset.qual; state.quals.has(q) ? state.quals.delete(q) : state.quals.add(q); }
-      else return;
-      renderTools(); renderOpts();
-    };
     btn.onclick = () => {
       const open = !wrap.classList.contains('open');
       document.querySelectorAll('.isel.open').forEach(w => w.classList.remove('open'));
