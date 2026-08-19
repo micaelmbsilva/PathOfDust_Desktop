@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseMod, parseItem, sumBuckets, classScore, bestLoadout, rollTargets, trimOrder, emptyBuckets,
-  treeLayer, bestTree, pointsForLevel, searchBuild } from './server/public/advisor-core.mjs';
+  treeLayer, bestTree, pointsForLevel, searchBuild, nodeScored, MODELED_SPECIAL_KEYS, statPriority } from './server/public/advisor-core.mjs';
 
 const model = JSON.parse(readFileSync(new URL('./server/public/game-model.json', import.meta.url)));
 
@@ -209,6 +209,31 @@ assert.equal(pointsForLevel(119), 30);
   assert.equal(req.dropped.length, 0);
   const banned = searchBuild('Warrior', nodes, 119, 119, model, { ban: ['dmg dealt'] });
   assert.ok(!picksOf(banned).includes('dmg dealt'), 'banned affix appeared');
+}
+
+// nodeScored: flatStat true, unmodeled special false, modeled special true, none false
+{
+  const flat = { key: 'x', effect: { kind: 'flatStat', stat: 'DamageReduction' } };
+  const overflow = { key: 'y', effect: { kind: 'overflowConversion' } };
+  const spike = tree.classes.Warrior.find((n) => n.key === 'spikebarrier'); // reflect, unmodeled
+  const secondSkin = tree.classes.Warrior.find((n) => n.key === 'secondskin'); // modeled special
+  assert.equal(nodeScored(flat), true);
+  assert.equal(nodeScored(overflow), true);
+  assert.equal(nodeScored({ key: 'z', effect: { kind: 'none' } }), false);
+  assert.ok(spike && nodeScored(spike) === false, 'spikebarrier reflect must read as unscored');
+  assert.ok(secondSkin && nodeScored(secondSkin) === true, 'secondskin is a modeled special');
+  assert.ok(MODELED_SPECIAL_KEYS.has('grimresolve'));
+}
+
+// statPriority: ranked desc, weight normalized to 1.0, elementals only on weapon/helm
+{
+  const g = { ...emptyBuckets(), weaponPower: 1500, attackSpeed: 0.4 };
+  const sp = statPriority('Ranger', 119, 119, model, g, { nodes: tree.classes.Ranger, alloc: {} });
+  assert.ok(sp.global.length > 0);
+  assert.ok(sp.global.every((e, i) => i === 0 || sp.global[i - 1].gain >= e.gain), 'global not sorted desc');
+  assert.ok(Math.abs(sp.global[0].weight - 1) < 1e-9, 'top weight must be 1.0');
+  assert.ok(sp.bySlot.weapon.some((e) => e.match === 'lightning damage'), 'weapon can roll elementals');
+  assert.ok(!sp.bySlot.boots.some((e) => /lightning damage/.test(e.match)), 'boots cannot roll elementals');
 }
 
 console.log('advisor-core tests passed');

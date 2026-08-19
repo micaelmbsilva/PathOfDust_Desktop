@@ -29,6 +29,28 @@ const TREE_STAT = {
 };
 const OVERFLOW_CAP = { dr: 0.75, block: 0.75, evasion: 0.75, intervene: 0.5 };
 
+// The `special` tree nodes classScore actually reads by key (via mag()/rank()).
+// KEEP IN SYNC with the mag('…')/rank('…') references in classScore below — any
+// special node NOT here is a per-fight mechanic (reflect, proc, multi-strike,
+// curse…) the closed-form can't value, so it scores 0.
+export const MODELED_SPECIAL_KEYS = new Set(['barrier', 'bloomingfield', 'colossus',
+  'deadeye', 'deathwish', 'evergrowth', 'gloryhound', 'grimresolve', 'ironbark', 'juggernaut',
+  'lifetap', 'momentousblow', 'overgrowth', 'overwhelmingforce', 'primalforce', 'reckless',
+  'recklessabandon', 'regrowth', 'secondskin', 'soulexchange', 'titansgrip', 'wildsurge']);
+
+// Does the closed-form put a number on this node? FlatStat nodes mapped to a
+// bucket and OverflowConversion nodes are modeled generically; Special nodes only
+// if hand-wired (MODELED_SPECIAL_KEYS). 'none' nodes are structural (they unlock
+// children), not scored. Used to tag "in-fight effect — not scored" in the tree.
+export function nodeScored(node) {
+  const e = node && node.effect;
+  if (!e) return false;
+  if (e.kind === 'flatStat') return !!TREE_STAT[e.stat];
+  if (e.kind === 'overflowConversion') return true;
+  if (e.kind === 'special') return MODELED_SPECIAL_KEYS.has(node.key);
+  return false; // 'none'
+}
+
 export function emptyBuckets() {
   const b = { attackSpeed: 0, weaponPower: 0, bodyPower: 0, helmPower: 0, helmCooldownMs: 0, unparsed: 0 };
   for (const k of BUCKETS) b[k] = 0;
@@ -442,6 +464,48 @@ export function rollTargets(cls, level, tier, model, baseBuckets, empirical, tre
     if (d > sacredGain) { sacredGain = d; sacred = { match: a.match, avg: perTier(a) * maxT * model.rules.sacredMult }; }
   }
   return { plan, sacred };
+}
+
+// Stat priority: rank every craftable affix by the marginal class-score gain of
+// ONE average roll on top of the current build, so when a veil can't land the
+// exact mod you know what to chase instead. `global` values each affix at its
+// best eligible slot; `bySlot` values it per slot (weapon/helm can roll the
+// elementals; other slots can't). Mirrors rollTargets' gain(). `tier` is a number
+// or a {slot:tier} map. Each list is sorted desc with weight = gain/topGain
+// (1.0 = strongest); `capped` flags an affix whose marginal gain has gone
+// near-zero (a defense already past its cap, only paying through overflow).
+export function statPriority(cls, level, tier, model, baseBuckets, tree, objective = (s) => s.score) {
+  const tierOf = (s) => (tier && typeof tier === 'object') ? (+tier[s] || 1) : (+tier || 1);
+  const g = { ...emptyBuckets(), ...(baseBuckets || {}) };
+  const slots = ['weapon', 'helm', 'body', 'gloves', 'boots'];
+  const base = objective(classScore(cls, g, level, model, tree));
+  const gainOf = (a, t) => {
+    const v = a.perTier * t;
+    g[a.bucket] += v;
+    const after = objective(classScore(cls, g, level, model, tree));
+    g[a.bucket] -= v;
+    return after - base;
+  };
+  const withWeights = (list) => {
+    list.sort((x, z) => z.gain - x.gain);
+    const top = Math.max(1e-12, list[0] ? list[0].gain : 0);
+    for (const e of list) { e.weight = Math.max(0, e.gain) / top; e.capped = e.gain <= top * 0.01; }
+    return list;
+  };
+  const bySlot = {};
+  for (const slot of slots) {
+    const t = tierOf(slot);
+    bySlot[slot] = withWeights(model.affixes
+      .filter(a => !a.slots || a.slots.includes(slot))
+      .map(a => ({ match: a.match, gain: gainOf(a, t), slots: a.slots || null })));
+  }
+  // Global: each affix at whichever eligible slot scores it highest.
+  const best = new Map();
+  for (const slot of slots) for (const e of bySlot[slot]) {
+    const cur = best.get(e.match);
+    if (!cur || e.gain > cur.gain) best.set(e.match, { match: e.match, gain: e.gain, slots: e.slots });
+  }
+  return { global: withWeights([...best.values()]), bySlot };
 }
 
 // Best reachable build for one class under the modeled ruleset (5 Perfect

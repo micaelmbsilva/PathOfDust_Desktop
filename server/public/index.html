@@ -158,6 +158,42 @@
   .rolls b { color: var(--ink); }
   .rolls .why { color: var(--ink-2); font-size: 13px; }
   .badge.top { color: #eda100; border-color: #eda10055; margin-left: 8px; }
+
+  /* Advisor rework: sections, hero stat tiles, tree respec states, stat priority */
+  .adv-sec { margin: 26px 0 0; }
+  .adv-sec > h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+                  margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--grid); }
+  .adv-hero { background: linear-gradient(150deg, rgba(57,135,229,0.10), var(--surface) 55%);
+              border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+  .adv-hero .htitle { font-size: 22px; font-weight: 700; color: var(--ink); }
+  .adv-hero .hwhy { color: var(--ink-2); margin: 10px 0 0; max-width: 70ch; }
+  .stiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 16px 0 0; }
+  .stile { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stile .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .stile .v { font-size: 22px; font-weight: 600; color: var(--ink); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stile .v small { font-size: 13px; color: var(--ink-2); font-weight: 400; }
+  /* Tree respec state on top of the .gnode base */
+  .gnode.get { border-color: #4caf7d; box-shadow: 0 0 0 1px rgba(76,175,125,0.25); }
+  .gnode.drop { border-color: #d9534f; border-style: dashed; }
+  .gnode.unscored { opacity: 0.62; }
+  .gnode .gtag { font-size: 8.5px; letter-spacing: 0.04em; text-transform: uppercase; color: #8a7fb0; margin-top: 3px; }
+  .tlegend { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .tlegend span { display: inline-flex; align-items: center; gap: 5px; }
+  .tlegend i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  /* Stat priority */
+  .prio { display: grid; gap: 5px; }
+  .prio-row { display: grid; grid-template-columns: 150px 1fr auto; align-items: center; gap: 10px; }
+  .prio-row .nm { color: var(--ink); font-size: 13px; }
+  .prio-row .nm .lock { color: var(--muted); font-size: 11px; margin-left: 5px; }
+  .prio-track { height: 8px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden; }
+  .prio-fill { height: 100%; background: var(--accent); border-radius: 5px; }
+  .prio-row.capped .prio-fill { background: var(--muted); }
+  .prio-row .wt { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+  .prio-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-top: 12px; }
+  .prio-slots .card { padding: 12px 14px; }
+  .prio-slots .card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); }
+  .prio-slots .srow { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
+  .prio-slots .srow .sw { color: var(--muted); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -1015,72 +1051,173 @@ async function advisor(name) {
           return tr;
         })));
     };
+    // Tree data + stat priority for the reworked sections.
+    const treeNodes = best && ptree && ptree.classes && arr(ptree.classes[best.cls]);
+    const currentByKey = new Map(arr(treeNodes).map(n => [n.key, alloc.get(n.name) || 0]));
+    const prio = best ? core.statPriority(best.cls, lvl, planTiers, model, best.loadout.buckets, best.tree) : null;
+    const heroStats = best ? [['DPS', fmt(best.cs.dps)], ['eHP', fmt(best.cs.ehp)]]
+      .concat(best.cs.hps > 0 ? [['HPS', fmt(best.cs.hps)]] : [])
+      .concat([['Cadence', fmt(best.cs.interval) + 'ms'], ['Score', str(best.score)]]) : [];
+    const sec = (title, ...kids) => el('div', { class: 'adv-sec' }, el('h2', null, title), ...kids);
+    const prioRow = (e) => el('div', { class: 'prio-row' + (e.capped ? ' capped' : '') },
+      el('div', { class: 'nm' }, e.match, e.slots ? el('span', { class: 'lock' }, e.slots.join('/') + ' only') : null),
+      el('div', { class: 'prio-track' }, el('div', { class: 'prio-fill', style: `width:${(e.weight * 100).toFixed(0)}%` })),
+      el('div', { class: 'wt' }, (e.weight * 100).toFixed(0) + '%'));
+    const legendDot = (style, label) => el('span', null, el('i', { style }), label);
+
     view(
       el('h1', null, 'Advisor'),
-      el('p', { class: 'sub' }, `${str(b.name)} · ${str(b.archetype)} Lv ${str(b.level)} — full-loadout suggestions from live data.`),
-      el('div', { class: 'chips', style: 'margin:0 0 14px' },
+      el('p', { class: 'sub' }, `${str(b.name)} · ${str(b.archetype)} Lv ${str(b.level)}`),
+      el('div', { class: 'chips', style: 'margin:8px 0 20px' },
         'Role: ', roleChip(null, 'Auto'), roleChip('dps', '🗡️ DPS'), roleChip('tank', '🛡️ Tank'), roleChip('healer', '🩹 Healer')),
-      !best ? el('p', { class: 'status' }, 'No builds for this role.') : el('div', { class: 'card' },
-        el('div', { class: 'bname' }, `${pinned ? 'Switch to' : 'Play'} ${best.cls} — ${str(best.build.name)}`),
-        el('div', { class: 'btag' }, `score ${best.score} · ≈${fmt(best.cs.dps)} dps · ≈${fmt(best.cs.ehp)} ehp · ${fmt(best.cs.interval)}ms cadence`
-          + (best.loadout.buckets.unparsed ? ` · ${best.loadout.buckets.unparsed} unrecognized mod(s) ignored` : '')),
-        el('p', null, str(best.build.why)),
-        arr(best.loadout.swaps).length ? el('p', null, 'Equip from bag: ', arr(best.loadout.swaps).map(s =>
-          `${str(s.use.name)} (${str(s.use.tier)}) over ${s.over ? str(s.over.name) : 'empty ' + s.slot}`).join(' · ')) : null,
-        el('p', null, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} build + tree order →`))),
-      best && arr(best.ops).length ? [
-        el('h2', null, 'Known-strong interactions for this pick'),
-        el('div', { class: 'stack' }, arr(best.ops).map(i => el('div', { class: 'card' },
-          el('div', { class: 'bname' }, str(i.title)),
-          el('div', { class: 'chips', style: 'margin:6px 0 0' },
-            el('span', { class: 'chip' + (str(i.impact) === 'high' ? ' on' : '') }, str(i.impact) + ' impact'),
-            i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
-            arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
-          el('p', null, str(i.text)))))] : null,
-      best && ranked.length > 1 ? [
-        el('div', { class: 'chips', style: 'margin:14px 0 6px', title: 'Filter with the Role chips above; click a header to sort; click a row to plan for that class' },
-          el('span', { class: 'sub' }, pinned ? `Pinned ${best.cls} — click any class to switch, or ` : 'All classes for this gear (click a row to plan for it):'),
-          pinned ? resetChip() : null),
-        rankTable()] : null,
-      best ? [
-        el('h2', null, 'Passives plan'),
-        el('div', { class: 'card' },
-          toGet.length ? [el('p', { class: 'sub', style: 'margin:0 0 6px' }, 'Allocate:'),
-            el('div', { class: 'chips' }, toGet.map(t => el('span', { class: 'chip' }, t)))] : el('p', { style: 'margin:0' }, 'Tree already matches this build.'),
-          toDrop.length ? [el('p', { class: 'sub', style: 'margin:12px 0 6px' }, 'Respec out (off-build):'),
-            el('div', { class: 'chips' }, toDrop.map(t => el('span', { class: 'chip' }, t)))] : null),
-        el('h2', null, 'Craft plan (4 mods + Sacred, no uniques)'),
-        el('p', { class: 'sub' }, `Per slot: the 4 crafted mods with the biggest marginal gain for ${best.cls} at your level, valued at the tier of the item you'd actually craft on — the worn one, or your best unkrangled base when the worn item is locked. One Sacred wish across the set (ignores slot restrictions, may duplicate a crafted mod). Veiled crafts (+500 dust) roll 3 candidates and let you pick.`),
-        el('table', null,
-          el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Craft on'), el('th', null, 'Craft these 4'), el('th', null, 'Sacred wish'))),
-          el('tbody', null, Object.entries(targets.plan).map(([slot, picks]) => {
-            const cb = craftBase(slot);
-            const it = cb && cb.it;
-            const sac = it ? sacredLineOf(it) : '';
-            const have = new Set(arr(it && it.mods).map(m => (core.parseMod(str(m && m.t), model) || {}).bucket).filter(Boolean));
-            const bucketOf = (p) => (core.parseMod('+1% ' + p.match, model) || {}).bucket;
-            const mark = (p) => `${p.match} ${fmtAvg(p)}${have.has(bucketOf(p)) ? ' ✓have' : ''}`;
-            // Don't tell someone to reroll a base that already carries a Sacred
-            // implicit AND a full set of crafted mods — a Sacred is a stage-300+
-            // upgrade you can't easily replace. Only flag the mods it's actually
-            // missing; if it already covers the plan, say leave it alone.
-            const crafted = it && sac && arr(it.mods).length >= model.rules.modCap;
-            const missing = picks.filter(p => !have.has(bucketOf(p)));
-            const craftCell = !crafted ? picks.map(mark).join(' · ')
-              : missing.length ? [el('span', { class: 'sub' }, 'already crafted — reroll only for: '), missing.map(mark).join(' · ')]
-              : el('span', { class: 'sub' }, 'already covers this plan — keep it');
-            return el('tr', null,
-              el('td', null, slot),
-              el('td', null, !it ? 'next drop'
-                : `${cb.worn ? 'worn' : 'bag'} t${tnum(it)}${cb.worn ? '' : ' ' + str(it.name)}${!cb.worn && arr(it.mods).length ? ' · has ' + arr(it.mods).map(m => str(m.t)).join(', ') : ''}`),
-              el('td', null, craftCell),
-              el('td', null, sac ? `locked in: ${sac}` : targets.sacred ? `wish: ${targets.sacred.match} ${fmtAvg(targets.sacred)}` : '—'));
-          }))),
-        craftRows.length ? [el('h2', null, 'Crafting worklist'),
-          el('ul', { class: 'rolls' }, craftRows)] : null,
-      ] : null);
+      !best ? el('p', { class: 'status' }, 'No builds for this role.') : [
+        // ---- Recommendation hero ------------------------------------------
+        el('div', { class: 'adv-hero' },
+          el('div', { class: 'htitle' }, `${pinned ? 'Switch to' : 'Play'} ${best.cls} — ${str(best.build.name)}`),
+          el('p', { class: 'hwhy' }, str(best.build.why)),
+          arr(best.loadout.swaps).length ? el('p', { class: 'sub', style: 'margin:12px 0 0' },
+            'Equip from bag: ' + arr(best.loadout.swaps).map(s => `${str(s.use.name)} (${str(s.use.tier)}) over ${s.over ? str(s.over.name) : 'empty ' + s.slot}`).join(' · ')) : null,
+          el('div', { class: 'stiles' }, heroStats.map(([k, v]) =>
+            el('div', { class: 'stile' }, el('div', { class: 'k' }, k), el('div', { class: 'v' }, v)))),
+          best.loadout.buckets.unparsed ? el('p', { class: 'sub', style: 'margin:12px 0 0' }, `${best.loadout.buckets.unparsed} unrecognized mod(s) ignored`) : null,
+          el('p', { style: 'margin:12px 0 0' }, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} reference →`))),
+        // ---- Known-strong interactions ------------------------------------
+        arr(best.ops).length ? sec('Known-strong interactions',
+          el('div', { class: 'stack' }, arr(best.ops).map(i => el('div', { class: 'card' },
+            el('div', { class: 'bname' }, str(i.title)),
+            el('div', { class: 'chips', style: 'margin:6px 0 0' },
+              el('span', { class: 'chip' + (str(i.impact) === 'high' ? ' on' : '') }, str(i.impact) + ' impact'),
+              i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
+              arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
+            el('p', null, str(i.text)))))) : null,
+        // ---- Class comparison ---------------------------------------------
+        ranked.length > 1 ? sec('Class comparison',
+          el('p', { class: 'sub', style: 'margin:-4px 0 12px' }, pinned
+            ? [`Pinned ${best.cls} — click any row to switch, or `, resetChip()]
+            : 'Click a row to plan for that class; click a header to sort.'),
+          rankTable()) : null,
+        // ---- Passive tree (game-style, recommended fill) ------------------
+        treeNodes.length ? sec('Passive tree — recommended allocation',
+          el('div', { class: 'tlegend' },
+            legendDot('background:#ff3b4e', 'point'),
+            legendDot('background:#ffd76b', '4th point (specializes)'),
+            legendDot('border:1.5px solid #4caf7d;background:transparent', 'add vs your tree'),
+            legendDot('border:1.5px dashed #d9534f;background:transparent', 'respec out'),
+            el('span', null, 'dimmed = in-fight effect, not scored')),
+          treeGraph(best.cls, treeNodes, best.tree.alloc, currentByKey, core),
+          el('p', { class: 'sub', style: 'margin:10px 0 0' }, toGet.length || toDrop.length
+            ? `${toGet.length} node change(s) to allocate, ${toDrop.length} to respec out.`
+            : 'Your tree already matches this build.')) : null,
+        // ---- Gear & crafting ----------------------------------------------
+        sec('Gear & crafting',
+          el('p', { class: 'sub', style: 'margin:-4px 0 12px' }, `Per slot: the 4 crafted mods with the biggest marginal gain for ${best.cls} at your level, valued at the tier of the item you'd actually craft on. One Sacred wish across the set (any slot, may duplicate a mod). Veiled crafts (+500 dust) roll 3 candidates and let you pick.`),
+          el('table', null,
+            el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Craft on'), el('th', null, 'Craft these 4'), el('th', null, 'Sacred wish'))),
+            el('tbody', null, Object.entries(targets.plan).map(([slot, picks]) => {
+              const cb = craftBase(slot);
+              const it = cb && cb.it;
+              const sac = it ? sacredLineOf(it) : '';
+              const have = new Set(arr(it && it.mods).map(m => (core.parseMod(str(m && m.t), model) || {}).bucket).filter(Boolean));
+              const bucketOf = (p) => (core.parseMod('+1% ' + p.match, model) || {}).bucket;
+              const mark = (p) => `${p.match} ${fmtAvg(p)}${have.has(bucketOf(p)) ? ' ✓have' : ''}`;
+              // Don't tell someone to reroll a base that already carries a Sacred
+              // implicit AND a full set of crafted mods — a Sacred is a stage-300+
+              // upgrade you can't easily replace. Only flag the mods it's missing.
+              const crafted = it && sac && arr(it.mods).length >= model.rules.modCap;
+              const missing = picks.filter(p => !have.has(bucketOf(p)));
+              const craftCell = !crafted ? picks.map(mark).join(' · ')
+                : missing.length ? [el('span', { class: 'sub' }, 'already crafted — reroll only for: '), missing.map(mark).join(' · ')]
+                : el('span', { class: 'sub' }, 'already covers this plan — keep it');
+              return el('tr', null,
+                el('td', null, slot),
+                el('td', null, !it ? 'next drop'
+                  : `${cb.worn ? 'worn' : 'bag'} t${tnum(it)}${cb.worn ? '' : ' ' + str(it.name)}${!cb.worn && arr(it.mods).length ? ' · has ' + arr(it.mods).map(m => str(m.t)).join(', ') : ''}`),
+                el('td', null, craftCell),
+                el('td', null, sac ? `locked in: ${sac}` : targets.sacred ? `wish: ${targets.sacred.match} ${fmtAvg(targets.sacred)}` : '—'));
+            }))),
+          craftRows.length ? [el('p', { class: 'sub', style: 'margin:16px 0 6px' }, 'Crafting worklist'),
+            el('ul', { class: 'rolls' }, craftRows)] : null),
+        // ---- Stat priority (global + per-slot) ----------------------------
+        prio ? sec('Stat priority',
+          el('p', { class: 'sub', style: 'margin:-4px 0 12px' }, "When a veil can't land the exact mod, chase these in order — ranked by score gained per average roll on top of this build. Dimmed = capped / barely pays."),
+          el('div', { class: 'prio' }, prio.global.filter(e => e.weight > 0.01).slice(0, 12).map(prioRow)),
+          el('div', { class: 'prio-slots' }, ['weapon', 'helm', 'body', 'gloves', 'boots'].map(slot =>
+            el('div', { class: 'card' }, el('h3', null, slot),
+              prio.bySlot[slot].filter(e => e.weight > 0.02).slice(0, 6).map(e =>
+                el('div', { class: 'srow' }, el('span', null, e.match), el('span', { class: 'sw' }, (e.weight * 100).toFixed(0) + '%'))))))) : null,
+      ]);
   }
   render();
+}
+
+// Deterministic game-style tree from passive-tree.json (no scraped coords, so it
+// works for every class incl. Elementalist). Lays out root → skills → specs →
+// mods (each spec spans its mods, each skill its specs), fills each node's dots to
+// the RECOMMENDED rank (red; a spec's 4th point gold, like the game), and borders
+// each node by the respec vs the player's current ranks (green = add, dashed red
+// = drop). Unscored specials (reflects/procs) are dimmed + tagged. Read-only.
+function treeGraph(cls, nodes, alloc, currentByKey, core) {
+  const kids = (k) => arr(nodes).filter(n => n.parent === k);
+  const skills = arr(nodes).filter(n => !n.parent);
+  // 27 mod-columns wide for a full class — keep nodes compact so the whole tree
+  // is a couple of screens of horizontal scroll, not ten (the game is wide too).
+  const COL = 92, NODEW = 80;
+  const rowY = { root: 44, skill: 150, spec: 292, mod: 438 };
+  const pos = {};
+  let col = 0;
+  for (const sk of skills) {
+    const specs = kids(sk.key), scols = [];
+    for (const sp of specs) {
+      const mods = kids(sp.key);
+      if (!mods.length) { pos[sp.key] = { col: col++, y: rowY.spec }; }
+      else {
+        const start = col;
+        for (const md of mods) pos[md.key] = { col: col++, y: rowY.mod };
+        pos[sp.key] = { col: (start + col - 1) / 2, y: rowY.spec };
+      }
+      scols.push(pos[sp.key].col);
+    }
+    pos[sk.key] = { col: specs.length ? (Math.min(...scols) + Math.max(...scols)) / 2 : col++, y: rowY.skill };
+  }
+  const cols = Object.values(pos).map(p => p.col);
+  const rootCol = cols.length ? (Math.min(...cols) + Math.max(...cols)) / 2 : 0;
+  const X = (c) => c * COL + COL / 2;
+  const stageW = Math.max(COL, col * COL), stageH = rowY.mod + 70;
+  const rank = (k) => alloc[k] || 0;
+
+  const stage = el('div', { class: 'gstage', style: `width:${stageW}px;height:${stageH}px` });
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', stageW); svg.setAttribute('height', stageH);
+  const line = (x1, y1, x2, y2, on) => { const l = document.createElementNS(svgNS, 'line');
+    l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+    l.setAttribute('stroke', on ? 'rgba(255,59,78,0.45)' : 'rgba(160,140,255,0.22)');
+    l.setAttribute('stroke-width', on ? 2.5 : 1.5); svg.appendChild(l); };
+  for (const sk of skills) line(X(rootCol), rowY.root, X(pos[sk.key].col), rowY.skill, rank(sk.key));
+  for (const n of nodes) for (const c of kids(n.key)) if (pos[n.key] && pos[c.key])
+    line(X(pos[n.key].col), pos[n.key].y, X(pos[c.key].col), pos[c.key].y, rank(n.key) && rank(c.key));
+  stage.appendChild(svg);
+
+  stage.appendChild(el('div', { class: 'gnode kind-root', style: `left:${X(rootCol)}px;top:${rowY.root}px;width:150px` },
+    el('div', { class: 'gkind' }, 'Class passive'), el('div', { class: 'gname' }, str(cls).toUpperCase())));
+  for (const n of nodes) {
+    const p = pos[n.key]; if (!p) continue;
+    const r = rank(n.key), cur = currentByKey.get(n.key) || 0, isSpec = n.tier === 'spec';
+    const dots = [];
+    for (let i = 0; i < (n.max || 0); i++)
+      dots.push(el('span', { class: 'gdot' + (i < r ? (isSpec && i === 3 ? ' gold' : ' on') : '') }));
+    const unscored = !core.nodeScored(n);
+    const state = r > cur ? ' get' : r < cur ? ' drop' : '';
+    stage.appendChild(el('div', {
+      class: `gnode kind-${n.tier}${r ? ' pick' : ''}${isSpec && r >= 4 ? ' gold' : ''}${state}${unscored ? ' unscored' : ''}`,
+      style: `left:${X(p.col)}px;top:${p.y}px;width:${NODEW}px`,
+      title: `${str(n.name)} — ${str(n.description)}${unscored ? '  ·  in-fight effect, not scored by the advisor' : ''}`,
+    },
+      el('div', { class: 'gname' }, str(n.name)),
+      dots.length ? el('div', { class: 'gdots' }, dots) : null,
+      unscored ? el('div', { class: 'gtag' }, 'not scored') : null));
+  }
+  return el('div', { class: 'gwrap' }, stage);
 }
 
 // Game-replica canvas: absolute node cards + connector lines at the game's own
