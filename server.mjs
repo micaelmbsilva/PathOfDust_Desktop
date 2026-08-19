@@ -447,10 +447,10 @@ export async function inventory() { // exported for scrape smoke-tests
   // Token pills carry a data-tip between the class and the '>' — an anchored
   // `class="token-pill">` matched nothing and read every player as tokenless.
   // Text: "🎫 Celestial Shard → Celestial Conversion ×2".
-  // The page prints the token pills in two places (nav + inventory panel), so
-  // the sweep sees each twice. Each pill's text is unique (name + ×count is
-  // aggregated), so dedupe by identity restores one of each.
-  const tokens = [...new Set([...text.matchAll(/class="token-pill"[^>]*>([^<]*)</g)].map(m => strip(m[1])))];
+  // These used to arrive doubled; that was never a second nav copy of the pills
+  // (the site has exactly one emitter) but the whole page body arriving twice —
+  // handled once now in getAuthed's firstBody, so no dedupe belongs here.
+  const tokens = [...text.matchAll(/class="token-pill"[^>]*>([^<]*)</g)].map(m => strip(m[1]));
   // Bag header prints "Bag (used/capacity)" — read the cap off the page rather
   // than copying INVENTORY_CAPACITY into our source, where it would silently rot.
   const bagCap = +(text.match(/<h2>Bag \((\d+)\/(\d+)\)<\/h2>/) || [])[2] || null;

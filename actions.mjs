@@ -46,6 +46,20 @@ export async function post(endpoint, fields = {}) {
   return { status: res.status, location: res.headers.get('location'), ok: res.status < 400 };
 }
 
+// The game's page shell currently renders each page body TWICE (its own
+// templates/base.html emits it in two places). Every whole-page sweep in
+// server.mjs then read every stat, roster card, tree node and token pill twice —
+// which is what put two of every card on the character sheet. Every body starts
+// with its top nav, and `class="top-nav"` appears exactly once per copy (never
+// in the shell), so a second one marks the start of a second copy: keep the
+// first. A no-op the moment the site stops doubling, and on the logged-out page
+// and /fights.json, which carry no nav at all.
+export const firstBody = (text) => {
+  const first = text.indexOf('class="top-nav"');
+  const second = first < 0 ? -1 : text.indexOf('class="top-nav"', first + 1);
+  return second < 0 ? text : text.slice(0, second);
+};
+
 // Authenticated GET — returns the response text. For scraping our own pages.
 // 5xx (incl. Cloudflare's 52x error pages when the game is down) throws so the
 // scrape routes 500 and the UI shows its downtime state instead of parsing junk.
@@ -64,7 +78,7 @@ export async function getAuthed(path = '/') {
   if (res.redirected && /Login with Twitch/i.test(text.slice(0, 30000)) && !text.includes('top-nav-stats')) {
     const e = new Error('session expired'); e.expired = true; throw e;
   }
-  return { status: res.status, text };
+  return { status: res.status, text: firstBody(text) };
 }
 // A craft/equip POST against a dead session 302s to the login page too.
 export const loginRedirect = (location) => !!location && /login|signin|twitch/i.test(location);

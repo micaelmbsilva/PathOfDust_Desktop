@@ -5,7 +5,8 @@
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
 import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed } from './server.mjs';
-import { netKey } from './actions.mjs';
+import { netKey, firstBody } from './actions.mjs';
+import { readFileSync } from 'node:fs';
 
 // Owner dossier: exact normalized login only. UI hiding is convenience; this
 // pure predicate backs the bridge route and guards the template filename too.
@@ -214,6 +215,36 @@ assert.deepEqual(nameItemOf(krangled), { id: 'itm_42', maxLen: 30, name: 'Celest
 assert.equal(nameItemOf('<div class="card"><h2>Bag (3/50)</h2></div>'), null, 'no prompt when nothing is pending');
 assert.equal(nameItemOf(krangled.replace(/name="item_id"\s+value="[^"]+"/, '')), null,
   'a form with no item id is not actionable');
+
+
+// --- The site's shell started rendering each page body TWICE inside one <head>,
+// which put two of every stat card on the character sheet, two of every roster
+// entry, two of every passive node. Every parser here sweeps a whole page, so
+// the guard is one cut at the fetch: a second `class="top-nav"` starts a second
+// copy. These fixtures are single-copy captures, so they double as the "healthy
+// page is untouched" case.
+const twice = (html) => {
+  const i = html.indexOf('class="top-nav"');
+  assert.ok(i > 0, 'fixture must carry exactly one top nav to be doubled');
+  return html.slice(0, i) + html.slice(i) + html.slice(i);
+};
+for (const f of ['authed/characters.html', 'authed/characters_afrosenbo.html']) {
+  const single = readFileSync(f, 'utf8');
+  assert.equal(firstBody(single), single, `${f}: a single-copy page is returned unchanged`);
+  assert.equal(firstBody(twice(single)), single, `${f}: the second copy is cut off`);
+}
+const roster = readFileSync('authed/characters.html', 'utf8');
+assert.ok(rosterOf(roster).length > 1, 'roster fixture has cards to duplicate');
+assert.equal(rosterOf(twice(roster)).length, rosterOf(roster).length * 2, 'unguarded, the sweep doubles');
+assert.deepEqual(rosterOf(firstBody(twice(roster))), rosterOf(roster), 'guarded, the roster parses once');
+
+const sheet = readFileSync('authed/characters_afrosenbo.html', 'utf8');
+const one = characterOf(sheet, 'afrosenbo');
+assert.ok(one.stats.length > 1 && one.bag.length > 0, 'sheet fixture has stats and a bag');
+assert.deepEqual(characterOf(firstBody(twice(sheet)), 'afrosenbo'), one,
+  'stats, gear and bag all parse once from a doubled page');
+assert.ok(characterOf(twice(sheet), 'afrosenbo').stats.length > one.stats.length,
+  'and would have doubled without the guard');
 
 console.log('ok');
 process.exit(0); // importing server.mjs opens the bridge listener
