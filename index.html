@@ -2216,6 +2216,18 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       const v = fight.vitals[id], u = fight.unitHp[id];
       if (!u) continue;
       while (v.idx < v.samples.length && v.samples[v.idx][0] <= cursor) u.hp = v.samples[v.idx++][1];
+      // The samples are a step function, so between two of them the bar sits
+      // still and then jumps the whole gap in one 0.34s glide — at 1x the gaps
+      // are short enough to read as movement, but a slowed replay stretches them
+      // into seconds of nothing followed by a sprint. Walk toward the next
+      // sample in display time instead: the sample times and values are
+      // untouched, only the space between them is filled in.
+      const nxt = v.samples[v.idx];
+      if (nxt) {
+        const prev = v.idx ? v.samples[v.idx - 1] : [0, u.max];
+        const span = nxt[0] - prev[0];
+        if (span > 0) u.hp = prev[1] + (nxt[1] - prev[1]) * Math.max(0, Math.min(1, (cursor - prev[0]) / span));
+      }
       // Before diedAtMs the player renders alive (the fight is resolved
       // server-side already — pinning early would spoil the replay).
       if (v.diedAt != null && cursor >= v.diedAt) { u.hp = 0; u.shield = 0; }
