@@ -92,6 +92,13 @@
      a narrow window). */
   .craft { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
   .craft-main { flex: 1 1 340px; min-width: 0; }
+  /* bag grid + its own pip card, same two-column shape as the craft form */
+  .bagwrap { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+  .bagwrap #bag { flex: 1 1 340px; min-width: 0; }
+  .isel-none, .bag-none { color: #8a7fb0; font-size: 0.82rem; padding: 8px 7px; }
+  .pip-q { width: 100%; background: #17132a; color: #eae6f5; font: inherit; font-size: 0.78rem;
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 7px; padding: 4px 8px; }
+  .pip-q:focus { outline: none; border-color: rgba(180,160,255,0.8); background: #1c1830; }
   .craft-pips { flex: 0 0 auto; width: 208px; display: flex; flex-direction: column; gap: 12px;
     background: linear-gradient(180deg, #211b3a, #191428); border: 1px solid rgba(160,140,255,0.28);
     border-radius: 12px; padding: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
@@ -151,7 +158,7 @@
 </head>
 <body>
   <div id="hdr">
-    <h1>🎒 Bag &amp; Crafting <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
+    <h1>🎒 Bag &amp; Crafting <button class="chip" id="reloadBtn" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
     <div class="bar" id="cur"></div>
   </div>
   <div id="err"></div>
@@ -168,15 +175,6 @@
 
   <div class="bag-head">
     <h2 id="bagh" style="margin:0">Bag</h2>
-    <label>Sort <select id="sortBy">
-      <option value="tier">Tier</option>
-      <option value="quality">Quality</option>
-      <option value="roll">Best Roll</option>
-      <option value="mods">Mod Count</option>
-      <option value="durability">Durability (worn first)</option>
-      <option value="name">Name</option>
-      <option value="slot">Slot</option>
-    </select></label>
     <label>Group <select id="groupBy">
       <option value="">None</option>
       <option value="slot">Slot</option>
@@ -186,7 +184,10 @@
     </select></label>
     <button id="disAll" class="danger" title="Disenchant every bag item. 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All</button>
   </div>
-  <div id="bag"></div>
+  <div class="bagwrap">
+    <div id="bag"></div>
+    <div class="craft-pips" id="bagPips" title="Sort and filter the bag"></div>
+  </div>
   <div id="toasts"></div>
 
 <script>
@@ -342,6 +343,12 @@
     if (opts && opts.currency) {
       try { before = await fetch('/api/inventory', { cache: 'no-store' }).then(r => r.json()); } catch {}
     }
+    // The retry loop can run ~3s. Without this the craft buttons stay live and a
+    // silent stall invites a second click that fires a second craft.
+    const busy = [...document.querySelectorAll('#craft button:not(:disabled)')];
+    busy.forEach(b => { b.disabled = true; });
+    document.body.style.cursor = 'progress';
+    try {
     const r = await api(endpoint, fields);
     if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
     if (before) {
@@ -367,6 +374,12 @@
         : `${label || 'Action'}: no change — likely rejected (not enough dust/tokens?)`, parts.length ? '' : 'cost');
     }
     return r;
+    } finally {
+      // load() rebuilds these anyway; re-enabling matters for the paths that
+      // return without one (a failed POST) and for the gap before refresh().
+      busy.forEach(b => { b.disabled = false; });
+      document.body.style.cursor = '';
+    }
   }
 
   // Overlapping loads waste a fetch pair and can strand pipTargets: it's reset
@@ -376,8 +389,13 @@
   async function load() {
     if (loadBusy) { loadAgain = true; return; }
     loadBusy = true;
+    const rb = $('reloadBtn'); if (rb) { rb.disabled = true; rb.textContent = '⏳'; }
     try { await loadNow(); }
-    finally { loadBusy = false; if (loadAgain) { loadAgain = false; load(); } }
+    finally {
+      loadBusy = false;
+      const b = $('reloadBtn'); if (b) { b.disabled = false; b.textContent = '🔄'; }
+      if (loadAgain) { loadAgain = false; load(); }
+    }
   }
   async function loadNow() {
     $('err').textContent = '';
@@ -553,7 +571,7 @@
     pipTargets = []; // fresh DOM each load — drop stale picker re-render closures
     itemForCache.clear(); // lastBag/lastEquipped/lastCraft are all assigned by now
     dropdown($('itemA')); dropdown($('itemB'), () => $('itemA').value);
-    renderPips();
+    renderCraftPips();
 
     // While a choice is pending the site rejects every craft — lock the form so
     // "nothing happened" clicks can't pile up, and point at the pending card.
@@ -632,46 +650,57 @@
     : 'plain';
   const QUAL_RANK = { krangled: 103, sacred: 102, perfect: 101 };
 
-  // Shared sort/filter state driving BOTH item pickers, edited from the pip card
-  // beside the craft form. Session-scoped (persists across reloads like the
-  // craft selection does). pipTargets holds each live picker's re-render fn.
-  const pipState = { sort: '', dir: 1, slots: new Set(), quals: new Set() }; // sort '' = grouped order; empty sets = all
+  // Sort/filter state. `pipState` drives BOTH item pickers from the card beside
+  // the craft form; `bagPipState` drives the bag grid from its own card. Same
+  // renderer, different state + sort list, so the two stay consistent.
+  // pipTargets holds each live picker's re-render fn.
+  const newPipState = () => ({ sort: '', dir: 1, slots: new Set(), quals: new Set(), q: '' }); // sort '' = grouped order; empty sets = all
+  const pipState = newPipState();
   let pipTargets = [];
-  function renderPips() {
-    const el = document.getElementById('craftPips'); if (!el) return;
+  const pipActive = (st) => st.sort || st.slots.size || st.quals.size || st.q;
+  // el: container, st: state object, sorts: [key,label][], onChange: re-render.
+  function renderPips(el, st, sorts, onChange) {
+    if (!el) return;
     const pip = (on, attr, txt, ttl, icon) =>
       `<button type="button" class="pip${icon ? ' pip-icon' : ''}${on ? ' on' : ''}" ${attr} title="${esc(ttl || '')}">${txt}</button>`;
     const sec = (cap, html) => `<div class="pip-sec"><span class="pip-cap">${cap}</span><div class="pipgrp">${html}</div></div>`;
-    const active = pipState.sort || pipState.slots.size || pipState.quals.size;
     el.innerHTML =
-      `<div class="pip-h"><span>Sort · Filter</span>${active ? '<button type="button" class="pip-clear" data-clear>Clear</button>' : ''}</div>` +
-      sec('Sort', SORTS.map(([k, lbl]) =>
-        pip(pipState.sort === k, `data-sort="${k}"`, lbl,
-          pipState.sort === k ? 'Click again to clear this sort' : `Sort by ${lbl}`)).join('')) +
+      `<div class="pip-h"><span>Sort · Filter</span>${pipActive(st) ? '<button type="button" class="pip-clear" data-clear>Clear</button>' : ''}</div>` +
+      `<input type="search" class="pip-q" placeholder="Search…" value="${esc(st.q)}">` +
+      sec('Sort', sorts.map(([k, lbl]) =>
+        pip(st.sort === k, `data-sort="${k}"`, lbl,
+          st.sort === k ? 'Click again to clear this sort' : `Sort by ${lbl}`)).join('')) +
       // Direction is its own control rather than a hidden re-click, and says
       // which way it means for the active sort (A–Z reads the opposite way).
       // dir 1 puts the "top" value first: highest number, or A for names.
-      (pipState.sort ? sec('Order', [[1, pipState.sort === 'name' ? 'A → Z' : 'High → Low'],
-        [-1, pipState.sort === 'name' ? 'Z → A' : 'Low → High']]
-        .map(([d, lbl]) => pip(pipState.dir === d, `data-dir="${d}"`, lbl)).join('')) : '') +
-      sec('Quality', QUALS.map(([k, em, t]) => pip(pipState.quals.has(k), `data-qual="${k}"`, em, t, true)).join('')) +
-      sec('Slot', SLOTS.map(s => pip(pipState.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join(''));
+      (st.sort ? sec('Order', [[1, st.sort === 'name' ? 'A → Z' : 'High → Low'],
+        [-1, st.sort === 'name' ? 'Z → A' : 'Low → High']]
+        .map(([d, lbl]) => pip(st.dir === d, `data-dir="${d}"`, lbl)).join('')) : '') +
+      sec('Quality', QUALS.map(([k, em, t]) => pip(st.quals.has(k), `data-qual="${k}"`, em, t, true)).join('')) +
+      sec('Slot', SLOTS.map(s => pip(st.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join(''));
+    // Re-rendering the card would blow away the field the user is typing in, so
+    // the search box updates state and refreshes only the list.
+    const q = el.querySelector('.pip-q');
+    q.oninput = () => { st.q = q.value; onChange(); };
+    q.onkeydown = (e) => { if (e.key === 'Escape' && st.q) { st.q = q.value = ''; onChange(); } };
     el.onclick = (e) => {
-      if (e.target.closest('[data-clear]')) { pipState.sort = ''; pipState.dir = 1; pipState.slots.clear(); pipState.quals.clear(); }
+      if (e.target.closest('[data-clear]')) { st.sort = ''; st.dir = 1; st.slots.clear(); st.quals.clear(); st.q = ''; }
       else {
         const sb = e.target.closest('[data-sort]'), fb = e.target.closest('[data-slot]'),
               qb = e.target.closest('[data-qual]'), db = e.target.closest('[data-dir]');
         // Re-clicking the active sort clears it (back to the site's grouped
         // order); direction is set explicitly by the Order pips.
-        if (sb) { const k = sb.dataset.sort; if (pipState.sort === k) pipState.sort = ''; else pipState.sort = k; }
-        else if (db) pipState.dir = +db.dataset.dir;
-        else if (fb) { const s = fb.dataset.slot; pipState.slots.has(s) ? pipState.slots.delete(s) : pipState.slots.add(s); }
-        else if (qb) { const q = qb.dataset.qual; pipState.quals.has(q) ? pipState.quals.delete(q) : pipState.quals.add(q); }
+        if (sb) { const k = sb.dataset.sort; if (st.sort === k) st.sort = ''; else st.sort = k; }
+        else if (db) st.dir = +db.dataset.dir;
+        else if (fb) { const s = fb.dataset.slot; st.slots.has(s) ? st.slots.delete(s) : st.slots.add(s); }
+        else if (qb) { const q2 = qb.dataset.qual; st.quals.has(q2) ? st.quals.delete(q2) : st.quals.add(q2); }
         else return;
       }
-      renderPips(); pipTargets.forEach(fn => fn());
+      renderPips(el, st, sorts, onChange); onChange();
     };
   }
+  const renderCraftPips = () => renderPips(document.getElementById('craftPips'), pipState, SORTS,
+    () => pipTargets.forEach(fn => fn()));
 
   // exclude: optional () => a value to hide from this list (itemB hides itemA).
   function dropdown(sel, exclude) {
@@ -685,9 +714,13 @@
     function renderOpts() {
       const m = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
       const ex = exclude ? exclude() : null;
+      // The label already carries name/slot/tier/mod-count/quality, so matching
+      // it covers every field on screen without resolving the item.
+      const q = pipState.q.trim().toLowerCase();
       const rows = [...sel.options].filter(o => {
         if (!o.value) return true;                              // keep "None" always
         if (ex && o.value === ex) return false;
+        if (q && !o.textContent.toLowerCase().includes(q)) return false;
         if (pipState.slots.size) {
           const sl = slotFromLabel((m[o.value] || {}).label || o.textContent);
           if (!pipState.slots.has(sl)) return false;
@@ -716,6 +749,10 @@
           html += `<div class="isel-opt" data-v="${esc(o.value)}">${esc(o.textContent)}</div>`; }
         opts.innerHTML = html;
       }
+      // An empty box reads as "broken"; say it's the filters, since the Clear
+      // control lives in the card and not next to the list.
+      if (!rows.some(o => o.value)) opts.innerHTML =
+        '<div class="isel-none">No items match the search/filters.</div>';
     }
     const rerender = () => { renderOpts(); sync(); };
     sel._rerender = rerender;                                   // itemA change re-filters itemB
@@ -1014,15 +1051,31 @@
      ${lockBtn(it)}
      ${disBtn(it)}
      ${repairBtn(it)} ${shareBtn(it)}`);
+  // Bag sorts: the pip card's four plus the three only the bag can answer (best
+  // roll, durability and slot all need the full item, which craft options lack).
+  const BAG_SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['roll', 'Roll'], ['mods', 'Mods'],
+    ['durability', 'Dura'], ['name', 'A–Z'], ['slot', 'Slot']];
+  // dir 1 = "top value first" (highest number, or A), matching the Order pips.
+  const BAG_CMP = { tier: (a, b) => numTier(b) - numTier(a), quality: (a, b) => numQual(b) - numQual(a),
+    roll: (a, b) => bestRoll(b) - bestRoll(a), mods: (a, b) => modCount(b) - modCount(a),
+    durability: (a, b) => durPct(b) - durPct(a), name: (a, b) => a.name.localeCompare(b.name),
+    slot: (a, b) => a.slot.localeCompare(b.slot) };
+  // Matches the name and the mod text — unlike the pickers, the bag holds whole
+  // items, so "fire" or "crit" finds gear by what it actually rolled.
+  const bagMatch = (it, q) => !q || (it.name || '').toLowerCase().includes(q)
+    || (it.mods || []).some(m => (m.t || '').toLowerCase().includes(q))
+    || (it.implicits || []).some(i => (i.t || '').toLowerCase().includes(q));
   function renderBag() {
-    const items = [...lastBag];
-    const cmp = { tier: (a, b) => numTier(b) - numTier(a), quality: (a, b) => numQual(b) - numQual(a),
-      roll: (a, b) => bestRoll(b) - bestRoll(a), mods: (a, b) => modCount(b) - modCount(a),
-      durability: (a, b) => durPct(a) - durPct(b), name: (a, b) => a.name.localeCompare(b.name),
-      slot: (a, b) => a.slot.localeCompare(b.slot) }[$('sortBy').value] || (() => 0);
-    items.sort(cmp);
-    $('bagh').textContent = `Bag (${items.length}${lastCap ? '/' + lastCap : ''})`;
-    if (!items.length) { $('bag').innerHTML = '<p class="muted">Empty.</p>'; return; }
+    const st = bagPipState, q = st.q.trim().toLowerCase();
+    const all = lastBag.length;
+    const items = lastBag.filter(it => bagMatch(it, q)
+      && (!st.slots.size || st.slots.has((it.slot || '').toLowerCase()))
+      && (!st.quals.size || st.quals.has(qualOf(it))));
+    if (st.sort) items.sort((a, b) => st.dir * BAG_CMP[st.sort](a, b));
+    const shown = items.length === all ? `${all}` : `${items.length} of ${all}`;
+    $('bagh').textContent = `Bag (${shown}${lastCap ? ' · cap ' + lastCap : ''})`;
+    if (!all) { $('bag').innerHTML = '<p class="muted">Empty.</p>'; return; }
+    if (!items.length) { $('bag').innerHTML = '<p class="bag-none">No items match the search/filters.</p>'; return; }
     const gr = GROUPERS[$('groupBy').value];
     if (gr) {
       const g = new Map();
@@ -1033,11 +1086,30 @@
       $('bag').innerHTML = `<div class="grid">${items.map(bagCard).join('')}</div>`;
     }
   }
-  // remember the user's sort/group across reloads
-  const sSel = document.getElementById('sortBy'), gSel = document.getElementById('groupBy');
-  if (localStorage.getItem('bagSort')) sSel.value = localStorage.getItem('bagSort');
+  // remember the user's grouping and pip state across reloads. Sets don't
+  // survive JSON, so they're stored as arrays; the search box deliberately does
+  // NOT persist — reopening to a silently filtered bag reads as lost items.
+  const BAGPIPS = 'bagPips';
+  const bagPipState = newPipState();
+  try {
+    const s = JSON.parse(localStorage.getItem(BAGPIPS)) || {};
+    if (BAG_CMP[s.sort]) { bagPipState.sort = s.sort; bagPipState.dir = s.dir === -1 ? -1 : 1; }
+    for (const k of s.slots || []) bagPipState.slots.add(k);
+    for (const k of s.quals || []) bagPipState.quals.add(k);
+  } catch {}
+  // Persistence must never break rendering — this runs on every pip click, and
+  // setItem throws on a quota or a storage-disabled origin.
+  const saveBagPips = () => { try {
+    localStorage.setItem(BAGPIPS, JSON.stringify({
+      sort: bagPipState.sort, dir: bagPipState.dir,
+      slots: [...bagPipState.slots], quals: [...bagPipState.quals] }));
+  } catch {} };
+  const renderBagPips = () => renderPips($('bagPips'), bagPipState, BAG_SORTS,
+    () => { saveBagPips(); renderBag(); });
+  renderBagPips(); // static card — it re-renders itself on every pip click
+
+  const gSel = document.getElementById('groupBy');
   if (localStorage.getItem('bagGroup')) gSel.value = localStorage.getItem('bagGroup');
-  sSel.onchange = () => { localStorage.setItem('bagSort', sSel.value); renderBag(); };
   gSel.onchange = () => { localStorage.setItem('bagGroup', gSel.value); renderBag(); };
 
   // One delegated listener instead of re-binding every button after each render.
