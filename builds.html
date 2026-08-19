@@ -10,15 +10,12 @@
     color-scheme: dark;
     --ink: #0c0a16;
     --panel: #171326;
-    --panel-2: #1c1830;
     --text: #eae6f5;
-    --muted: #9a90b6;
     --rule: rgba(160, 140, 255, 0.2);
     --gold: #ffd76b;
-    --paladin: #ffd76b;
-    --monk: #a9ed82;
-    --warrior: #ff8a8a;
-    --cleric: #8ab4ff;
+    --damage: #ff8a8a;
+    --tank: #8ab4ff;
+    --healing: #a9ed82;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -48,13 +45,8 @@
     border-radius: 10px;
     overflow: hidden;
   }
-  .rail__seal {
-    padding: 22px 18px 18px;
-    border-bottom: 1px solid rgba(255, 215, 107, 0.2);
-  }
-  .eyebrow,
-  .role-label,
-  .utility-label {
+  .rail__seal { padding: 22px 18px 18px; border-bottom: 1px solid rgba(255, 215, 107, 0.2); }
+  .eyebrow, .role-label, .utility-label {
     margin: 0;
     color: var(--gold);
     font: 700 0.68rem/1.3 Consolas, "Courier New", monospace;
@@ -78,12 +70,7 @@
   }
   .constraints div:last-child { border-bottom: 0; }
   .constraints dt { color: #a69bba; font-size: 0.72rem; }
-  .constraints dd {
-    margin: 0;
-    color: #f3e6b7;
-    text-align: right;
-    font: 700 0.72rem/1.3 Consolas, "Courier New", monospace;
-  }
+  .constraints dd { margin: 0; color: #f3e6b7; text-align: right; font: 700 0.72rem/1.3 Consolas, "Courier New", monospace; }
   .rail nav { padding: 8px; border-top: 1px solid rgba(255, 215, 107, 0.15); }
   .rail nav a {
     display: grid;
@@ -99,10 +86,9 @@
   .rail nav a::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--role); }
   .rail nav a:hover { background: rgba(160, 140, 255, 0.1); color: #fff; }
   .rail nav a:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
-  .rail nav a[href="#overall"] { --role: var(--paladin); }
-  .rail nav a[href="#damage"] { --role: var(--monk); }
-  .rail nav a[href="#tank"] { --role: var(--warrior); }
-  .rail nav a[href="#healer"] { --role: var(--cleric); }
+  .rail nav a[href$="damage"] { --role: var(--damage); }
+  .rail nav a[href$="tank"] { --role: var(--tank); }
+  .rail nav a[href$="healing"] { --role: var(--healing); }
   .content { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
   .hero {
     position: relative;
@@ -114,80 +100,64 @@
       repeating-linear-gradient(135deg, transparent 0 32px, rgba(255, 255, 255, 0.014) 32px 33px),
       rgba(23, 19, 38, 0.92);
   }
-  .hero::after {
-    content: "119";
-    position: absolute;
-    right: 18px;
-    top: -26px;
-    color: rgba(255, 215, 107, 0.04);
-    font: 800 8.5rem/1 Georgia, "Times New Roman", serif;
-    pointer-events: none;
-  }
   .hero h1 {
-    position: relative;
-    z-index: 1;
     margin: 5px 0 10px;
     max-width: 720px;
     font: 700 clamp(2rem, 5vw, 3.8rem)/1 Georgia, "Times New Roman", serif;
     letter-spacing: -0.035em;
   }
-  .hero p:last-child {
-    position: relative;
-    z-index: 1;
-    max-width: 760px;
-    margin: 0;
-    color: #c5bdd5;
-    font-size: 0.95rem;
-    line-height: 1.6;
-  }
+  .hero p:last-child { max-width: 760px; margin: 0; color: #c5bdd5; font-size: 0.95rem; line-height: 1.6; }
   .runtime {
     display: grid;
     grid-template-columns: 150px minmax(0, 1fr);
     gap: 18px;
     align-items: center;
     padding: 14px 17px;
-    border-left: 3px solid var(--warrior);
+    border-left: 3px solid var(--damage);
     background: rgba(255, 138, 138, 0.065);
   }
   .runtime p { margin: 0; color: #cfc7dd; font-size: 0.82rem; line-height: 1.5; }
   .runtime strong { color: #fff; }
+  .section { scroll-margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .section > h2 {
+    margin: 8px 0 0;
+    color: var(--role);
+    font: 700 0.72rem/1.3 Consolas, "Courier New", monospace;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+  .section > h2 small { color: #756c87; font-weight: 400; letter-spacing: 0.04em; text-transform: none; }
   .build {
-    --role: var(--paladin);
     --rgb: 255, 215, 107;
-    scroll-margin-top: 18px;
     overflow: hidden;
     border: 1px solid rgba(var(--rgb), 0.25);
     border-left: 4px solid var(--role);
     border-radius: 10px;
     background: linear-gradient(110deg, rgba(var(--rgb), 0.05), transparent 34%), rgba(23, 19, 38, 0.86);
   }
-  .build--monk { --role: var(--monk); --rgb: 169, 237, 130; }
-  .build--warrior { --role: var(--warrior); --rgb: 255, 138, 138; }
-  .build--cleric { --role: var(--cleric); --rgb: 138, 180, 255; }
+  .section--damage { --role: var(--damage); --rgb: 255, 138, 138; }
+  .section--tank { --role: var(--tank); --rgb: 138, 180, 255; }
+  .section--healing { --role: var(--healing); --rgb: 169, 237, 130; }
   .build__head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 24px;
     align-items: end;
-    padding: 22px 24px 18px;
+    padding: 20px 24px 16px;
     border-bottom: 1px solid rgba(var(--rgb), 0.16);
   }
   .role-label { color: var(--role); }
-  .build h2 { margin: 3px 0 0; font: 700 1.65rem/1.15 Georgia, "Times New Roman", serif; }
+  .build h3 { margin: 3px 0 0; font: 700 1.5rem/1.15 Georgia, "Times New Roman", serif; }
   .build__subtitle { margin: 5px 0 0; color: #a99fbb; font-size: 0.82rem; line-height: 1.45; }
   .headline-metric { min-width: 190px; text-align: right; }
-  .headline-metric span,
-  .headline-metric small { display: block; }
+  .headline-metric span, .headline-metric small { display: block; }
   .headline-metric span { color: #8f85a2; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; }
   .headline-metric strong { display: block; color: var(--role); font: 700 1.45rem/1.3 Consolas, "Courier New", monospace; }
   .headline-metric small { color: #756c87; font-size: 0.68rem; }
-  .build__grid {
-    display: grid;
-    grid-template-columns: minmax(230px, 0.85fr) minmax(300px, 1.15fr) minmax(230px, 0.85fr);
-  }
-  .block { min-width: 0; padding: 20px 21px; border-right: 1px solid var(--rule); }
+  .build__grid { display: grid; grid-template-columns: minmax(230px, 0.9fr) minmax(300px, 1.1fr) minmax(230px, 0.9fr); }
+  .block { min-width: 0; padding: 18px 21px; border-right: 1px solid var(--rule); }
   .block:last-child { border-right: 0; }
-  .block h3 {
+  .block h4 {
     display: flex;
     justify-content: space-between;
     gap: 10px;
@@ -197,13 +167,12 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .block h3 span { color: #706681; font-weight: 400; white-space: nowrap; }
+  .block h4 span { color: #706681; font-weight: 400; white-space: nowrap; }
   .passives { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin: 0; padding: 0; list-style: none; }
   .passives li {
     display: flex;
     justify-content: space-between;
     gap: 8px;
-    margin: 0;
     padding: 0 0 5px;
     border-bottom: 1px dotted rgba(var(--rgb), 0.18);
     color: #c8c0d5;
@@ -212,15 +181,49 @@
   }
   .passives b { color: var(--role); font-family: Consolas, "Courier New", monospace; }
   .gear { width: 100%; border-collapse: collapse; }
-  .gear th,
-  .gear td { padding: 6px 0; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; font-size: 0.71rem; line-height: 1.45; }
-  .gear tr:last-child th,
-  .gear tr:last-child td { border-bottom: 0; }
+  .gear th, .gear td { padding: 6px 0; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; font-size: 0.71rem; line-height: 1.45; }
+  .gear tr:last-child th, .gear tr:last-child td { border-bottom: 0; }
   .gear th { width: 62px; padding-right: 9px; color: var(--role); font: 700 0.64rem/1.5 Consolas, "Courier New", monospace; text-transform: uppercase; }
   .gear td { color: #bdb5ca; }
-  .reasons { margin: 0; padding-left: 16px; }
-  .reasons li { margin: 0 0 9px; color: #bdb5ca; font-size: 0.73rem; line-height: 1.5; }
-  .reasons li::marker { color: var(--role); }
+  .stats { margin: 0; padding: 0; list-style: none; }
+  .stats li { display: flex; justify-content: space-between; gap: 10px; padding: 0 0 6px; color: #bdb5ca; font-size: 0.73rem; }
+  .stats b { color: #ece6f7; font-family: Consolas, "Courier New", monospace; font-weight: 400; }
+  /* Apply strip — the only actionable part of the page. Same pill language as
+     the Passives page's Memories card, since it drives the same endpoints. */
+  .apply {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 12px 21px;
+    border-top: 1px solid rgba(var(--rgb), 0.16);
+    background: rgba(255, 255, 255, 0.015);
+  }
+  .apply select {
+    background: #1c1830;
+    color: var(--text);
+    border: 1px solid rgba(160, 140, 255, 0.3);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.74rem;
+    max-width: 260px;
+  }
+  .btn-go {
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #fff;
+    background: #7c5cff;
+    border: 1px solid #7c5cff;
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .btn-go:hover:not(:disabled) { background: #9375ff; border-color: #9375ff; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .apply .note { color: #8a7fb0; font-size: 0.72rem; }
+  .apply .note.bad { color: #ff8080; }
+  .apply .note.good { color: var(--gold); }
   .method {
     display: grid;
     grid-template-columns: 150px minmax(0, 1fr);
@@ -239,10 +242,9 @@
     .dossier { grid-template-columns: 1fr; }
     .rail { position: static; }
     .constraints { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
-    .rail nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .rail nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .hero { padding: 25px 22px; }
-    .runtime,
-    .method { grid-template-columns: 1fr; gap: 7px; }
+    .runtime, .method { grid-template-columns: 1fr; gap: 7px; }
   }
   @media (max-width: 560px) {
     html { scroll-behavior: auto; }
@@ -261,207 +263,456 @@
   <aside class="rail" aria-label="Build guide navigation">
     <div class="rail__seal">
       <p class="eyebrow">Build boundary</p>
-      <strong>119</strong>
+      <strong id="railLevel">—</strong>
       <small>Reachable power, not rare-drop fantasy.</small>
     </div>
-    <dl class="constraints">
-      <div><dt>Passives</dt><dd>30 points</dd></div>
-      <div><dt>Items</dt><dd>5 slots</dd></div>
-      <div><dt>Modifiers</dt><dd>4 per item</dd></div>
-      <div><dt>Rare states</dt><dd>None</dd></div>
-    </dl>
+    <dl class="constraints" id="railConstraints"></dl>
     <nav>
-      <a href="#overall">Most broken · Paladin</a>
-      <a href="#damage">Damage · Monk</a>
-      <a href="#tank">Tank · Warrior</a>
-      <a href="#healer">Healer · Cleric</a>
+      <a href="#obs-damage">Observed · damage</a>
+      <a href="#obs-tank">Observed · tank</a>
+      <a href="#obs-healing">Observed · healing</a>
+      <a href="#damage">Solver · damage</a>
+      <a href="#tank">Solver · tank</a>
+      <a href="#healing">Solver · healing</a>
     </nav>
   </aside>
 
   <div class="content">
     <header class="hero">
-      <p class="eyebrow">Owner dossier · current source audit</p>
-      <h1>Level-119 ladder builds</h1>
-      <p>The strongest legal setups under ordinary four-mod gearing. Every allocation totals 30 points; every gear row uses exactly four standard modifiers.</p>
+      <p class="eyebrow">Owner dossier · solver output</p>
+      <h1 id="heroTitle">Ladder builds</h1>
+      <p>Two boards. <strong>Observed</strong> ranks real players on what they actually did in the
+        last fights the game still remembers — their live tree is fetched on demand. <strong>Solver</strong>
+        is the theoretical ceiling from the same advisor math the site scores players with, gear and
+        tree optimized together per objective. Either can be written into one of your Memory slots.</p>
     </header>
 
     <aside class="runtime">
       <span class="utility-label">Live scheduler</span>
-      <p>Player actions are clamped to a <strong>200ms minimum</strong> during combat. Sheet intervals around 50–95ms are pre-combat values and can overstate real throughput by roughly 2–4×.</p>
+      <p>Player actions are clamped to a <strong>200ms minimum</strong> during combat. Solver intervals
+        below that are pre-combat values and overstate real throughput.</p>
     </aside>
 
-    <article class="build" id="overall">
-      <header class="build__head">
-        <div>
-          <p class="role-label">Most broken overall</p>
-          <h2>Paladin · Radiant Wildfire</h2>
-          <p class="build__subtitle">The best total package: capped live speed, healing-fed damage, shields, cleanse, mitigation, and reflect.</p>
-        </div>
-        <div class="headline-metric"><span>Direct healing</span><strong>53.2M / sec</strong><small>before Smite, Holy Fire, and shields</small></div>
-      </header>
-      <div class="build__grid">
-        <section class="block">
-          <h3>Passives <span>30 / 30</span></h3>
-          <ul class="passives">
-            <li><span>Radiant Smite</span><b>3</b></li><li><span>Holy Fire</span><b>4</b></li>
-            <li><span>Wildfire</span><b>3</b></li><li><span>Purging Flame</span><b>1</b></li>
-            <li><span>Zealotry</span><b>4</b></li><li><span>Desperate Grace</span><b>3</b></li>
-            <li><span>United Front</span><b>3</b></li><li><span>Judgment</span><b>3</b></li>
-            <li><span>Divine Shield</span><b>3</b></li><li><span>Retribution Aura</span><b>3</b></li>
-          </ul>
-        </section>
-        <section class="block">
-          <h3>Gear <span>4 mods each</span></h3>
-          <table class="gear"><tbody>
-            <tr><th>Weapon</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
-            <tr><th>Helm</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
-            <tr><th>Body</th><td>Damage · Crit chance · Crit multiplier · Splash</td></tr>
-            <tr><th>Gloves</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
-            <tr><th>Boots</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
-          </tbody></table>
-        </section>
-        <section class="block">
-          <h3>Why it wins</h3>
-          <ul class="reasons">
-            <li>Holy Fire converts 45% of actual restored healing into a fresh damage roll.</li>
-            <li>Radiant Smite layers another offensive event over the primary action.</li>
-            <li>Divine Shield, United Front, cleanse, and Retribution Aura keep the engine alive without sacrificing output.</li>
-          </ul>
-        </section>
-      </div>
-    </article>
-
-    <article class="build build--monk" id="damage">
-      <header class="build__head">
-        <div>
-          <p class="role-label">Damage ceiling</p>
-          <h2>Monk · Hundred-Point Pressure</h2>
-          <p class="build__subtitle">Best sustained single-target damage after evasion, defenses, Vital Points, and Chakra stacks are fully ramped.</p>
-        </div>
-        <div class="headline-metric"><span>Hypothetical DPS</span><strong>124M boss</strong><small>491M zero-defense dummy · 395ms interval</small></div>
-      </header>
-      <div class="build__grid">
-        <section class="block">
-          <h3>Passives <span>30 / 30</span></h3>
-          <ul class="passives">
-            <li><span>Flowing Strikes</span><b>3</b></li><li><span>Hundred Fists</span><b>4</b></li>
-            <li><span>Chakra of Many</span><b>3</b></li><li><span>Chakra of Light</span><b>3</b></li>
-            <li><span>Pressure Point</span><b>4</b></li><li><span>Vital Points</span><b>3</b></li>
-            <li><span>Iron Body</span><b>1</b></li><li><span>Unbroken</span><b>4</b></li>
-            <li><span>Crippling Grip</span><b>3</b></li><li><span>Stone Fist</span><b>2</b></li>
-          </ul>
-        </section>
-        <section class="block">
-          <h3>Gear <span>4 mods each</span></h3>
-          <table class="gear"><tbody>
-            <tr><th>Weapon</th><td>Damage · Crit chance · Crit multiplier · Lightning</td></tr>
-            <tr><th>Helm</th><td>Damage · Crit chance · Crit multiplier · Lightning</td></tr>
-            <tr><th>Body</th><td>Damage · Crit chance · Crit multiplier · Evasion</td></tr>
-            <tr><th>Gloves</th><td>Damage · Crit chance · Crit multiplier · Evasion</td></tr>
-            <tr><th>Boots</th><td>Damage · Crit chance · Crit multiplier · Evasion</td></tr>
-          </tbody></table>
-        </section>
-        <section class="block">
-          <h3>Ramp assumptions</h3>
-          <ul class="reasons">
-            <li>Unbroken removes 75% evasion; Crippling Grip reaches −75 defense and Vital Points reaches −66.</li>
-            <li>Chakra of Light reaches its 200-stack ceiling; primary and clone events both contribute.</li>
-            <li>Chakra of Many supplies a real 30% follow-up hit. The estimate uses neutral stage-119 boss jitter.</li>
-          </ul>
-        </section>
-      </div>
-    </article>
-
-    <article class="build build--warrior" id="tank">
-      <header class="build__head">
-        <div>
-          <p class="role-label">Tank ceiling</p>
-          <h2>Warrior · Three-Wall Fortress</h2>
-          <p class="build__subtitle">The strongest ordinary-gear durability stack: life, avoidance, block reduction, opening auto-blocks, and counter-healing.</p>
-        </div>
-        <div class="headline-metric"><span>Hypothetical durability</span><strong>7.80M EHP</strong><small>183,194 HP · 14.17M EHP vs crits</small></div>
-      </header>
-      <div class="build__grid">
-        <section class="block">
-          <h3>Passives <span>30 / 30</span></h3>
-          <ul class="passives">
-            <li><span>Bulwark</span><b>3</b></li><li><span>Unbreakable</span><b>4</b></li>
-            <li><span>Fortress</span><b>3</b></li><li><span>Second Skin</span><b>3</b></li>
-            <li><span>Stonewall</span><b>3</b></li><li><span>Juggernaut</span><b>3</b></li>
-            <li><span>Colossus</span><b>4</b></li><li><span>Immovable</span><b>3</b></li>
-            <li><span>Retaliation</span><b>1</b></li><li><span>Bloodied Resolve</span><b>3</b></li>
-          </ul>
-        </section>
-        <section class="block">
-          <h3>Gear <span>4 mods each</span></h3>
-          <table class="gear"><tbody>
-            <tr><th>Weapon</th><td>Increased life · Flat life · Damage reduction · Block</td></tr>
-            <tr><th>Helm</th><td>Increased life · Flat life · Evasion · Block</td></tr>
-            <tr><th>Body</th><td>Increased life · Flat life · Damage reduction · Evasion</td></tr>
-            <tr><th>Gloves</th><td>Increased life · Flat life · Damage reduction · Block</td></tr>
-            <tr><th>Boots</th><td>Increased life · Flat life · Evasion · Block</td></tr>
-          </tbody></table>
-        </section>
-        <section class="block">
-          <h3>Defensive stack</h3>
-          <ul class="reasons">
-            <li>76.5% effective damage reduction · 75% evasion · 80% block.</li>
-            <li>Blocked hits lose another 75%; the first three incoming attacks auto-block.</li>
-            <li>Crit damage is reduced by another 45%; Retaliation heals 20% of counter damage.</li>
-          </ul>
-        </section>
-      </div>
-    </article>
-
-    <article class="build build--cleric" id="healer">
-      <header class="build__head">
-        <div>
-          <p class="role-label">Healing ceiling</p>
-          <h2>Cleric · Unbroken Chain</h2>
-          <p class="build__subtitle">The live speed floor moves the optimum away from extra cadence and into larger crit heals, chains, shields, and splash coverage.</p>
-        </div>
-        <div class="headline-metric"><span>Hypothetical healing</span><strong>84.5M / sec</strong><small>direct healing before chains and shielding</small></div>
-      </header>
-      <div class="build__grid">
-        <section class="block">
-          <h3>Passives <span>30 / 30</span></h3>
-          <ul class="passives">
-            <li><span>Divine Grace</span><b>1</b></li><li><span>Sanctified Touch</span><b>4</b></li>
-            <li><span>Holy Crit</span><b>3</b></li><li><span>Prayer of Mending</span><b>3</b></li>
-            <li><span>Chain of Light</span><b>4</b></li><li><span>Swift Mending</span><b>3</b></li>
-            <li><span>Unbroken Prayer</span><b>3</b></li><li><span>Merciful Touch</span><b>4</b></li>
-            <li><span>Gentle Touch</span><b>3</b></li><li><span>Divine Favor</span><b>2</b></li>
-          </ul>
-        </section>
-        <section class="block">
-          <h3>Gear <span>4 mods each</span></h3>
-          <table class="gear"><tbody>
-            <tr><th>Weapon</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
-            <tr><th>Helm</th><td>Damage · Crit chance · Crit multiplier · Divine</td></tr>
-            <tr><th>Body</th><td>Damage · Crit chance · Crit multiplier · Splash</td></tr>
-            <tr><th>Gloves</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
-            <tr><th>Boots</th><td>Damage · Crit chance · Crit multiplier · Damage reduction</td></tr>
-          </tbody></table>
-        </section>
-        <section class="block">
-          <h3>Coverage engine</h3>
-          <ul class="reasons">
-            <li>Prayer triggers at 65%; bounces retain 95%, continue at 45%, and can reach four bounces.</li>
-            <li>Divine Favor turns 40% into shielding; Holy Crit adds an 80% extra-heal event.</li>
-            <li>Splash reaches four additional hurt targets, so 84.5M/sec is the baseline rather than the whole result.</li>
-          </ul>
-        </section>
-      </div>
-    </article>
+    <div id="observed"></div>
+    <div id="sections"></div>
 
     <footer class="method">
       <p class="utility-label">Calculation boundary</p>
-      <p>Tier-119 gear, maximum ordinary affix rolls and polish, full durability, and neutral boss power/jitter. No fifth modifiers, Split Personality, Sacred, Perfect, Celestial or unique affixes, Krangled items, or other rare-drop states. These are achievable ceilings, not average-drop expectations.</p>
+      <p id="ruleset"></p>
     </footer>
   </div>
 </main>
+
 <script>
-  document.title = `${window.GAME_NAME || 'Path of Dust'} — Owner Build Dossier`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const fmt = (n) => {
+    n = +n || 0;
+    for (const [d, s] of [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']]) if (n >= d) return (n / d).toFixed(1) + s;
+    return n.toFixed(0);
+  };
+  const pct = (x) => (x * 100).toFixed(1) + '%';
+  // Fight records carry the archetype lowercased ("warlock"); everything else
+  // here — the node index, the class picker, the site itself — says "Warlock".
+  const cap = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
+  const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
+
+  // Only the three roles asked for. `overall` stays in the JSON for the tool's
+  // own report — this page is the per-role board.
+  const ROLES = [
+    { key: 'damage', title: 'Damage', metric: 'dps', label: 'Hypothetical DPS', unit: '/ sec' },
+    { key: 'tank', title: 'Tank', metric: 'ehp', label: 'Effective HP', unit: 'EHP' },
+    { key: 'healing', title: 'Healing', metric: 'hps', label: 'Hypothetical healing', unit: '/ sec' },
+  ];
+
+  // Observed board: same three roles, measured off /api/fights instead of solved.
+  // Tank is "damage soaked per second" — the only durability signal a fight log
+  // carries. It rewards a tank that actually held aggro, so deaths ride along
+  // beside it: a squishy player who ate one hit and died scores low on both.
+  const OBS_ROLES = [
+    { key: 'damage', title: 'Damage', metric: 'dps', label: 'Damage / sec' },
+    { key: 'tank', title: 'Tank', metric: 'tps', label: 'Damage soaked / sec' },
+    { key: 'healing', title: 'Healing', metric: 'hps', label: 'Healing / sec' },
+  ];
+  // One fight is a coin flip (boss roll, party composition, who got focused).
+  // Two is still thin, but it's the floor at which a name means anything.
+  const MIN_FIGHTS = 2;
+
+  let data = null;       // tools/best-builds.json
+  let live = null;       // { cls, level, options, memories } — null while the game is unreachable
+  let observed = null;   // { damage: [...], tank: [...], healing: [...], fights, from, to }
+  const trees = {};      // login -> { alloc, skipped, cls } once fetched
+
+  async function api(endpoint, fields) {
+    return fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
+  }
+
+  async function loadLive() {
+    try {
+      const [me, p] = await Promise.all([
+        fetch('/api/me').then(r => r.json()),
+        fetch('/api/passives').then(r => r.json()),
+      ]);
+      if (me.name) document.title = `${window.GAME_NAME || 'Path of Dust'} — Build Dossier — ${me.name}`;
+      const lv = (me.nav || '').match(/Lv\s*(\d+)/);
+      live = {
+        cls: (me.archetype && me.archetype.current) || '',
+        level: lv ? +lv[1] : 0,
+        options: (me.archetype && me.archetype.options) || [],
+        memories: p.memories || [],
+        totalPoints: +(String(p.points || '').match(/\/\s*(\d+)/) || [])[1] || 0, // "3/30 unspent"
+        // A respec refunds the PRIMARY tree only (known game bug), so points
+        // parked in a 2nd-class tree stay spent and eat the same budget this
+        // build needs. Worth saying before the click, not after.
+        secondarySpent: (p.secondary && p.secondary.nodes || [])
+          .some(n => +(String(n.rank || '').match(/^(\d+)\s*\//) || [])[1] > 0),
+      };
+    } catch { live = null; }
+  }
+
+  // ---- Observed board ------------------------------------------------------
+  // /api/fights is the game's own summary tier. The streamer login gets it
+  // unfiltered (every fight the server still holds, not just their own), which
+  // is the whole population this board ranks; anyone else only ever sees fights
+  // they were in, so the board degrades to "me and whoever I fought with".
+  async function loadObserved() {
+    let r;
+    try { r = await fetch('/api/fights').then(x => x.json()); } catch { return; }
+    const fights = (r.fights || []).filter(f => f && Array.isArray(f.players));
+    if (!fights.length) return;
+    const by = new Map();
+    for (const f of fights) {
+      // realDurationMs is fight time; displayDurationMs is the compressed
+      // playback clock. Rates have to divide by the real one.
+      const secs = (f.realDurationMs || f.displayDurationMs || 0) / 1000;
+      if (!secs) continue;
+      for (const p of f.players) {
+        if (!p || !p.id) continue;
+        const e = by.get(p.id) || { id: p.id, name: p.id, cls: '', fights: 0, secs: 0, dmg: 0, heal: 0, taken: 0, deaths: 0 };
+        if (p.displayName) e.name = p.displayName;
+        if (p.archetype) e.cls = cap(p.archetype); // recorded per fight, so it survives a later respec
+        e.fights++; e.secs += secs;
+        e.dmg += +p.damageDealt || 0;
+        e.heal += +p.healingDone || 0;
+        e.taken += +p.damageTaken || 0;
+        if (f.firstToDie === p.id) e.deaths++;
+        by.set(p.id, e);
+      }
+    }
+    const all = [...by.values()].map(e => ({ ...e, dps: e.dmg / e.secs, hps: e.heal / e.secs, tps: e.taken / e.secs }));
+    // Prefer players with a couple of fights behind them, but never show an
+    // empty board just because the window was short.
+    const pool = all.filter(e => e.fights >= MIN_FIGHTS).length ? all.filter(e => e.fights >= MIN_FIGHTS) : all;
+    const stamps = fights.map(f => +f.startedAtUnixMs || 0).filter(Boolean);
+    observed = { fights: fights.length, source: r.source || 'summary', players: pool.length,
+      from: stamps.length ? Math.min(...stamps) : 0, to: stamps.length ? Math.max(...stamps) : 0 };
+    for (const role of OBS_ROLES) {
+      observed[role.key] = pool.filter(e => e[role.metric] > 0)
+        .sort((a, z) => z[role.metric] - a[role.metric]).slice(0, 3);
+    }
+  }
+
+  function obsCard(role, e, rank) {
+    return `<article class="build" data-src="obs" data-role="${role.key}" data-rank="${rank}"
+              data-login="${esc(e.id)}" data-cls="${esc(e.cls)}">
+      <header class="build__head">
+        <div>
+          <p class="role-label">#${rank + 1} ${esc(role.title)} · observed</p>
+          <h3>${esc(e.name)}</h3>
+          <p class="build__subtitle">${esc(e.cls || 'unknown class')} · ${e.fights} fights · ${(e.secs / 60).toFixed(1)} min of combat${e.deaths ? ` · first to die ${e.deaths}×` : ''}</p>
+        </div>
+        <div class="headline-metric">
+          <span>${esc(role.label)}</span><strong>${fmt(e[role.metric])}</strong>
+          <small>${fmt(e.dmg)} dealt · ${fmt(e.taken)} taken · ${fmt(e.heal)} healed</small>
+        </div>
+      </header>
+      <div class="build__grid">
+        <section class="block" style="grid-column: 1 / -1">
+          <h4>Passives <span class="treeMeta">not fetched</span></h4>
+          <ul class="passives treeBody"><li><span>Fetch their tree to see the loadout.</span></li></ul>
+        </section>
+      </div>
+      <div class="apply">
+        <button class="btn-go" data-act="tree">Fetch tree</button>
+        <span class="utility-label">Copy passives to</span>
+        <select class="slotSel" aria-label="Memory slot"></select>
+        <button class="btn-go" data-act="apply" disabled>Write build</button>
+        <span class="note"></span>
+      </div>
+    </article>`;
+  }
+
+  // A read-only /characters/:login/passives page carries no form, so its nodes
+  // have NO node_key — only names and "2 / 4" ranks. Map them back through the
+  // shipped node index, then order them the way the game's own Memory replay
+  // does (tier order, parent before child) so no allocate call is refused.
+  const TIERS = ['skill', 'spec', 'modifier'];
+  function orderAlloc(cls, ranked) {
+    const idx = data.nodes[Object.keys(data.nodes).find(k => k.toLowerCase() === String(cls).toLowerCase())] || [];
+    const byName = new Map(idx.map(n => [n.name.toLowerCase(), n]));
+    const rows = [], skipped = [];
+    for (const r of ranked) {
+      const n = byName.get(r.name.toLowerCase());
+      if (!n) { skipped.push(r.name); continue; }
+      rows.push({ key: n.key, name: n.name, rank: Math.min(r.rank, n.max), tier: n.tier, parent: n.parent, unlockAt: n.unlockAt });
+    }
+    rows.sort((a, z) => TIERS.indexOf(a.tier) - TIERS.indexOf(z.tier));
+    const alloc = [], done = new Set();
+    while (rows.length) {
+      const i = rows.findIndex(r => !r.parent || (done.has(r.parent) && true));
+      if (i < 0) break; // parent missing from the scrape — the rest can't be placed
+      const [r] = rows.splice(i, 1);
+      done.add(r.key);
+      alloc.push(r);
+    }
+    return { alloc, skipped: skipped.concat(rows.map(r => r.name)) };
+  }
+
+  async function fetchTree(card, btn) {
+    const login = card.dataset.login;
+    const note = card.querySelector('.note');
+    btn.disabled = true;
+    try {
+      let t = trees[login];
+      if (!t) {
+        const p = await fetch('/api/character-passives?login=' + encodeURIComponent(login)).then(r => r.json());
+        if (p.notFound || p.noTree) throw new Error('no visible tree for this player');
+        // "2 / 4" -> 2. Unallocated nodes and the root node fall out here.
+        const ranked = (p.nodes || []).map(n => ({ name: String(n.name || '').replace(/\s*\(.*\)$/, ''),
+          rank: +(String(n.rank || '').match(/^(\d+)/) || [])[1] || 0 })).filter(n => n.name && n.rank > 0);
+        // The class on the fight record is HISTORICAL (recorded per fight, so a
+        // later respec can't rewrite it); the tree we just scraped belongs to
+        // whatever they play NOW. Map node names against the scraped class —
+        // using the fight's would silently drop every node — and say so when
+        // the two disagree, because then this tree is not the one that posted
+        // the numbers above it. "Berserker · Level 219" -> "Berserker".
+        const now = cap(String(p.archetype || '').split('·')[0].trim());
+        const cls = now || card.dataset.cls || '';
+        t = trees[login] = { cls, was: card.dataset.cls || '', ...orderAlloc(cls, ranked),
+          // Equipped-but-empty doesn't count — only points actually parked there.
+          secondary: (p.secondary && p.secondary.nodes || []).some(n => /^[1-9]/.test(String(n.rank || ''))) };
+      }
+      const points = t.alloc.reduce((a, n) => a + n.rank, 0);
+      card.querySelector('.treeMeta').textContent = `${points} points · ${t.alloc.length} nodes`
+        + (t.skipped.length ? ` · ${t.skipped.length} unmapped` : '');
+      card.querySelector('.treeBody').innerHTML = t.alloc.map(n =>
+        `<li><span>${esc(n.name)}</span><b>${n.rank}</b></li>`).join('')
+        || '<li><span>Nothing allocated.</span></li>';
+      const drift = t.was && t.was.toLowerCase() !== t.cls.toLowerCase()
+        ? `They play ${t.cls} now — this is not the ${t.was} tree that posted those numbers. ` : '';
+      note.className = 'note' + (drift ? ' bad' : '');
+      // Split Personality parks half a build in the 2nd tree; nothing here can
+      // reproduce that (the site only takes points into whichever tree the
+      // unique is currently pointing at), so it never silently looks complete.
+      const split = t.secondary ? 'They run a 2nd class tree — only the primary is copied. ' : '';
+      note.textContent = drift + split + (t.skipped.length ? `Skipped: ${t.skipped.join(', ')}` : '');
+      renderSlots();
+    } catch (e) {
+      note.className = 'note bad';
+      note.textContent = String(e.message || e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderObserved() {
+    if (!observed) {
+      $('observed').innerHTML = '<section class="section"><h2>Observed</h2>'
+        + '<p class="build__subtitle">No fight summaries available — the game server has none stored, or it predates the summary tier.</p></section>';
+      return;
+    }
+    const when = observed.to ? new Date(observed.from).toLocaleString() + ' → ' + new Date(observed.to).toLocaleString() : '';
+    $('observed').innerHTML = OBS_ROLES.map(role => `
+      <section class="section section--${role.key}" id="obs-${role.key}">
+        <h2>${esc(role.title)} — observed top 3
+          <small>last ${observed.fights} fights · ${observed.players} players · ${esc(when)}</small></h2>
+        ${(observed[role.key] || []).map((e, i) => obsCard(role, e, i)).join('')}
+      </section>`).join('');
+  }
+
+  function buildCard(role, b, rank) {
+    const metric = b[role.metric];
+    const passives = b.alloc.map(n => `<li><span>${esc(n.name)}</span><b>${n.rank}</b></li>`).join('');
+    const points = b.alloc.reduce((a, n) => a + n.rank, 0);
+    const gear = SLOTS.map(s => `<tr><th>${s}</th><td>${esc((b.gear[s] || []).join(' · '))}</td></tr>`).join('');
+    return `<article class="build" data-role="${role.key}" data-rank="${rank}">
+      <header class="build__head">
+        <div>
+          <p class="role-label">#${rank + 1} ${esc(role.title)}</p>
+          <h3>${esc(b.cls)}</h3>
+          <p class="build__subtitle">${esc(b.cls)} at level ${data.level}, tier ${data.tier} gear, ${points} passive points.</p>
+        </div>
+        <div class="headline-metric">
+          <span>${esc(role.label)}</span><strong>${fmt(metric)}</strong><small>${esc(role.unit)}</small>
+        </div>
+      </header>
+      <div class="build__grid">
+        <section class="block">
+          <h4>Passives <span>${points} / ${data.points}</span></h4>
+          <ul class="passives">${passives}</ul>
+        </section>
+        <section class="block">
+          <h4>Gear <span>4 mods each</span></h4>
+          <table class="gear"><tbody>${gear}</tbody></table>
+          <p class="build__subtitle">Sacred: ${esc(b.sacred || '—')}</p>
+        </section>
+        <section class="block">
+          <h4>Numbers</h4>
+          <ul class="stats">
+            <li><span>DPS</span><b>${fmt(b.dps)}</b></li>
+            <li><span>Healing / sec</span><b>${fmt(b.hps)}</b></li>
+            <li><span>Effective HP</span><b>${fmt(b.ehp)}</b></li>
+            <li><span>Max HP</span><b>${fmt(b.hp)}</b></li>
+            <li><span>Increased damage</span><b>${pct(b.inc)}</b></li>
+            <li><span>Crit chance / mult</span><b>${b.critChance.toFixed(1)} / ${b.critMult.toFixed(1)}</b></li>
+            <li><span>DR / block / evasion</span><b>${pct(b.eff.dr)} · ${pct(b.eff.block)} · ${pct(b.eff.evasion)}</b></li>
+            <li><span>Action interval</span><b>${b.intervalMs.toFixed(0)}ms</b></li>
+          </ul>
+        </section>
+      </div>
+      <div class="apply">
+        <span class="utility-label">Copy passives to</span>
+        <select class="slotSel" aria-label="Memory slot"></select>
+        <button class="btn-go" data-act="apply">Write build</button>
+        <span class="note"></span>
+      </div>
+    </article>`;
+  }
+
+  function render() {
+    $('railLevel').textContent = data.level;
+    $('heroTitle').textContent = `Level-${data.level} ladder builds`;
+    $('railConstraints').innerHTML = [
+      ['Passives', `${data.points} points`], ['Gear tier', `t${data.tier}`],
+      ['Items', '5 slots'], ['Modifiers', '4 + 1 Sacred'], ['Rare states', 'None'],
+    ].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+    $('ruleset').textContent = data.ruleset;
+    $('sections').innerHTML = ROLES.map(role => `
+      <section class="section section--${role.key}" id="${role.key}">
+        <h2>${esc(role.title)} — top 3 <small>by ${esc(role.metric)}</small></h2>
+        ${(data.results[role.key] || []).slice(0, 3).map((b, i) => buildCard(role, b, i)).join('')}
+      </section>`).join('');
+    renderObserved();
+    renderSlots();
+    document.querySelectorAll('button[data-act="apply"]').forEach(btn => {
+      btn.onclick = () => applyBuild(btn.closest('.build'), btn);
+    });
+    document.querySelectorAll('button[data-act="tree"]').forEach(btn => {
+      btn.onclick = () => fetchTree(btn.closest('.build'), btn);
+    });
+  }
+
+  // Slot pickers mirror the Passives page's Memories card: the site's own slot
+  // number, never our array index, and empty slots are offered too.
+  function renderSlots() {
+    const opts = !live ? '' : live.memories.map(m =>
+      `<option value="${m.slot}">Slot ${m.slot + 1} — ${esc(m.filled ? m.name : 'empty')}</option>`).join('');
+    document.querySelectorAll('.build').forEach(card => {
+      const sel = card.querySelector('.slotSel');
+      const btn = card.querySelector('button[data-act="apply"]');
+      const keep = sel.value;
+      sel.innerHTML = opts || '<option>—</option>';
+      if (keep) sel.value = keep;
+      // An observed card has nothing to write until its tree has been fetched.
+      const ok = !!(live && live.memories.length) && (card.dataset.src !== 'obs' || !!trees[card.dataset.login]);
+      sel.disabled = !(live && live.memories.length);
+      btn.disabled = !ok;
+      if (!live || !live.memories.length) {
+        card.querySelector('.note').textContent = live ? 'No Memory slots on this character.' : 'Game unreachable.';
+      }
+    });
+  }
+
+  // Both boards end up as the same thing: a class plus an ordered list of
+  // {key, name, rank}. Solver builds ship theirs; observed ones are scraped.
+  function buildOf(card) {
+    if (card.dataset.src !== 'obs') {
+      const b = data.results[card.dataset.role][+card.dataset.rank];
+      return { cls: b.cls, alloc: b.alloc, label: `${b.cls} ${card.dataset.role}` };
+    }
+    const t = trees[card.dataset.login];
+    if (!t) return null;
+    return { cls: t.cls, alloc: t.alloc, label: `${t.cls} ${card.dataset.role}`.trim() };
+  }
+
+  // Write a dossier build into the live tree, then snapshot it into a Memory.
+  // The site has no "import a build" endpoint — a Memory can only be saved FROM
+  // the current tree — so this is the same sequence a player would click:
+  // clear the tree (class change if the class differs, otherwise a respec),
+  // allocate every node in tier order, save, then save the slot.
+  async function applyBuild(card, btn) {
+    const b = buildOf(card);
+    const slot = card.querySelector('.slotSel').value;
+    const mem = live.memories.find(m => String(m.slot) === String(slot));
+    const note = card.querySelector('.note');
+    const say = (t, cls) => { note.className = 'note' + (cls ? ' ' + cls : ''); note.textContent = t; };
+    if (!b || !b.alloc.length) return say('Nothing to write — fetch the tree first.', 'bad');
+    if (!b.cls) return say('Unknown class for this player — can\'t write their tree.', 'bad');
+
+    const changingClass = live.cls && live.cls.toLowerCase() !== b.cls.toLowerCase();
+    const option = live.options.find(o => (o.value || '').toLowerCase() === b.cls.toLowerCase()
+      || (o.label || '').toLowerCase() === b.cls.toLowerCase());
+    if (changingClass && !option) return say(`Can't switch to ${b.cls} from here.`, 'bad');
+
+    const points = b.alloc.reduce((a, n) => a + n.rank, 0);
+    // "3/30 unspent" on our own passives page — the second number is the budget
+    // a respec hands back. A build that can't fit is refused before it costs a
+    // respec, rather than dying halfway through the allocate loop.
+    if (live.totalPoints && points > live.totalPoints) {
+      return say(`That build needs ${points} points; you have ${live.totalPoints}.`, 'bad');
+    }
+    const warn = [
+      `Write the ${b.cls} ${card.dataset.role} build into Memory slot ${+slot + 1}${mem && mem.filled ? ` (overwrites "${mem.name}")` : ''}?`,
+      '',
+      changingClass
+        ? `• Changes your class from ${live.cls} to ${b.cls}. That costs a free class change or dust, and clears your current tree.`
+        : '• Respecs your passive tree. That costs a free respec token or dust.',
+      `• Allocates ${points} points across ${b.alloc.length} nodes and saves the tree.`,
+      '• Your current build is replaced. Save it to another slot first if you want it back.',
+    ];
+    if (card.dataset.src !== 'obs' && live.level && live.level < data.level) warn.push(`• You are level ${live.level}; this build is designed for ${data.level}. Nodes may not fit.`);
+    if (card.dataset.src === 'obs' && trees[card.dataset.login] && trees[card.dataset.login].secondary) warn.push('• Only their PRIMARY tree is copied — their 2nd class tree is not.');
+    if (live.secondarySpent) warn.push('• Points spent in your 2nd class tree are NOT refunded by a respec and still count against the budget.');
+    if (!confirm(warn.join('\n'))) return;
+
+    btn.disabled = true;
+    try {
+      const step = async (label, endpoint, fields) => {
+        say(label + '…');
+        const r = await api(endpoint, fields);
+        if (!r.ok) throw new Error(`${label}: ${r.reason || r.status}`);
+        return r;
+      };
+      if (changingClass) await step(`Switching to ${b.cls}`, 'change-archetype', { archetype: option.value });
+      else await step('Respeccing', 'passives/respec', {});
+      for (const n of b.alloc) {
+        await step(`Allocating ${n.name}`, 'passives/allocate',
+          { node_key: n.key, secondary: 'false', delta: String(n.rank) });
+      }
+      await step('Saving tree', 'passives/save', {});
+      await step('Saving Memory', 'passives/memories/save',
+        { slot: String(slot), name: b.label.slice(0, 150) });
+      say(`Written to slot ${+slot + 1}.`, 'good');
+      await loadLive();
+      renderSlots();
+    } catch (e) {
+      // Stop at the first refusal rather than plough on — a half-applied tree is
+      // recoverable by hand, a tree built on top of a failed step is not.
+      say(String(e.message || e) + ' — stopped, tree may be partly applied.', 'bad');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  (async () => {
+    document.title = `${window.GAME_NAME || 'Path of Dust'} — Owner Build Dossier`;
+    try { data = await fetch('/tools/best-builds.json').then(r => r.json()); }
+    catch { $('sections').innerHTML = '<p class="build__subtitle">No solver output — run <code>node tools/best-builds.mjs</code>.</p>'; return; }
+    await Promise.all([loadLive(), loadObserved()]);
+    render();
+  })();
 </script>
 <script src="/autoreload.js"></script>
 </body>

@@ -36,6 +36,62 @@
      "Colossus": 4,
      "Fortress": 3
     },
+    "alloc": [
+     {
+      "key": "juggernaut",
+      "name": "Juggernaut",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "bulwark",
+      "name": "Bulwark",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "overwhelmingforce",
+      "name": "Overwhelming Force",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "unbreakable",
+      "name": "Unbreakable",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "colossus",
+      "name": "Colossus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "momentousblow",
+      "name": "Momentous Blow",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "grimresolve",
+      "name": "Grim Resolve",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "titansgrip",
+      "name": "Titan's Grip",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "fortress",
+      "name": "Fortress",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "block chance",
@@ -99,6 +155,50 @@
      "Chaos Bolt": 3,
      "Soul Exchange": 3
     },
+    "alloc": [
+     {
+      "key": "siphon",
+      "name": "Soul Siphon",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "pact",
+      "name": "Dark Pact",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "lifetap",
+      "name": "Life Tap",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "felhaste",
+      "name": "Fel Haste",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "burningrage",
+      "name": "Burning Rage",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "chaosbolt",
+      "name": "Chaos Bolt",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "soulexchange",
+      "name": "Soul Exchange",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -158,6 +258,26 @@
      "Death Wish": 4,
      "Glory Hound": 3
     },
+    "alloc": [
+     {
+      "key": "reckless",
+      "name": "Reckless Swing",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "deathwish",
+      "name": "Death Wish",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "gloryhound",
+      "name": "Glory Hound",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -219,6 +339,38 @@
      "Overgrown Reach": 3,
      "Unbroken": 4
     },
+    "alloc": [
+     {
+      "key": "ironbody",
+      "name": "Iron Body",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "stonefist",
+      "name": "Stone Fist",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "unbroken",
+      "name": "Unbroken",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "graniteskin",
+      "name": "Granite Skin",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "risingdefiance",
+      "name": "Overgrown Reach",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -283,6 +435,56 @@
      "Critical Mass": 4,
      "Mana Surge": 3
     },
+    "alloc": [
+     {
+      "key": "arcane",
+      "name": "Arcane Mastery",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "weaving",
+      "name": "Spell Weaving",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "overload",
+      "name": "Overload",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "quickcast",
+      "name": "Quickcast",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "criticalmass",
+      "name": "Critical Mass",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "cataclysm",
+      "name": "Cataclysm",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "haste",
+      "name": "Haste",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "manasurge",
+      "name": "Mana Surge",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -344,6 +546,38 @@
      "Blizzard": 3,
      "Chilling Focus": 4
     },
+    "alloc": [
+     {
+      "key": "elementalfocus",
+      "name": "Elemental Focus",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "shockingfocus",
+      "name": "Shocking Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "chillingfocus",
+      "name": "Chilling Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "electricaloverload",
+      "name": "Electrical Overload",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "hoarfrost",
+      "name": "Blizzard",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -406,6 +640,44 @@
      "Volley": 4,
      "Multishot": 1
     },
+    "alloc": [
+     {
+      "key": "fleet",
+      "name": "Fleet Step",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "multishot",
+      "name": "Multishot",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "rapidfire",
+      "name": "Rapid Fire",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "volley",
+      "name": "Volley",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "windsprint",
+      "name": "Wind Sprint",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "deadeye",
+      "name": "Deadeye",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -463,6 +735,14 @@
     "tree": {
      "Deadly Precision": 3
     },
+    "alloc": [
+     {
+      "key": "precision",
+      "name": "Deadly Precision",
+      "rank": 3,
+      "tier": "skill"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -518,6 +798,7 @@
     "splash": 4.926599999999999,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -580,6 +861,44 @@
      "Wild Agility": 3,
      "Feral Reflexes": 4
     },
+    "alloc": [
+     {
+      "key": "instinct",
+      "name": "Predator's Instinct",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "shiftingform",
+      "name": "Shifting Form",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "feralreflexes",
+      "name": "Feral Reflexes",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "primalshift",
+      "name": "Primal Shift",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "clawstrike",
+      "name": "Claw Strike",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "wildagility",
+      "name": "Wild Agility",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -635,6 +954,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -665,6 +985,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -704,6 +1025,44 @@
      "Thorned Barrier": 3,
      "Ironbark": 3
     },
+    "alloc": [
+     {
+      "key": "instinct",
+      "name": "Predator's Instinct",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "barrier",
+      "name": "Thorned Barrier",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "feralreflexes",
+      "name": "Feral Reflexes",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "livingarmor",
+      "name": "Living Armor",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "quickpaw",
+      "name": "Quick Paw",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "ironbark",
+      "name": "Ironbark",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "max hp %",
@@ -763,6 +1122,26 @@
      "Aegis Ward": 4,
      "Guardian's Oath": 1
     },
+    "alloc": [
+     {
+      "key": "oath",
+      "name": "Guardian's Oath",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "aegisward",
+      "name": "Aegis Ward",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "sanctifiedarmor",
+      "name": "Sanctified Armor",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "max hp %",
@@ -825,6 +1204,44 @@
      "Bulwark": 3,
      "Fortress": 3
     },
+    "alloc": [
+     {
+      "key": "juggernaut",
+      "name": "Juggernaut",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "bulwark",
+      "name": "Bulwark",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "colossus",
+      "name": "Colossus",
+      "rank": 3,
+      "tier": "spec"
+     },
+     {
+      "key": "unbreakable",
+      "name": "Unbreakable",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "secondskin",
+      "name": "Second Skin",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "fortress",
+      "name": "Fortress",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "max hp %",
@@ -884,6 +1301,26 @@
      "Earthen Will": 3,
      "Stone Fist": 4
     },
+    "alloc": [
+     {
+      "key": "ironbody",
+      "name": "Iron Body",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "stonefist",
+      "name": "Stone Fist",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "earthenwill",
+      "name": "Earthen Will",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "max hp %",
@@ -943,6 +1380,26 @@
      "Evasive Maneuvers": 4,
      "Fleet Step": 1
     },
+    "alloc": [
+     {
+      "key": "fleet",
+      "name": "Fleet Step",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "evasivemaneuvers",
+      "name": "Evasive Maneuvers",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "swiftwind",
+      "name": "Swift Wind",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1000,6 +1457,14 @@
     "tree": {
      "Shadowstep": 3
     },
+    "alloc": [
+     {
+      "key": "shadowstep",
+      "name": "Shadowstep",
+      "rank": 3,
+      "tier": "skill"
+     }
+    ],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1063,6 +1528,50 @@
      "Soul Exchange": 3,
      "Chaos Bolt": 3
     },
+    "alloc": [
+     {
+      "key": "siphon",
+      "name": "Soul Siphon",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "pact",
+      "name": "Dark Pact",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "lifetap",
+      "name": "Life Tap",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "felhaste",
+      "name": "Fel Haste",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "burningrage",
+      "name": "Burning Rage",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "soulexchange",
+      "name": "Soul Exchange",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "chaosbolt",
+      "name": "Chaos Bolt",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1118,6 +1627,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1173,6 +1683,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1228,6 +1739,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1283,6 +1795,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1338,6 +1851,7 @@
     "splash": 1.935,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "max hp %",
@@ -1406,6 +1920,68 @@
      "Nature's Blessing": 4,
      "Bloom Strike": 2
     },
+    "alloc": [
+     {
+      "key": "regrowth",
+      "name": "Regrowth",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "instinct",
+      "name": "Predator's Instinct",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "rejuvenation",
+      "name": "Rejuvenation",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "shiftingform",
+      "name": "Shifting Form",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "naturesblessing",
+      "name": "Nature's Blessing",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "evergrowth",
+      "name": "Evergrowth",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "clawstrike",
+      "name": "Claw Strike",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "bloomingfield",
+      "name": "Blooming Field",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "primalshift",
+      "name": "Primal Shift",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "bloomstrike",
+      "name": "Bloom Strike",
+      "rank": 2,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "divine damage",
@@ -1461,6 +2037,7 @@
     "splash": 4.926599999999999,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "divine damage",
@@ -1516,6 +2093,7 @@
     "splash": 4.926599999999999,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -1571,6 +2149,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1601,6 +2180,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1631,6 +2211,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1661,6 +2242,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1691,6 +2273,7 @@
     "splash": 1.935,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1721,6 +2304,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1751,6 +2335,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1781,6 +2366,7 @@
     "splash": 0,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1811,6 +2397,7 @@
     "splash": 1.935,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [],
      "helm": [],
@@ -1853,6 +2440,62 @@
      "Feral Reflexes": 4,
      "Quick Paw": 3
     },
+    "alloc": [
+     {
+      "key": "regrowth",
+      "name": "Regrowth",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "instinct",
+      "name": "Predator's Instinct",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "rejuvenation",
+      "name": "Rejuvenation",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "shiftingform",
+      "name": "Shifting Form",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "feralreflexes",
+      "name": "Feral Reflexes",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "evergrowth",
+      "name": "Evergrowth",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "primalshift",
+      "name": "Primal Shift",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "bloomingfield",
+      "name": "Blooming Field",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "quickpaw",
+      "name": "Quick Paw",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "divine damage",
@@ -1912,6 +2555,26 @@
      "Aegis Ward": 4,
      "Guardian's Oath": 1
     },
+    "alloc": [
+     {
+      "key": "oath",
+      "name": "Guardian's Oath",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "aegisward",
+      "name": "Aegis Ward",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "sanctifiedarmor",
+      "name": "Sanctified Armor",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg taken reduction",
@@ -1977,6 +2640,62 @@
      "Colossus": 4,
      "Grim Resolve": 3
     },
+    "alloc": [
+     {
+      "key": "bulwark",
+      "name": "Bulwark",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "juggernaut",
+      "name": "Juggernaut",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "unbreakable",
+      "name": "Unbreakable",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "overwhelmingforce",
+      "name": "Overwhelming Force",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "colossus",
+      "name": "Colossus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "secondskin",
+      "name": "Second Skin",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "momentousblow",
+      "name": "Momentous Blow",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "titansgrip",
+      "name": "Titan's Grip",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "grimresolve",
+      "name": "Grim Resolve",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "block chance",
@@ -2032,6 +2751,7 @@
     "splash": 4.926599999999999,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "dmg taken reduction",
@@ -2094,6 +2814,44 @@
      "Overgrown Reach": 3,
      "Unbroken": 4
     },
+    "alloc": [
+     {
+      "key": "ironbody",
+      "name": "Iron Body",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "stonefist",
+      "name": "Stone Fist",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "unbroken",
+      "name": "Unbroken",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "graniteskin",
+      "name": "Granite Skin",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "earthenwill",
+      "name": "Earthen Will",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "risingdefiance",
+      "name": "Overgrown Reach",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg taken reduction",
@@ -2157,6 +2915,50 @@
      "Chaos Bolt": 3,
      "Soul Exchange": 3
     },
+    "alloc": [
+     {
+      "key": "siphon",
+      "name": "Soul Siphon",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "pact",
+      "name": "Dark Pact",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "lifetap",
+      "name": "Life Tap",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "felhaste",
+      "name": "Fel Haste",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "burningrage",
+      "name": "Burning Rage",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "chaosbolt",
+      "name": "Chaos Bolt",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "soulexchange",
+      "name": "Soul Exchange",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -2222,6 +3024,62 @@
      "Volley": 4,
      "Multishot": 1
     },
+    "alloc": [
+     {
+      "key": "fleet",
+      "name": "Fleet Step",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "multishot",
+      "name": "Multishot",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "evasivemaneuvers",
+      "name": "Evasive Maneuvers",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "rapidfire",
+      "name": "Rapid Fire",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "volley",
+      "name": "Volley",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "lightfoot",
+      "name": "Lightfoot",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "swiftwind",
+      "name": "Swift Wind",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "windsprint",
+      "name": "Wind Sprint",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "deadeye",
+      "name": "Deadeye",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg taken reduction",
@@ -2283,6 +3141,38 @@
      "Elusive": 4,
      "Phantom": 3
     },
+    "alloc": [
+     {
+      "key": "precision",
+      "name": "Deadly Precision",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "shadowstep",
+      "name": "Shadowstep",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "elusive",
+      "name": "Elusive",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "duskveil",
+      "name": "Duskveil",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "phantom",
+      "name": "Phantom",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "evasion",
@@ -2347,6 +3237,56 @@
      "Critical Mass": 4,
      "Mana Surge": 3
     },
+    "alloc": [
+     {
+      "key": "arcane",
+      "name": "Arcane Mastery",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "weaving",
+      "name": "Spell Weaving",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "overload",
+      "name": "Overload",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "quickcast",
+      "name": "Quickcast",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "criticalmass",
+      "name": "Critical Mass",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "cataclysm",
+      "name": "Cataclysm",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "haste",
+      "name": "Haste",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "manasurge",
+      "name": "Mana Surge",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg taken reduction",
@@ -2407,6 +3347,32 @@
      "Glory Hound": 3,
      "Reckless Abandon": 3
     },
+    "alloc": [
+     {
+      "key": "reckless",
+      "name": "Reckless Swing",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "deathwish",
+      "name": "Death Wish",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "gloryhound",
+      "name": "Glory Hound",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "recklessabandon",
+      "name": "Reckless Abandon",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg taken reduction",
@@ -2468,6 +3434,38 @@
      "Blizzard": 3,
      "Chilling Focus": 4
     },
+    "alloc": [
+     {
+      "key": "elementalfocus",
+      "name": "Elemental Focus",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "shockingfocus",
+      "name": "Shocking Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "chillingfocus",
+      "name": "Chilling Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "electricaloverload",
+      "name": "Electrical Overload",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "hoarfrost",
+      "name": "Blizzard",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
     "gear": {
      "weapon": [
       "dmg taken reduction",
@@ -2523,6 +3521,7 @@
     "splash": 4.926599999999999,
     "linger": 0,
     "tree": {},
+    "alloc": [],
     "gear": {
      "weapon": [
       "dmg dealt",
@@ -2556,6 +3555,3800 @@
      ]
     },
     "sacred": "lightning damage"
+   }
+  ]
+ },
+ "nodes": {
+  "Warrior": [
+   {
+    "key": "bulwark",
+    "name": "Bulwark",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "retaliation",
+    "name": "Retaliation",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "juggernaut",
+    "name": "Juggernaut",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "aegis",
+    "name": "Aegis",
+    "tier": "spec",
+    "parent": "bulwark",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "spikebarrier",
+    "name": "Spike Barrier",
+    "tier": "spec",
+    "parent": "bulwark",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "unbreakable",
+    "name": "Unbreakable",
+    "tier": "spec",
+    "parent": "bulwark",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "vengeance",
+    "name": "Vengeance",
+    "tier": "spec",
+    "parent": "retaliation",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "bloodresolve",
+    "name": "Bloodied Resolve",
+    "tier": "spec",
+    "parent": "retaliation",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "laststand",
+    "name": "Last Stand",
+    "tier": "spec",
+    "parent": "retaliation",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "colossus",
+    "name": "Colossus",
+    "tier": "spec",
+    "parent": "juggernaut",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "momentum",
+    "name": "Momentum",
+    "tier": "spec",
+    "parent": "juggernaut",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "overwhelmingforce",
+    "name": "Overwhelming Force",
+    "tier": "spec",
+    "parent": "juggernaut",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "bastion",
+    "name": "Bastion",
+    "tier": "modifier",
+    "parent": "aegis",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "rally",
+    "name": "Rally",
+    "tier": "modifier",
+    "parent": "aegis",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "ironcircle",
+    "name": "Iron Circle",
+    "tier": "modifier",
+    "parent": "aegis",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "thornedhide",
+    "name": "Thorned Hide",
+    "tier": "modifier",
+    "parent": "spikebarrier",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "retribution",
+    "name": "Retribution",
+    "tier": "modifier",
+    "parent": "spikebarrier",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unyielding",
+    "name": "Unyielding",
+    "tier": "modifier",
+    "parent": "spikebarrier",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "fortress",
+    "name": "Fortress",
+    "tier": "modifier",
+    "parent": "unbreakable",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "secondskin",
+    "name": "Second Skin",
+    "tier": "modifier",
+    "parent": "unbreakable",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "stonewall",
+    "name": "Stonewall",
+    "tier": "modifier",
+    "parent": "unbreakable",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "grudge",
+    "name": "Grudge",
+    "tier": "modifier",
+    "parent": "vengeance",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "executionersmark",
+    "name": "Executioner's Mark",
+    "tier": "modifier",
+    "parent": "vengeance",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "payback",
+    "name": "Payback",
+    "tier": "modifier",
+    "parent": "vengeance",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "adrenalinesurge",
+    "name": "Adrenaline Surge",
+    "tier": "modifier",
+    "parent": "bloodresolve",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "hardened",
+    "name": "Hardened",
+    "tier": "modifier",
+    "parent": "bloodresolve",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "secondwind",
+    "name": "Second Wind",
+    "tier": "modifier",
+    "parent": "bloodresolve",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "defiance",
+    "name": "Defiance",
+    "tier": "modifier",
+    "parent": "laststand",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "undyingwill",
+    "name": "Undying Will",
+    "tier": "modifier",
+    "parent": "laststand",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "berserkvigor",
+    "name": "Berserk Vigor",
+    "tier": "modifier",
+    "parent": "laststand",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "titansgrip",
+    "name": "Titan's Grip",
+    "tier": "modifier",
+    "parent": "colossus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "immovable",
+    "name": "Immovable",
+    "tier": "modifier",
+    "parent": "colossus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "reserves",
+    "name": "Endless Reserves",
+    "tier": "modifier",
+    "parent": "colossus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "rampage",
+    "name": "Rampage",
+    "tier": "modifier",
+    "parent": "momentum",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "avalanche",
+    "name": "Avalanche",
+    "tier": "modifier",
+    "parent": "momentum",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unstoppable",
+    "name": "Unstoppable",
+    "tier": "modifier",
+    "parent": "momentum",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "grimresolve",
+    "name": "Grim Resolve",
+    "tier": "modifier",
+    "parent": "overwhelmingforce",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "momentousblow",
+    "name": "Momentous Blow",
+    "tier": "modifier",
+    "parent": "overwhelmingforce",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "onslaught",
+    "name": "Onslaught",
+    "tier": "modifier",
+    "parent": "overwhelmingforce",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Berserker": [
+   {
+    "key": "frenzy",
+    "name": "Frenzy",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "bloodlust",
+    "name": "Bloodlust",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "reckless",
+    "name": "Reckless Swing",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "bloodfury",
+    "name": "Rising Fury",
+    "tier": "spec",
+    "parent": "frenzy",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "killingspree",
+    "name": "Berserking",
+    "tier": "spec",
+    "parent": "frenzy",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "savagemomentum",
+    "name": "Bloodletting",
+    "tier": "spec",
+    "parent": "frenzy",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "unendingrage",
+    "name": "Unending Rage",
+    "tier": "spec",
+    "parent": "bloodlust",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "overwhelm",
+    "name": "Overwhelm",
+    "tier": "spec",
+    "parent": "bloodlust",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "frenziedblows",
+    "name": "Frenzied Blows",
+    "tier": "spec",
+    "parent": "bloodlust",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "deathwish",
+    "name": "Death Wish",
+    "tier": "spec",
+    "parent": "reckless",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "vigor",
+    "name": "Vigor",
+    "tier": "spec",
+    "parent": "reckless",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "gambit",
+    "name": "Berserker's Gambit",
+    "tier": "spec",
+    "parent": "reckless",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "deathmark",
+    "name": "Frenzied Assault",
+    "tier": "modifier",
+    "parent": "bloodfury",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "bloodscent",
+    "name": "Blood Scent",
+    "tier": "modifier",
+    "parent": "bloodfury",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "cullingblow",
+    "name": "Overkill",
+    "tier": "modifier",
+    "parent": "bloodfury",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chainkiller",
+    "name": "Overrun",
+    "tier": "modifier",
+    "parent": "killingspree",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "massacre",
+    "name": "Culling Strike",
+    "tier": "modifier",
+    "parent": "killingspree",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "reaperscall",
+    "name": "Chain Frenzy",
+    "tier": "modifier",
+    "parent": "killingspree",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unbridled",
+    "name": "Vitality Surge",
+    "tier": "modifier",
+    "parent": "savagemomentum",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "warpath",
+    "name": "Bloodshield",
+    "tier": "modifier",
+    "parent": "savagemomentum",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "bloodrush",
+    "name": "Undying Fury",
+    "tier": "modifier",
+    "parent": "savagemomentum",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "furyunleashed",
+    "name": "Fury Unleashed",
+    "tier": "modifier",
+    "parent": "unendingrage",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "neverending",
+    "name": "Neverending",
+    "tier": "modifier",
+    "parent": "unendingrage",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "warlord",
+    "name": "Warlord",
+    "tier": "modifier",
+    "parent": "unendingrage",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "shatter",
+    "name": "Shatter",
+    "tier": "modifier",
+    "parent": "overwhelm",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "exposed",
+    "name": "Exposed",
+    "tier": "modifier",
+    "parent": "overwhelm",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "crush",
+    "name": "Crush",
+    "tier": "modifier",
+    "parent": "overwhelm",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "hurricane",
+    "name": "Hurricane",
+    "tier": "modifier",
+    "parent": "frenziedblows",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "tempo",
+    "name": "Tempo",
+    "tier": "modifier",
+    "parent": "frenziedblows",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "windfury",
+    "name": "Windfury",
+    "tier": "modifier",
+    "parent": "frenziedblows",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "gloryhound",
+    "name": "Glory Hound",
+    "tier": "modifier",
+    "parent": "deathwish",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "recklessabandon",
+    "name": "Reckless Abandon",
+    "tier": "modifier",
+    "parent": "deathwish",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "gloriousdeath",
+    "name": "Glorious Death",
+    "tier": "modifier",
+    "parent": "deathwish",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "bloodpump",
+    "name": "Blood Pump",
+    "tier": "modifier",
+    "parent": "vigor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "secondgale",
+    "name": "Second Gale",
+    "tier": "modifier",
+    "parent": "vigor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "vengefulblood",
+    "name": "Vengeful Blood",
+    "tier": "modifier",
+    "parent": "vigor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "lastlaugh",
+    "name": "Last Laugh",
+    "tier": "modifier",
+    "parent": "gambit",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "ragefueled",
+    "name": "Rage Fueled",
+    "tier": "modifier",
+    "parent": "gambit",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "deathdefiant",
+    "name": "Death Defiant",
+    "tier": "modifier",
+    "parent": "gambit",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Rogue": [
+   {
+    "key": "opportunist",
+    "name": "Opportunist",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "precision",
+    "name": "Deadly Precision",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "shadowstep",
+    "name": "Shadowstep",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "ambush",
+    "name": "Ambush",
+    "tier": "spec",
+    "parent": "opportunist",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "cutthroat",
+    "name": "Cutthroat",
+    "tier": "spec",
+    "parent": "opportunist",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "vanish",
+    "name": "Vanish",
+    "tier": "spec",
+    "parent": "opportunist",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "exploitweakness",
+    "name": "Exploit Weakness",
+    "tier": "spec",
+    "parent": "precision",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "twinstrikes",
+    "name": "Twin Strikes",
+    "tier": "spec",
+    "parent": "precision",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "assassinate",
+    "name": "Assassinate",
+    "tier": "spec",
+    "parent": "precision",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "fleetfoot",
+    "name": "Fleetfoot",
+    "tier": "spec",
+    "parent": "shadowstep",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "elusive",
+    "name": "Elusive",
+    "tier": "spec",
+    "parent": "shadowstep",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "nightstalker",
+    "name": "Nightstalker",
+    "tier": "spec",
+    "parent": "shadowstep",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "openingmove",
+    "name": "Opening Move",
+    "tier": "modifier",
+    "parent": "ambush",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "coldsteel",
+    "name": "Cold Steel",
+    "tier": "modifier",
+    "parent": "ambush",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "predator",
+    "name": "Predator",
+    "tier": "modifier",
+    "parent": "ambush",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "markedfordeath",
+    "name": "Marked for Death",
+    "tier": "modifier",
+    "parent": "cutthroat",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "bloodyknife",
+    "name": "Bloody Knife",
+    "tier": "modifier",
+    "parent": "cutthroat",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "finalcut",
+    "name": "Final Cut",
+    "tier": "modifier",
+    "parent": "cutthroat",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "smokescreen",
+    "name": "Smokescreen",
+    "tier": "modifier",
+    "parent": "vanish",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "fadeaway",
+    "name": "Fadeaway",
+    "tier": "modifier",
+    "parent": "vanish",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "backstab",
+    "name": "Backstab",
+    "tier": "modifier",
+    "parent": "vanish",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "vitalstrike",
+    "name": "Vital Strike",
+    "tier": "modifier",
+    "parent": "exploitweakness",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "weakpoint",
+    "name": "Weak Point",
+    "tier": "modifier",
+    "parent": "exploitweakness",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "surgicalstrike",
+    "name": "Surgical Strike",
+    "tier": "modifier",
+    "parent": "exploitweakness",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "echo",
+    "name": "Echo",
+    "tier": "modifier",
+    "parent": "twinstrikes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "flurry",
+    "name": "Flurry",
+    "tier": "modifier",
+    "parent": "twinstrikes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "doubletap",
+    "name": "Double Tap",
+    "tier": "modifier",
+    "parent": "twinstrikes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "coupdegrace",
+    "name": "Coup de Grace",
+    "tier": "modifier",
+    "parent": "assassinate",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "premeditation",
+    "name": "Premeditation",
+    "tier": "modifier",
+    "parent": "assassinate",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "silentblade",
+    "name": "Silent Blade",
+    "tier": "modifier",
+    "parent": "assassinate",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "windrunner",
+    "name": "Windrunner",
+    "tier": "modifier",
+    "parent": "fleetfoot",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "silentsteps",
+    "name": "Silent Steps",
+    "tier": "modifier",
+    "parent": "fleetfoot",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "quickdraw",
+    "name": "Quickdraw",
+    "tier": "modifier",
+    "parent": "fleetfoot",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "phantom",
+    "name": "Phantom",
+    "tier": "modifier",
+    "parent": "elusive",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "duskveil",
+    "name": "Duskveil",
+    "tier": "modifier",
+    "parent": "elusive",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "voidstep",
+    "name": "Voidstep",
+    "tier": "modifier",
+    "parent": "elusive",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "huntersinstinct",
+    "name": "Hunter's Instinct",
+    "tier": "modifier",
+    "parent": "nightstalker",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "apexpredator",
+    "name": "Apex Predator",
+    "tier": "modifier",
+    "parent": "nightstalker",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "silentkiller",
+    "name": "Silent Killer",
+    "tier": "modifier",
+    "parent": "nightstalker",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Monk": [
+   {
+    "key": "flowingstrikes",
+    "name": "Flowing Strikes",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "innerfocus",
+    "name": "Inner Focus",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "ironbody",
+    "name": "Iron Body",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "onehundredhands",
+    "name": "Flow like Water",
+    "tier": "spec",
+    "parent": "flowingstrikes",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "pressurepoint",
+    "name": "Pressure Point",
+    "tier": "spec",
+    "parent": "flowingstrikes",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "relentlessassault",
+    "name": "Relentless Assault",
+    "tier": "spec",
+    "parent": "flowingstrikes",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "meditation",
+    "name": "Meditation",
+    "tier": "spec",
+    "parent": "innerfocus",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "chiburst",
+    "name": "Chi Burst",
+    "tier": "spec",
+    "parent": "innerfocus",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "serenity",
+    "name": "Serenity",
+    "tier": "spec",
+    "parent": "innerfocus",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "stonefist",
+    "name": "Stone Fist",
+    "tier": "spec",
+    "parent": "ironbody",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "unbroken",
+    "name": "Unbroken",
+    "tier": "spec",
+    "parent": "ironbody",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "templeguardian",
+    "name": "Temple Guardian",
+    "tier": "spec",
+    "parent": "ironbody",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "windwalker",
+    "name": "Windwalker",
+    "tier": "modifier",
+    "parent": "flowingstrikes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unbrokenchain",
+    "name": "Unbroken Chain",
+    "tier": "modifier",
+    "parent": "flowingstrikes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "risingstorm",
+    "name": "Rising Storm",
+    "tier": "modifier",
+    "parent": "flowingstrikes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "nervestrike",
+    "name": "Nerve Strike",
+    "tier": "modifier",
+    "parent": "pressurepoint",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "vitalpoints",
+    "name": "Vital Points",
+    "tier": "modifier",
+    "parent": "pressurepoint",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "hundredfists",
+    "name": "Hundred Fists",
+    "tier": "modifier",
+    "parent": "pressurepoint",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chakraofmany",
+    "name": "Chakra of Many",
+    "tier": "modifier",
+    "parent": "onehundredhands",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chakraoflight",
+    "name": "Chakra of Light",
+    "tier": "modifier",
+    "parent": "onehundredhands",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chakraoflife",
+    "name": "Chakra of Life",
+    "tier": "modifier",
+    "parent": "onehundredhands",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "eternalflow",
+    "name": "Eternal Flow",
+    "tier": "modifier",
+    "parent": "relentlessassault",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unendingcycle",
+    "name": "Unending Cycle",
+    "tier": "modifier",
+    "parent": "relentlessassault",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "stormfront",
+    "name": "Stormfront",
+    "tier": "modifier",
+    "parent": "relentlessassault",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "innerpeace",
+    "name": "Inner Peace",
+    "tier": "modifier",
+    "parent": "meditation",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "risingtide",
+    "name": "Rising Tide",
+    "tier": "modifier",
+    "parent": "meditation",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "clarity",
+    "name": "Clarity",
+    "tier": "modifier",
+    "parent": "meditation",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chiburstsanctuary",
+    "name": "Sanctuary",
+    "tier": "modifier",
+    "parent": "chiburst",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "harmonize",
+    "name": "Harmonize",
+    "tier": "modifier",
+    "parent": "chiburst",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "widecircle",
+    "name": "Wide Circle",
+    "tier": "modifier",
+    "parent": "chiburst",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unshakable",
+    "name": "Unshakable",
+    "tier": "modifier",
+    "parent": "serenity",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "stillwater",
+    "name": "Stillwater",
+    "tier": "modifier",
+    "parent": "serenity",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unmovable",
+    "name": "Unmovable",
+    "tier": "modifier",
+    "parent": "serenity",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "graniteskin",
+    "name": "Granite Skin",
+    "tier": "modifier",
+    "parent": "stonefist",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "earthenwill",
+    "name": "Earthen Will",
+    "tier": "modifier",
+    "parent": "stonefist",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "counterflow",
+    "name": "Counterflow",
+    "tier": "modifier",
+    "parent": "stonefist",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "lastbastion",
+    "name": "Crippling Grip",
+    "tier": "modifier",
+    "parent": "unbroken",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "risingdefiance",
+    "name": "Overgrown Reach",
+    "tier": "modifier",
+    "parent": "unbroken",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unyieldingspirit",
+    "name": "Last Stand",
+    "tier": "modifier",
+    "parent": "unbroken",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "sharedstrength",
+    "name": "Shared Strength",
+    "tier": "modifier",
+    "parent": "templeguardian",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "ironwill",
+    "name": "Iron Will",
+    "tier": "modifier",
+    "parent": "templeguardian",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "templeguardianspirit",
+    "name": "Guardian Spirit",
+    "tier": "modifier",
+    "parent": "templeguardian",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Paladin": [
+   {
+    "key": "oath",
+    "name": "Guardian's Oath",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "shield",
+    "name": "Divine Shield",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "smite",
+    "name": "Radiant Smite",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "aegisward",
+    "name": "Aegis Ward",
+    "tier": "spec",
+    "parent": "oath",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "vowofprotection",
+    "name": "Vow of Protection",
+    "tier": "spec",
+    "parent": "oath",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "unbreakablefaith",
+    "name": "Unbreakable Faith",
+    "tier": "spec",
+    "parent": "oath",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "bulwarkoflight",
+    "name": "Bulwark of Light",
+    "tier": "spec",
+    "parent": "shield",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "consecration",
+    "name": "Consecration",
+    "tier": "spec",
+    "parent": "shield",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "retributionaura",
+    "name": "Retribution Aura",
+    "tier": "spec",
+    "parent": "shield",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "zealotry",
+    "name": "Zealotry",
+    "tier": "spec",
+    "parent": "smite",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "holyfire",
+    "name": "Holy Fire",
+    "tier": "spec",
+    "parent": "smite",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "judgment",
+    "name": "Judgment",
+    "tier": "spec",
+    "parent": "smite",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "sanctifiedarmor",
+    "name": "Sanctified Armor",
+    "tier": "modifier",
+    "parent": "aegisward",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "bondeddevotion",
+    "name": "Bonded Devotion",
+    "tier": "modifier",
+    "parent": "aegisward",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "steadfast",
+    "name": "Steadfast",
+    "tier": "modifier",
+    "parent": "aegisward",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "beaconoflight",
+    "name": "Beacon of Light",
+    "tier": "modifier",
+    "parent": "vowofprotection",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "hallowedground",
+    "name": "Hallowed Ground",
+    "tier": "modifier",
+    "parent": "vowofprotection",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unwavering",
+    "name": "Unwavering",
+    "tier": "modifier",
+    "parent": "vowofprotection",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "martyrsblessing",
+    "name": "Martyr's Blessing",
+    "tier": "modifier",
+    "parent": "unbreakablefaith",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "graciousburden",
+    "name": "Gracious Burden",
+    "tier": "modifier",
+    "parent": "unbreakablefaith",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "eternalvow",
+    "name": "Eternal Vow",
+    "tier": "modifier",
+    "parent": "unbreakablefaith",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "radiantbarrier",
+    "name": "Radiant Barrier",
+    "tier": "modifier",
+    "parent": "bulwarkoflight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "graceperiod",
+    "name": "Grace Period",
+    "tier": "modifier",
+    "parent": "bulwarkoflight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "sacredoverflow",
+    "name": "Sacred Overflow",
+    "tier": "modifier",
+    "parent": "bulwarkoflight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "widerblessing",
+    "name": "Wider Blessing",
+    "tier": "modifier",
+    "parent": "consecration",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "communion",
+    "name": "Communion",
+    "tier": "modifier",
+    "parent": "consecration",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "sharedlight",
+    "name": "Shared Light",
+    "tier": "modifier",
+    "parent": "consecration",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "holyvengeance",
+    "name": "Holy Vengeance",
+    "tier": "modifier",
+    "parent": "retributionaura",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "purify",
+    "name": "Purify",
+    "tier": "modifier",
+    "parent": "retributionaura",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "lastjudgment",
+    "name": "Last Judgment",
+    "tier": "modifier",
+    "parent": "retributionaura",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "martyrscall",
+    "name": "Desperate Grace",
+    "tier": "modifier",
+    "parent": "zealotry",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "risingfervor",
+    "name": "United Front",
+    "tier": "modifier",
+    "parent": "zealotry",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "guardianswrath",
+    "name": "Zealous Charge",
+    "tier": "modifier",
+    "parent": "zealotry",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "holyfirewildfire",
+    "name": "Wildfire",
+    "tier": "modifier",
+    "parent": "holyfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "purgingflame",
+    "name": "Purging Flame",
+    "tier": "modifier",
+    "parent": "holyfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "risingblaze",
+    "name": "Rising Blaze",
+    "tier": "modifier",
+    "parent": "holyfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "finaljudgment",
+    "name": "Final Judgment",
+    "tier": "modifier",
+    "parent": "judgment",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "executionersblessing",
+    "name": "Executioner's Blessing",
+    "tier": "modifier",
+    "parent": "judgment",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wrathoftheheavens",
+    "name": "Wrath of the Heavens",
+    "tier": "modifier",
+    "parent": "judgment",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Ranger": [
+   {
+    "key": "multishot",
+    "name": "Multishot",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "mark",
+    "name": "Hunter's Mark",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "fleet",
+    "name": "Fleet Step",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "volley",
+    "name": "Volley",
+    "tier": "spec",
+    "parent": "multishot",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "piercingshots",
+    "name": "Piercing Shots",
+    "tier": "spec",
+    "parent": "multishot",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "explosivetips",
+    "name": "Explosive Tips",
+    "tier": "spec",
+    "parent": "multishot",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "predatorseye",
+    "name": "Predator's Eye",
+    "tier": "spec",
+    "parent": "mark",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "packtactics",
+    "name": "Pack Tactics",
+    "tier": "spec",
+    "parent": "mark",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "killzone",
+    "name": "Kill Zone",
+    "tier": "spec",
+    "parent": "mark",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "rapidfire",
+    "name": "Rapid Fire",
+    "tier": "spec",
+    "parent": "fleet",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "evasivemaneuvers",
+    "name": "Evasive Maneuvers",
+    "tier": "spec",
+    "parent": "fleet",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "relentlesspursuit",
+    "name": "Relentless Pursuit",
+    "tier": "spec",
+    "parent": "fleet",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "chainshot",
+    "name": "Chain Shot",
+    "tier": "modifier",
+    "parent": "volley",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "deadeye",
+    "name": "Deadeye",
+    "tier": "modifier",
+    "parent": "volley",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "stormofarrows",
+    "name": "Storm of Arrows",
+    "tier": "modifier",
+    "parent": "volley",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "armorbreaker",
+    "name": "Armor Breaker",
+    "tier": "modifier",
+    "parent": "piercingshots",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "windpierce",
+    "name": "Wind Pierce",
+    "tier": "modifier",
+    "parent": "piercingshots",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "truestrike",
+    "name": "True Strike",
+    "tier": "modifier",
+    "parent": "piercingshots",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "widerburst",
+    "name": "Wider Burst",
+    "tier": "modifier",
+    "parent": "explosivetips",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "scorchedearth",
+    "name": "Scorched Earth",
+    "tier": "modifier",
+    "parent": "explosivetips",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "overcharge",
+    "name": "Overcharge",
+    "tier": "modifier",
+    "parent": "explosivetips",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "apexhunter",
+    "name": "Apex Hunter",
+    "tier": "modifier",
+    "parent": "predatorseye",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "trueshot",
+    "name": "Trueshot",
+    "tier": "modifier",
+    "parent": "predatorseye",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "huntersfocus",
+    "name": "Hunter's Focus",
+    "tier": "modifier",
+    "parent": "predatorseye",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "coordinatedstrike",
+    "name": "Coordinated Strike",
+    "tier": "modifier",
+    "parent": "packtactics",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "alphaspredator",
+    "name": "Alpha's Predator",
+    "tier": "modifier",
+    "parent": "packtactics",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "widerpack",
+    "name": "Wider Pack",
+    "tier": "modifier",
+    "parent": "packtactics",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "finalblow",
+    "name": "Final Blow",
+    "tier": "modifier",
+    "parent": "killzone",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "cleankill",
+    "name": "Clean Kill",
+    "tier": "modifier",
+    "parent": "killzone",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "huntersreward",
+    "name": "Hunter's Reward",
+    "tier": "modifier",
+    "parent": "killzone",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "windsprint",
+    "name": "Wind Sprint",
+    "tier": "modifier",
+    "parent": "rapidfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "quickshot",
+    "name": "Quick Shot",
+    "tier": "modifier",
+    "parent": "rapidfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "fleetingshadow",
+    "name": "Fleeting Shadow",
+    "tier": "modifier",
+    "parent": "rapidfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "swiftwind",
+    "name": "Swift Wind",
+    "tier": "modifier",
+    "parent": "evasivemaneuvers",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "vanishingshot",
+    "name": "Vanishing Shot",
+    "tier": "modifier",
+    "parent": "evasivemaneuvers",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "lightfoot",
+    "name": "Lightfoot",
+    "tier": "modifier",
+    "parent": "evasivemaneuvers",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "windborn",
+    "name": "Windborn",
+    "tier": "modifier",
+    "parent": "relentlesspursuit",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "huntersstride",
+    "name": "Hunter's Stride",
+    "tier": "modifier",
+    "parent": "relentlesspursuit",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "neverwinded",
+    "name": "Never Winded",
+    "tier": "modifier",
+    "parent": "relentlesspursuit",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Mage": [
+   {
+    "key": "arcane",
+    "name": "Arcane Mastery",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "weaving",
+    "name": "Spell Weaving",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "surge",
+    "name": "Elemental Surge",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "criticalmass",
+    "name": "Critical Mass",
+    "tier": "spec",
+    "parent": "arcane",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "overload",
+    "name": "Overload",
+    "tier": "spec",
+    "parent": "arcane",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "spellecho",
+    "name": "Spell Echo",
+    "tier": "spec",
+    "parent": "arcane",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "quickcast",
+    "name": "Quickcast",
+    "tier": "spec",
+    "parent": "weaving",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "flowstate",
+    "name": "Flow State",
+    "tier": "spec",
+    "parent": "weaving",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "temporalrift",
+    "name": "Temporal Rift",
+    "tier": "spec",
+    "parent": "weaving",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "chainlightning",
+    "name": "Chain Lightning",
+    "tier": "spec",
+    "parent": "surge",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "wildfire",
+    "name": "Wildfire",
+    "tier": "spec",
+    "parent": "surge",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "frostnova",
+    "name": "Frost Nova",
+    "tier": "spec",
+    "parent": "surge",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "manasurge",
+    "name": "Mana Surge",
+    "tier": "modifier",
+    "parent": "criticalmass",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "arcaneshield",
+    "name": "Arcane Shield",
+    "tier": "modifier",
+    "parent": "criticalmass",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "empoweredbolt",
+    "name": "Empowered Bolt",
+    "tier": "modifier",
+    "parent": "criticalmass",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "cataclysm",
+    "name": "Cataclysm",
+    "tier": "modifier",
+    "parent": "overload",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "volatilemagic",
+    "name": "Volatile Magic",
+    "tier": "modifier",
+    "parent": "overload",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "arcaneinstability",
+    "name": "Arcane Instability",
+    "tier": "modifier",
+    "parent": "overload",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "echoingpower",
+    "name": "Echoing Power",
+    "tier": "modifier",
+    "parent": "spellecho",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "resonance",
+    "name": "Resonance",
+    "tier": "modifier",
+    "parent": "spellecho",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "infiniteloop",
+    "name": "Finite Loop",
+    "tier": "modifier",
+    "parent": "spellecho",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "haste",
+    "name": "Haste",
+    "tier": "modifier",
+    "parent": "quickcast",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "acceleration",
+    "name": "Acceleration",
+    "tier": "modifier",
+    "parent": "quickcast",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "timewarp",
+    "name": "Timewarp",
+    "tier": "modifier",
+    "parent": "quickcast",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "perpetualmotion",
+    "name": "Perpetual Motion",
+    "tier": "modifier",
+    "parent": "flowstate",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "riptide",
+    "name": "Riptide",
+    "tier": "modifier",
+    "parent": "flowstate",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unbrokenrhythm",
+    "name": "Unbroken Rhythm",
+    "tier": "modifier",
+    "parent": "flowstate",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "dilation",
+    "name": "Dilation",
+    "tier": "modifier",
+    "parent": "temporalrift",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "paradox",
+    "name": "Paradox",
+    "tier": "modifier",
+    "parent": "temporalrift",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "eternalmoment",
+    "name": "Eternal Moment",
+    "tier": "modifier",
+    "parent": "temporalrift",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "thunderstruck",
+    "name": "Thunderstruck",
+    "tier": "modifier",
+    "parent": "chainlightning",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "staticfield",
+    "name": "Static Field",
+    "tier": "modifier",
+    "parent": "chainlightning",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "stormcaller",
+    "name": "Stormcaller",
+    "tier": "modifier",
+    "parent": "chainlightning",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "conflagration",
+    "name": "Conflagration",
+    "tier": "modifier",
+    "parent": "wildfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "risingheat",
+    "name": "Rising Heat",
+    "tier": "modifier",
+    "parent": "wildfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "infernalpact",
+    "name": "Infernal Pact",
+    "tier": "modifier",
+    "parent": "wildfire",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "blizzard",
+    "name": "Blizzard",
+    "tier": "modifier",
+    "parent": "frostnova",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "permafrost",
+    "name": "Permafrost",
+    "tier": "modifier",
+    "parent": "frostnova",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "absolutezero",
+    "name": "Absolute Zero",
+    "tier": "modifier",
+    "parent": "frostnova",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Warlock": [
+   {
+    "key": "pact",
+    "name": "Dark Pact",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "curse",
+    "name": "Curse of Weakness",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "siphon",
+    "name": "Soul Siphon",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "felhaste",
+    "name": "Fel Haste",
+    "tier": "spec",
+    "parent": "pact",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "unstablepower",
+    "name": "Unstable Power",
+    "tier": "spec",
+    "parent": "pact",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "felrush",
+    "name": "Fel Rush",
+    "tier": "spec",
+    "parent": "pact",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "amplifycurse",
+    "name": "Amplify Curse",
+    "tier": "spec",
+    "parent": "curse",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "contagiouscurse",
+    "name": "Contagious Curse",
+    "tier": "spec",
+    "parent": "curse",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "doom",
+    "name": "Doom",
+    "tier": "spec",
+    "parent": "curse",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "soulharvest",
+    "name": "Soul Harvest",
+    "tier": "spec",
+    "parent": "siphon",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "lifetap",
+    "name": "Life Tap",
+    "tier": "spec",
+    "parent": "siphon",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "darkcommunion",
+    "name": "Dark Communion",
+    "tier": "spec",
+    "parent": "siphon",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "chaosbolt",
+    "name": "Chaos Bolt",
+    "tier": "modifier",
+    "parent": "felhaste",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "burningrage",
+    "name": "Burning Rage",
+    "tier": "modifier",
+    "parent": "felhaste",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "demonicspeed",
+    "name": "Demonic Speed",
+    "tier": "modifier",
+    "parent": "felhaste",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "voidenergy",
+    "name": "Void Energy",
+    "tier": "modifier",
+    "parent": "unstablepower",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "entropicforce",
+    "name": "Entropic Force",
+    "tier": "modifier",
+    "parent": "unstablepower",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chaostheory",
+    "name": "Chaos Theory",
+    "tier": "modifier",
+    "parent": "unstablepower",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "warpspeed",
+    "name": "Warp Speed",
+    "tier": "modifier",
+    "parent": "felrush",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "deathmarch",
+    "name": "Death March",
+    "tier": "modifier",
+    "parent": "felrush",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "ravage",
+    "name": "Ravage",
+    "tier": "modifier",
+    "parent": "felrush",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "witheringcurse",
+    "name": "Withering Curse",
+    "tier": "modifier",
+    "parent": "amplifycurse",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "hexmastery",
+    "name": "Hex Mastery",
+    "tier": "modifier",
+    "parent": "amplifycurse",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "cursedblood",
+    "name": "Cursed Blood",
+    "tier": "modifier",
+    "parent": "amplifycurse",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "plagueoflocusts",
+    "name": "Plague of Locusts",
+    "tier": "modifier",
+    "parent": "contagiouscurse",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "epidemic",
+    "name": "Epidemic",
+    "tier": "modifier",
+    "parent": "contagiouscurse",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "virulence",
+    "name": "Soul Stone",
+    "tier": "modifier",
+    "parent": "contagiouscurse",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "harbinger",
+    "name": "Harbinger",
+    "tier": "modifier",
+    "parent": "doom",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "dreadfuldeath",
+    "name": "Dreadful Death",
+    "tier": "modifier",
+    "parent": "doom",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "apocalypse",
+    "name": "Apocalypse",
+    "tier": "modifier",
+    "parent": "doom",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "reaping",
+    "name": "Reaping",
+    "tier": "modifier",
+    "parent": "soulharvest",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "darkritual",
+    "name": "Dark Ritual",
+    "tier": "modifier",
+    "parent": "soulharvest",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "eternalhunger",
+    "name": "Eternal Hunger",
+    "tier": "modifier",
+    "parent": "soulharvest",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "painbond",
+    "name": "Pain Bond",
+    "tier": "modifier",
+    "parent": "lifetap",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "demonicresilience",
+    "name": "Demonic Resilience",
+    "tier": "modifier",
+    "parent": "lifetap",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "soulexchange",
+    "name": "Soul Exchange",
+    "tier": "modifier",
+    "parent": "lifetap",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "sharedsuffering",
+    "name": "Shared Suffering",
+    "tier": "modifier",
+    "parent": "darkcommunion",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "covenant",
+    "name": "Covenant",
+    "tier": "modifier",
+    "parent": "darkcommunion",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unbreakablebond",
+    "name": "Unbreakable Bond",
+    "tier": "modifier",
+    "parent": "darkcommunion",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Cleric": [
+   {
+    "key": "grace",
+    "name": "Divine Grace",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "prayer",
+    "name": "Prayer of Mending",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "resilience",
+    "name": "Blessed Resilience",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "radiantlight",
+    "name": "Radiant Light",
+    "tier": "spec",
+    "parent": "grace",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "overflowinggrace",
+    "name": "Overflowing Grace",
+    "tier": "spec",
+    "parent": "grace",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "sanctifiedtouch",
+    "name": "Sanctified Touch",
+    "tier": "spec",
+    "parent": "grace",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "chainoflight",
+    "name": "Chain of Light",
+    "tier": "spec",
+    "parent": "prayer",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "mercifultouch",
+    "name": "Merciful Touch",
+    "tier": "spec",
+    "parent": "prayer",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "divinefavor",
+    "name": "Divine Favor",
+    "tier": "spec",
+    "parent": "prayer",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "sanctuary",
+    "name": "Sanctuary",
+    "tier": "spec",
+    "parent": "resilience",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "guardianspirit",
+    "name": "Guardian Spirit",
+    "tier": "spec",
+    "parent": "resilience",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "radiantaegis",
+    "name": "Radiant Aegis",
+    "tier": "spec",
+    "parent": "resilience",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "luminous",
+    "name": "Luminous",
+    "tier": "modifier",
+    "parent": "radiantlight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "graciousspirit",
+    "name": "Gracious Spirit",
+    "tier": "modifier",
+    "parent": "radiantlight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "eternallight",
+    "name": "Eternal Light",
+    "tier": "modifier",
+    "parent": "radiantlight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "graciousoverflow",
+    "name": "Gracious Overflow",
+    "tier": "modifier",
+    "parent": "overflowinggrace",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "balancedfaith",
+    "name": "Balanced Faith",
+    "tier": "modifier",
+    "parent": "overflowinggrace",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "riftofmercy",
+    "name": "Rift of Mercy",
+    "tier": "modifier",
+    "parent": "overflowinggrace",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "holycrit",
+    "name": "Holy Crit",
+    "tier": "modifier",
+    "parent": "sanctifiedtouch",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "divineclarity",
+    "name": "Divine Clarity",
+    "tier": "modifier",
+    "parent": "sanctifiedtouch",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "radiance",
+    "name": "Radiance",
+    "tier": "modifier",
+    "parent": "sanctifiedtouch",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wideningcircle",
+    "name": "Widening Circle",
+    "tier": "modifier",
+    "parent": "chainoflight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "swiftmending",
+    "name": "Swift Mending",
+    "tier": "modifier",
+    "parent": "chainoflight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unbrokenprayer",
+    "name": "Unbroken Prayer",
+    "tier": "modifier",
+    "parent": "chainoflight",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "gentletouch",
+    "name": "Gentle Touch",
+    "tier": "modifier",
+    "parent": "mercifultouch",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "compassion",
+    "name": "Compassion",
+    "tier": "modifier",
+    "parent": "mercifultouch",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "healingtouch",
+    "name": "Healing Touch",
+    "tier": "modifier",
+    "parent": "mercifultouch",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "aegisofmercy",
+    "name": "Aegis of Mercy",
+    "tier": "modifier",
+    "parent": "divinefavor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wardinglight",
+    "name": "Warding Light",
+    "tier": "modifier",
+    "parent": "divinefavor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "sacredbarrier",
+    "name": "Sacred Barrier",
+    "tier": "modifier",
+    "parent": "divinefavor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "consecratedearth",
+    "name": "Consecrated Earth",
+    "tier": "modifier",
+    "parent": "sanctuary",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wardingprayer",
+    "name": "Warding Prayer",
+    "tier": "modifier",
+    "parent": "sanctuary",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unyieldingfaith",
+    "name": "Unyielding Faith",
+    "tier": "modifier",
+    "parent": "sanctuary",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "secondchance",
+    "name": "Second Chance",
+    "tier": "modifier",
+    "parent": "guardianspirit",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "divineintervention",
+    "name": "Divine Intervention",
+    "tier": "modifier",
+    "parent": "guardianspirit",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "finalblessing",
+    "name": "Final Blessing",
+    "tier": "modifier",
+    "parent": "guardianspirit",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "windsofgrace",
+    "name": "Winds of Grace",
+    "tier": "modifier",
+    "parent": "radiantaegis",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "swiftblessing",
+    "name": "Swift Blessing",
+    "tier": "modifier",
+    "parent": "radiantaegis",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "haloedsteps",
+    "name": "Haloed Steps",
+    "tier": "modifier",
+    "parent": "radiantaegis",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Druid": [
+   {
+    "key": "regrowth",
+    "name": "Regrowth",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "instinct",
+    "name": "Predator's Instinct",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "barrier",
+    "name": "Thorned Barrier",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "rejuvenation",
+    "name": "Rejuvenation",
+    "tier": "spec",
+    "parent": "regrowth",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "wildsurge",
+    "name": "Wild Surge",
+    "tier": "spec",
+    "parent": "regrowth",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "naturesblessing",
+    "name": "Nature's Blessing",
+    "tier": "spec",
+    "parent": "regrowth",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "feralreflexes",
+    "name": "Feral Reflexes",
+    "tier": "spec",
+    "parent": "instinct",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "shiftingform",
+    "name": "Shifting Form",
+    "tier": "spec",
+    "parent": "instinct",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "packinstinct",
+    "name": "Pack Instinct",
+    "tier": "spec",
+    "parent": "instinct",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "livingarmor",
+    "name": "Living Armor",
+    "tier": "spec",
+    "parent": "barrier",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "bramblegrowth",
+    "name": "Bramblegrowth",
+    "tier": "spec",
+    "parent": "barrier",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "symbiosis",
+    "name": "Werebear",
+    "tier": "spec",
+    "parent": "barrier",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "bloomingfield",
+    "name": "Blooming Field",
+    "tier": "modifier",
+    "parent": "rejuvenation",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "evergrowth",
+    "name": "Evergrowth",
+    "tier": "modifier",
+    "parent": "rejuvenation",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "seedoflife",
+    "name": "Seed of Life",
+    "tier": "modifier",
+    "parent": "rejuvenation",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "overgrowth",
+    "name": "Overgrowth",
+    "tier": "modifier",
+    "parent": "wildsurge",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "primalforce",
+    "name": "Primal Force",
+    "tier": "modifier",
+    "parent": "wildsurge",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wildheart",
+    "name": "Wild Heart",
+    "tier": "modifier",
+    "parent": "wildsurge",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "bloomstrike",
+    "name": "Bloom Strike",
+    "tier": "modifier",
+    "parent": "naturesblessing",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wildinstinct",
+    "name": "Wild Instinct",
+    "tier": "modifier",
+    "parent": "naturesblessing",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "verdantburst",
+    "name": "Verdant Burst",
+    "tier": "modifier",
+    "parent": "naturesblessing",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "quickpaw",
+    "name": "Quick Paw",
+    "tier": "modifier",
+    "parent": "feralreflexes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "silentprowl",
+    "name": "Silent Prowl",
+    "tier": "modifier",
+    "parent": "feralreflexes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wildagility",
+    "name": "Wild Agility",
+    "tier": "modifier",
+    "parent": "feralreflexes",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "primalshift",
+    "name": "Primal Shift",
+    "tier": "modifier",
+    "parent": "shiftingform",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "clawstrike",
+    "name": "Claw Strike",
+    "tier": "modifier",
+    "parent": "shiftingform",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wildfury",
+    "name": "Wild Fury",
+    "tier": "modifier",
+    "parent": "shiftingform",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "pathfinder",
+    "name": "Pathfinder",
+    "tier": "modifier",
+    "parent": "packinstinct",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unitedpack",
+    "name": "United Pack",
+    "tier": "modifier",
+    "parent": "packinstinct",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "wildguardian",
+    "name": "Wild Guardian",
+    "tier": "modifier",
+    "parent": "packinstinct",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "ironbark",
+    "name": "Ironbark",
+    "tier": "modifier",
+    "parent": "livingarmor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "naturesward",
+    "name": "Nature's Ward",
+    "tier": "modifier",
+    "parent": "livingarmor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unyieldingroots",
+    "name": "Unyielding Roots",
+    "tier": "modifier",
+    "parent": "livingarmor",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "thornlash",
+    "name": "Thornlash",
+    "tier": "modifier",
+    "parent": "bramblegrowth",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "poisonthorns",
+    "name": "Poison Thorns",
+    "tier": "modifier",
+    "parent": "bramblegrowth",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "entangle",
+    "name": "Entangle",
+    "tier": "modifier",
+    "parent": "bramblegrowth",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "rootednetwork",
+    "name": "Rooted Network",
+    "tier": "modifier",
+    "parent": "symbiosis",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "livingbond",
+    "name": "Wild Roar",
+    "tier": "modifier",
+    "parent": "symbiosis",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "naturesembrace",
+    "name": "Nature's Embrace",
+    "tier": "modifier",
+    "parent": "symbiosis",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Slayer": [
+   {
+    "key": "wound",
+    "name": "Open Wound",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "vampiricfrenzy",
+    "name": "Vampiric Frenzy",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "sacrifice",
+    "name": "Bloodpact",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "festering",
+    "name": "Festering Wound",
+    "tier": "spec",
+    "parent": "wound",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "hemorrhage",
+    "name": "Hemorrhage",
+    "tier": "spec",
+    "parent": "wound",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "necrotic",
+    "name": "Necrotic Grip",
+    "tier": "spec",
+    "parent": "wound",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "bloodfrenzy",
+    "name": "Blood Frenzy",
+    "tier": "spec",
+    "parent": "vampiricfrenzy",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "endlessthirst",
+    "name": "Endless Thirst",
+    "tier": "spec",
+    "parent": "vampiricfrenzy",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "reapers",
+    "name": "Reaper's Momentum",
+    "tier": "spec",
+    "parent": "vampiricfrenzy",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "grimbargain",
+    "name": "Grim Bargain",
+    "tier": "spec",
+    "parent": "sacrifice",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "bloodsac",
+    "name": "Blood Sacrifice",
+    "tier": "spec",
+    "parent": "sacrifice",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "martyrdom",
+    "name": "Martyrdom",
+    "tier": "spec",
+    "parent": "sacrifice",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "rot",
+    "name": "Rot",
+    "tier": "modifier",
+    "parent": "festering",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "contagion",
+    "name": "Contagion",
+    "tier": "modifier",
+    "parent": "festering",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "blooddebt",
+    "name": "Blood Debt",
+    "tier": "modifier",
+    "parent": "festering",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "overflow",
+    "name": "Overflow",
+    "tier": "modifier",
+    "parent": "hemorrhage",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "arterialspray",
+    "name": "Arterial Spray",
+    "tier": "modifier",
+    "parent": "hemorrhage",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "hemorrhagesecondwind",
+    "name": "Second Wind",
+    "tier": "modifier",
+    "parent": "hemorrhage",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "witheringtouch",
+    "name": "Withering Touch",
+    "tier": "modifier",
+    "parent": "necrotic",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "plaguebearer",
+    "name": "Plague Bearer",
+    "tier": "modifier",
+    "parent": "necrotic",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "gravechill",
+    "name": "Grave Chill",
+    "tier": "modifier",
+    "parent": "necrotic",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "unrelenting",
+    "name": "Unrelenting",
+    "tier": "modifier",
+    "parent": "bloodfrenzy",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "warcry",
+    "name": "War Cry",
+    "tier": "modifier",
+    "parent": "bloodfrenzy",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "adrenaline",
+    "name": "Adrenaline",
+    "tier": "modifier",
+    "parent": "bloodfrenzy",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "overflowvessel",
+    "name": "Overflow Vessel",
+    "tier": "modifier",
+    "parent": "endlessthirst",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "insatiable",
+    "name": "Insatiable",
+    "tier": "modifier",
+    "parent": "endlessthirst",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "secondheartbeat",
+    "name": "Second Heartbeat",
+    "tier": "modifier",
+    "parent": "endlessthirst",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chainreaper",
+    "name": "Chain Reaper",
+    "tier": "modifier",
+    "parent": "reapers",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "deathspiral",
+    "name": "Death Spiral",
+    "tier": "modifier",
+    "parent": "reapers",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "undying",
+    "name": "Undying",
+    "tier": "modifier",
+    "parent": "reapers",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "bloodforblood",
+    "name": "Blood for Blood",
+    "tier": "modifier",
+    "parent": "grimbargain",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "debtcollector",
+    "name": "Debt Collector",
+    "tier": "modifier",
+    "parent": "grimbargain",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "cleanslate",
+    "name": "Clean Slate",
+    "tier": "modifier",
+    "parent": "grimbargain",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "triage",
+    "name": "Triage",
+    "tier": "modifier",
+    "parent": "bloodsac",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "warlordsresolve",
+    "name": "Warlord's Resolve",
+    "tier": "modifier",
+    "parent": "bloodsac",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "finaloffering",
+    "name": "Final Offering",
+    "tier": "modifier",
+    "parent": "bloodsac",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "guardiansblood",
+    "name": "Guardian's Blood",
+    "tier": "modifier",
+    "parent": "martyrdom",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "sharedpain",
+    "name": "Shared Pain",
+    "tier": "modifier",
+    "parent": "martyrdom",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "lastrites",
+    "name": "Last Rites",
+    "tier": "modifier",
+    "parent": "martyrdom",
+    "unlockAt": 4,
+    "max": 3
+   }
+  ],
+  "Elementalist": [
+   {
+    "key": "righteousfire",
+    "name": "Righteous Fire",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "elementalfocus",
+    "name": "Elemental Focus",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "golemmaster",
+    "name": "Golem Master",
+    "tier": "skill",
+    "parent": null,
+    "unlockAt": null,
+    "max": 3
+   },
+   {
+    "key": "healingflames",
+    "name": "Healing Flames",
+    "tier": "spec",
+    "parent": "righteousfire",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "cleansingflames",
+    "name": "Cleansing Flames",
+    "tier": "spec",
+    "parent": "righteousfire",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "scorchingflames",
+    "name": "Scorching Flames",
+    "tier": "spec",
+    "parent": "righteousfire",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "shockingfocus",
+    "name": "Shocking Focus",
+    "tier": "spec",
+    "parent": "elementalfocus",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "chillingfocus",
+    "name": "Chilling Focus",
+    "tier": "spec",
+    "parent": "elementalfocus",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "scorchingfocus",
+    "name": "Scorching Focus",
+    "tier": "spec",
+    "parent": "elementalfocus",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "thundergolem",
+    "name": "Thunder Golem",
+    "tier": "spec",
+    "parent": "golemmaster",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "flamegolem",
+    "name": "Flame Golem",
+    "tier": "spec",
+    "parent": "golemmaster",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "watergolem",
+    "name": "Water Golem",
+    "tier": "spec",
+    "parent": "golemmaster",
+    "unlockAt": null,
+    "max": 4
+   },
+   {
+    "key": "fanningflames",
+    "name": "Fanning Flames",
+    "tier": "modifier",
+    "parent": "healingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "risingphoenix",
+    "name": "Rising Phoenix",
+    "tier": "modifier",
+    "parent": "healingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "shieldingflames",
+    "name": "Shielding Flames",
+    "tier": "modifier",
+    "parent": "healingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "enshroudedfire",
+    "name": "Enshrouded Fire",
+    "tier": "modifier",
+    "parent": "cleansingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "guardianfire",
+    "name": "Guardian Fire",
+    "tier": "modifier",
+    "parent": "cleansingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "shieldingfire",
+    "name": "Shielding Fire",
+    "tier": "modifier",
+    "parent": "cleansingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "relentlessflames",
+    "name": "Relentless Flames",
+    "tier": "modifier",
+    "parent": "scorchingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "cauterizingflames",
+    "name": "Cauterizing Flames",
+    "tier": "modifier",
+    "parent": "scorchingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "ashestoashes",
+    "name": "Ashes to Ashes, Dust to Dust",
+    "tier": "modifier",
+    "parent": "scorchingflames",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "overshock",
+    "name": "Overshock",
+    "tier": "modifier",
+    "parent": "shockingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "electricaloverload",
+    "name": "Electrical Overload",
+    "tier": "modifier",
+    "parent": "shockingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "lightningaegis",
+    "name": "Lightning Aegis",
+    "tier": "modifier",
+    "parent": "shockingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "polarflux",
+    "name": "Polar Flux",
+    "tier": "modifier",
+    "parent": "chillingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "hoarfrost",
+    "name": "Blizzard",
+    "tier": "modifier",
+    "parent": "chillingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "chillingaegis",
+    "name": "Chilling Aegis",
+    "tier": "modifier",
+    "parent": "chillingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "incinerate",
+    "name": "Incinerate",
+    "tier": "modifier",
+    "parent": "scorchingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "pyroclasm",
+    "name": "Conflagration",
+    "tier": "modifier",
+    "parent": "scorchingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "scorchingaegis",
+    "name": "Scorching Aegis",
+    "tier": "modifier",
+    "parent": "scorchingfocus",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "gigantify",
+    "name": "Gigantify",
+    "tier": "modifier",
+    "parent": "thundergolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "growing",
+    "name": "Growing",
+    "tier": "modifier",
+    "parent": "thundergolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "terrifying",
+    "name": "Terrifying",
+    "tier": "modifier",
+    "parent": "thundergolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "volcanicash",
+    "name": "Volcanic Ash",
+    "tier": "modifier",
+    "parent": "flamegolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "blazing",
+    "name": "Blazing",
+    "tier": "modifier",
+    "parent": "flamegolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "surging",
+    "name": "Surging",
+    "tier": "modifier",
+    "parent": "flamegolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "replenishing",
+    "name": "Replenishing",
+    "tier": "modifier",
+    "parent": "watergolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "singing",
+    "name": "Singing",
+    "tier": "modifier",
+    "parent": "watergolem",
+    "unlockAt": 4,
+    "max": 3
+   },
+   {
+    "key": "shattering",
+    "name": "Shattering",
+    "tier": "modifier",
+    "parent": "watergolem",
+    "unlockAt": 4,
+    "max": 3
    }
   ]
  }

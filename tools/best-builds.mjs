@@ -31,8 +31,37 @@ const OBJECTIVES = {
 };
 
 const classes = Object.keys(model.archetypes).filter((c) => tree.classes[c] && tree.classes[c].length);
-const out = { level: LEVEL, tier: TIER, points: POINTS, ruleset: model.note, results: {} };
-const nameOf = (cls, key) => (tree.classes[cls].find((n) => n.key === key) || {}).name || key;
+// `nodes` is passive-tree.json with the prose and effect math stripped: enough
+// to turn a scraped tree (which carries node NAMES only — the read-only
+// /characters/:login/passives page has no form, so no node_key) back into
+// allocatable keys in a legal order. Rides along here because server/public is
+// not shipped with the app and this file already is.
+const out = {
+  level: LEVEL, tier: TIER, points: POINTS, ruleset: model.note, results: {},
+  nodes: Object.fromEntries(classes.map((c) => [c, tree.classes[c].map(
+    ({ key, name, tier: t, parent, unlockAt, max }) => ({ key, name, tier: t, parent, unlockAt, max }))])),
+};
+const nodeOf = (cls, key) => tree.classes[cls].find((n) => n.key === key) || {};
+const nameOf = (cls, key) => nodeOf(cls, key).name || key;
+// Node keys in an order the game will accept: tier order (Skills -> Specs ->
+// Modifiers), and within that, a parent always before its children. Same rule
+// docs/memories_spec.md gives for replaying a saved build — the dossier page
+// replays these one allocate call at a time, so a child sent first would be
+// refused with ParentNotInvested.
+const TIERS = ['skill', 'spec', 'modifier'];
+function orderedAlloc(cls, alloc) {
+  const rows = Object.entries(alloc).map(([key, rank]) => ({ key, rank, ...nodeOf(cls, key) }));
+  rows.sort((a, z) => TIERS.indexOf(a.tier) - TIERS.indexOf(z.tier));
+  const out = [], done = new Set();
+  while (rows.length) {
+    const i = rows.findIndex((r) => !r.parent || done.has(r.parent));
+    if (i < 0) throw new Error(`${cls}: allocation has an unreachable parent chain`);
+    const [r] = rows.splice(i, 1);
+    done.add(r.key);
+    out.push({ key: r.key, name: r.name || r.key, rank: r.rank, tier: r.tier });
+  }
+  return out;
+}
 const pct = (x) => (x * 100).toFixed(1) + '%';
 
 for (const [obj, fn] of Object.entries(OBJECTIVES)) {
@@ -44,6 +73,9 @@ for (const [obj, fn] of Object.entries(OBJECTIVES)) {
     eff: r.score.detail.eff, taken: r.score.detail.taken, healPower: r.score.healPower,
     intervalMs: r.score.interval, splash: r.score.splash, linger: r.score.detail.lingerPct,
     tree: Object.fromEntries(Object.entries(r.alloc).map(([k, v]) => [nameOf(r.cls, k), v])),
+    // Keyed + ordered twin of `tree`, for anything that replays the build into
+    // the live game rather than printing it.
+    alloc: orderedAlloc(r.cls, r.alloc),
     gear: r.gear.picks, sacred: r.gear.sacred,
   }));
   console.log(`\n=== best ${obj} — level ${LEVEL}, tier ${TIER} gear, ${POINTS} passive points ===`);
@@ -51,6 +83,25 @@ for (const [obj, fn] of Object.entries(OBJECTIVES)) {
     console.log(`${x.cls.padEnd(10)} dps ${x.dps.toExponential(3)}  hps ${x.hps.toExponential(3)}  ehp ${x.ehp.toExponential(3)}`
       + `  inc ${pct(x.inc)}  cc ${x.critChance.toFixed(1)}  cm ${x.critMult.toFixed(1)}`
       + `  dr/blk/eva ${pct(x.eff.dr)}/${pct(x.eff.block)}/${pct(x.eff.evasion)}  heal ${pct(x.healPower)}  ${x.intervalMs.toFixed(0)}ms`);
+  }
+}
+
+// Replay every emitted allocation the way the game will (passive_tree.rs's
+// validate_allocation_step): ranks within max, a parent invested to unlock_at
+// BEFORE its child, and the whole thing inside the point budget. The dossier
+// page fires one allocate call per node in this order, so a bad order here is a
+// half-applied tree on someone's character.
+for (const list of Object.values(out.results)) {
+  for (const r of list) {
+    const side = {};
+    for (const n of r.alloc) {
+      const node = nodeOf(r.cls, n.key);
+      if (!(n.rank > 0 && n.rank <= node.max)) throw new Error(`${r.cls}/${n.key}: rank ${n.rank} over max ${node.max}`);
+      if (node.parent && (side[node.parent] || 0) < (node.unlockAt ?? 1)) throw new Error(`${r.cls}/${n.key}: parent ${node.parent} not invested yet`);
+      side[n.key] = n.rank;
+    }
+    const spent = Object.values(side).reduce((a, v) => a + v, 0);
+    if (spent > POINTS) throw new Error(`${r.cls}: ${spent} points over the ${POINTS} budget`);
   }
 }
 
