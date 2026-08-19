@@ -2549,7 +2549,11 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         return;
       }
       e.target.disabled = true;
-      const dust = () => fetch('/api/inventory', { cache: 'no-store' })
+      // ?fresh=1: this is a before/after delta, so the "before" must not be a
+      // few-seconds-stale cached body or the reported gain absorbs whatever the
+      // auto-battle earned in that window. (The "after" is fresh regardless —
+      // the disenchant POST drops the bridge's cache.)
+      const dust = () => fetch('/api/inventory?fresh=1', { cache: 'no-store' })
         .then(r => r.json()).then(i => /^\d+$/.test(String(i.dust)) ? +i.dust : null).catch(() => null);
       const before = await dust();
       stampCraft(); // currency action — keep it out of the battle-toast delta

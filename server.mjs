@@ -306,6 +306,35 @@ function bag(text) {
 // clears it — before invalidateRoster existed, a class change stayed invisible
 // until the TTL lapsed or the user quit the whole app, which is exactly what
 // they reported doing.
+// Same idea for /inventory and /, the two pages every window re-pulls: with the
+// main window and the bag open, both poll independently and each pull is a
+// 50-100KB page plus a full parse. Serve one upstream fetch to concurrent
+// callers, and to anything asking again inside a short window.
+//
+// Correctness: the only readers that need a read to reflect a write are the
+// before/after diffs (craftAct, the disenchant dust probe), and everything that
+// can move this state goes through the single post() call site in /api/action —
+// so dropping both caches there is complete, not a heuristic. The craft retry
+// loop additionally passes ?fresh=1, since it re-reads the SAME state waiting
+// out the game's read-after-write lag and would otherwise just re-read its own
+// cached body. Unlike rosterCache this never caches or serves stale on error:
+// the downtime curtain keys off /api/me actually failing.
+const API_TTL_MS = 3000;
+const ttlCache = (fn) => {
+  let at = 0, data = null, flight = null;
+  const get = (fresh) => {
+    if (!fresh && data && Date.now() - at < API_TTL_MS) return Promise.resolve(data);
+    if (flight) return flight;                 // in-flight coalescing, same as pullInterface's guard
+    flight = fn().then(d => { at = Date.now(); data = d; return d; })
+                 .finally(() => { flight = null; });
+    return flight;
+  };
+  get.drop = () => { at = 0; };                // fresh=1 bypasses the READ, still fills the cache
+  return get;
+};
+// inventory/me are hoisted function declarations, so wrapping them here is fine.
+const cachedInventory = ttlCache(() => inventory()), cachedMe = ttlCache(() => me());
+
 const ROSTER_TTL_MS = 5 * 60000;
 let rosterCache = { at: 0, list: [] };
 // Force the next roster() to re-scrape. Called when we know the roster just
@@ -1047,10 +1076,10 @@ const srv = createServer(async (req, res) => {
       return json(res, { since: netStats.since, paths: netStats.paths });
     }
     if (url.pathname === '/api/me') {
-      return json(res, await me());
+      return json(res, await cachedMe(url.searchParams.has('fresh')));
     }
     if (url.pathname === '/api/inventory') {
-      return json(res, await inventory());
+      return json(res, await cachedInventory(url.searchParams.has('fresh')));
     }
     if (url.pathname === '/api/passives') {
       return json(res, await passives());
@@ -1092,6 +1121,12 @@ const srv = createServer(async (req, res) => {
     if (url.pathname === '/api/action' && req.method === 'POST') {
       const { endpoint, fields } = await jbody(req);
       const r = await post(endpoint, fields || {});
+      // This is the only post() call site, so it's the only thing that can move
+      // the inventory or the character sheet from our side — drop both caches
+      // unconditionally. Not gated on r.ok: the site 303s on business failures
+      // too and a rejected craft may still have moved dust, and being wrong here
+      // costs one extra fetch.
+      cachedInventory.drop(); cachedMe.drop();
       // Success-looking 302 to the login page = dead session; tell the UI apart
       // from a normal craft redirect so it can say "restart to re-login".
       if (r.ok && loginRedirect(r.location)) r.expired = true;

@@ -350,7 +350,11 @@
         // Front-loaded backoff: the typical craft settles in one short beat, so
         // don't make every action wait a flat 800ms to find that out.
         if (i) await new Promise(z => setTimeout(z, 200 * 2 ** (i - 1))); // 200,400,800,1600
-        let after; try { after = await fetch('/api/inventory', { cache: 'no-store' }).then(x => x.json()); } catch { continue; }
+        // Retries re-read the SAME state waiting out the game's read-after-write
+        // lag, so they must skip the bridge's TTL cache or they'd just re-read
+        // their own cached body and every action would report "no change".
+        // The i=0 read is fresh anyway — the POST just dropped the cache.
+        let after; try { after = await fetch('/api/inventory' + (i ? '?fresh=1' : ''), { cache: 'no-store' }).then(x => x.json()); } catch { continue; }
         // A veiled/token craft doesn't change the inventory — it parks a pending
         // 3-outcome choice. Don't sit in the retry loop: render it right away.
         if (after.veil && !before.veil) { toast('🔮 Veiled — pick your outcome below'); load(); return r; }
