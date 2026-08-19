@@ -206,6 +206,8 @@
   .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 3px 9px; font-size: 0.78rem; }
   /* Party arrange picker — native select, pushed to the end of the chip row. */
+  .rolechips .nq { margin-left: auto; cursor: help; opacity: 0.75; padding: 3px 8px; }
+  .rolechips .nq + .psel { margin-left: 0; }
   .rolechips .psel { margin-left: auto; background: #1c1830; color: #c9bdf0; font-size: 0.72rem;
     border: 1px solid rgba(160,140,255,0.25); border-radius: 8px; padding: 2px 4px; }
   /* MMO raid-frame grid: compact member cells, status-tinted */
@@ -1485,19 +1487,20 @@
       })
       .catch(() => { delete buildPending[pid]; });
   };
-  // Notch period as a % of a member's own bar. One fixed HP-per-notch across the
-  // party (refMax/10, so the tankiest shows ~10), but each bar's notch COUNT is
-  // rounded to a whole number and the period is 100/count — so notches always
-  // spread evenly edge to edge (no ragged last segment) while a higher-max member
-  // still shows more of them. Floor of 3 so even the squishiest bar reads as a
-  // bar, not one block. The cap was 16/18: at a ~110px cell that is a notch
-  // every 6px, which reads as hatching rather than segments — 10/12 keeps them
-  // legible at raid-frame width. null when there's no HP scale yet.
-  const tickPctOf = (refMax, max) => {
-    if (!(refMax > 0) || !(max > 0)) return null;
-    const count = Math.max(3, Math.min(12, Math.round(max / (refMax / 10))));
-    return 100 / count;
-  };
+  // A round number near v, off a 1/2/5/10 ladder — so the notch unit is
+  // something you can say out loud ("100k a notch"), not 287,431.
+  const niceUnit = (v) => { const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
+    return (n >= 7 ? 10 : n >= 3.5 ? 5 : n >= 1.5 ? 2 : 1) * p; };
+  // Notch period as a % of a member's own bar, for ONE fixed HP-per-notch across
+  // the whole party. Earlier versions rounded the notch COUNT to a whole number
+  // so the marks divided each bar evenly — which quietly made a notch worth a
+  // different amount of HP on every bar, and the clamp (min 3, max 12) made a
+  // 598-HP alt and a 2.9M-HP tank read as roughly the same chain of segments.
+  // Now the unit is fixed and the LAST segment is allowed to be a short one:
+  // count is genuinely max/unit, so more notches really does mean a bigger pool.
+  // null when a member's whole pool is under one notch — a plain bar, which is
+  // the honest picture next to a party 5000x their size.
+  const tickPctOf = (unit, max) => (unit > 0 && max > unit) ? unit / max * 100 : null;
   function renderParty() {
     if (!lastRoster) return; // placeholder stays
     // Class kit first; the WS role field is the fallback when the roster
@@ -1575,21 +1578,24 @@
     // empty/red regardless of the last HP sample. No fight data → full/neutral.
     // A shield_hp absorb rides on top as a bluish glow that shrinks as it's spent.
     // Party-wide HP scale (its biggest active member), so the fixed HP-per-notch —
-    // and thus how many notches each bar shows — is shared across the pane.
+    // and thus how many notches each bar shows — is shared across the pane. The
+    // tankiest member lands on ~10 notches; everyone else falls where their own
+    // max puts them.
     const refMax = Math.max(0, ...cs.filter(c => !c.retreated).map(maxOf));
+    const notchUnit = refMax > 0 ? niceUnit(refMax / 10) : 0;
     // One state object drives both the rebuild string (hpBar) and the in-place
     // tick update (paintBar), so they can't drift. Downed = a dead bar; no live
     // unit = a full, green, glowing bar (with notches from best-known max).
     const barState = (c) => {
       const max = maxOf(c);
-      if (isDown(c)) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(refMax, max), title: '⬇️ Downed' };
+      if (isDown(c)) return { pct: 100, lvl: 'dead', shPct: 0, tick: tickPctOf(notchUnit, max), title: '⬇️ Downed' };
       const u = unitOf(c);
-      if (!u || !u.max) return { pct: 100, lvl: 'ok', shPct: 0, tick: tickPctOf(refMax, max), title: 'Full HP' };
+      if (!u || !u.max) return { pct: 100, lvl: 'ok', shPct: 0, tick: tickPctOf(notchUnit, max), title: 'Full HP' };
       const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
       const lvl = pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'low';
       const shPct = u.shield > 0 ? Math.max(0, Math.min(100, u.shield / u.max * 100)) : 0;
       const title = `${fmtN(u.hp)} / ${fmtN(u.max)} HP${u.shield > 0 ? ` · \u{1F6E1} ${fmtN(u.shield)} shield` : ''}`;
-      return { pct, lvl, shPct, tick: tickPctOf(refMax, u.max), title };
+      return { pct, lvl, shPct, tick: tickPctOf(notchUnit, u.max), title };
     };
     // Live HP% for the name row. Same clamp as barState's pct; only meaningful
     // while a fight plays, and a downed member's bar is forced full-red so a
@@ -1674,6 +1680,7 @@
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
       ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)} data-tip="Role coverage by class kit — dual-role classes (Warrior, Paladin, Druid, Monk) count in each of their roles, so the pips can sum past the party size.">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
       `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}` +
+      (notchUnit > 0 ? `<span class="chip nq" data-tip="Each notch on an HP bar is ${fmtN(notchUnit)} HP, the same amount on every bar. A bar is always full-width at that member's OWN max Health, so the notch count is what tells you how big their pool is — and someone whose whole pool is under one notch shows no notches at all. Max Health comes from the live fight while one is playing, otherwise from their build page, which reports it rounded (a flat &quot;1M&quot;).">?</span>` : '') +
       `<select class="psel" id="partySortSel" title="How the grid is arranged. HP % re-ranks live during a fight (about once a second), most-hurt first, fallen and retreated last. Max HP is the health stat, so it holds still.">` +
       Object.entries(PARTY_SORTS).map(([k, label]) =>
         `<option value="${k}"${k === partySort ? ' selected' : ''}>${label}</option>`).join('') + '</select></div>' +
