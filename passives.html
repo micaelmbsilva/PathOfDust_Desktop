@@ -182,8 +182,11 @@
         <div class="srow">
           <button class="btn-save" data-act="load" data-slot="${m.slot}">Load</button>
           <button class="btn-respec" data-act="over" data-slot="${m.slot}" data-name="${esc(m.name)}">Overwrite</button>
-          <button class="btn-respec" data-act="rename" data-slot="${m.slot}" data-name="${esc(m.name)}">Rename</button>
           <button class="btn-respec danger" data-act="del" data-slot="${m.slot}">Delete</button>
+        </div>
+        <div class="srow">
+          <input class="mname" id="mn${m.slot}" maxlength="150" value="${esc(m.name)}" aria-label="Rename Memory ${m.slot + 1}">
+          <button class="btn-respec" data-act="rename" data-slot="${m.slot}" data-name="${esc(m.name)}">Rename</button>
         </div>
       </div>` : `
       <div class="slot empty">
@@ -211,8 +214,11 @@
       if (!confirm('Overwrite this Memory with your current build?')) return;
       endpoint = 'passives/memories/save'; fields = { slot, name: b.dataset.name };
     } else if (act === 'rename') {
-      const v = prompt('New name for this Memory:', b.dataset.name);
-      if (v == null) return;
+      // An inline input, NOT window.prompt() — Electron doesn't implement prompt
+      // and silently no-ops it, which is exactly how this shipped broken. Same
+      // note lives on index.html's feedback composer.
+      const v = ($('mn' + slot).value || '').trim();
+      if (!v || v === b.dataset.name) return; // nothing typed, or unchanged
       endpoint = 'passives/memories/rename'; fields = { slot, name: v };
     } else {
       if (!confirm('Delete this Memory? This cannot be undone.')) return;
