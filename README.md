@@ -37,6 +37,11 @@ your character and watch the action without juggling browser tabs.
 2. Run it. It installs for the current user (no admin needed) and launches automatically.
    - Windows SmartScreen may warn on an unsigned app → *More info → Run anyway*.
 
+**macOS**: grab the `.dmg` for your chip (`arm64` for Apple Silicon, `x64` for Intel) from the
+[latest release](https://github.com/micaelmbsilva/PathOfDust_Desktop/releases/latest). The app is
+unsigned — right-click → *Open* on first launch, and shell updates are applied by downloading the
+new `.dmg` when the app offers it (the web UI still updates itself automatically).
+
 A Start Menu shortcut is created for you.
 
 ### First launch — log in
