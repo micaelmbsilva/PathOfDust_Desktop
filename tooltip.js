@@ -14,10 +14,17 @@
   document.body.appendChild(tip); // this script is loaded at end of <body>, so body exists
 
   let cur = null;
+  // The box only changes size when its text does, i.e. in show(). Measuring
+  // there instead of on every mousemove takes a forced synchronous layout out
+  // of the pointer path — it was reading getBoundingClientRect one event after
+  // writing left/top, which is the classic read-after-write reflow, on a page
+  // whose bag grid can be thousands of elements.
+  let tw = 0, th = 0;
   const show = (el) => {
     const t = el.getAttribute('data-tip');
     if (!t) return;
     tip.textContent = t; tip.style.display = 'block'; cur = el;
+    const r = tip.getBoundingClientRect(); tw = r.width; th = r.height;
   };
   const hide = () => { tip.style.display = 'none'; cur = null; };
 
@@ -29,11 +36,10 @@
     if (cur && !cur.contains(e.relatedTarget)) hide();
   });
   document.addEventListener('mousemove', (e) => {
-    if (tip.style.display === 'none') return;
+    if (!cur) return;
     let x = e.clientX + 14, y = e.clientY + 16;
-    const r = tip.getBoundingClientRect();
-    if (x + r.width > innerWidth) x = e.clientX - r.width - 10;
-    if (y + r.height > innerHeight) y = e.clientY - r.height - 10;
+    if (x + tw > innerWidth) x = e.clientX - tw - 10;
+    if (y + th > innerHeight) y = e.clientY - th - 10;
     tip.style.left = x + 'px'; tip.style.top = y + 'px';
   });
 })();

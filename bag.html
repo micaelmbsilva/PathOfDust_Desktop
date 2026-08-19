@@ -369,7 +369,17 @@
     return r;
   }
 
+  // Overlapping loads waste a fetch pair and can strand pipTargets: it's reset
+  // partway through, so an interleaved pair leaves picker closures bound to
+  // detached DOM. Same busy/again shape as index.html's pollBag.
+  let loadBusy = false, loadAgain = false;
   async function load() {
+    if (loadBusy) { loadAgain = true; return; }
+    loadBusy = true;
+    try { await loadNow(); }
+    finally { loadBusy = false; if (loadAgain) { loadAgain = false; load(); } }
+  }
+  async function loadNow() {
     $('err').textContent = '';
     let inv, meData;
     try { [inv, meData] = await Promise.all([
