@@ -40,8 +40,23 @@ jobs:
       - name: Tests
         run: npm test
 
-  build:
+  # Create the release once, before either publish job. When both build jobs
+  # let electron-builder create it, they race: v4.3.0 ended up as TWO non-draft
+  # releases on one tag (win assets in one, mac in the other), the tag download
+  # URL 404'd for latest.yml, and every Windows shell read the failed check as
+  # "up to date". Title must equal package.json's version (tag minus "v") —
+  # that's what electron-builder matches on; verify already enforces they agree.
+  create-release:
     needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release if missing
+        run: gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "${GITHUB_REF_NAME#v}" --notes ""
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: create-release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +79,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
   build-mac:
-    needs: verify
+    needs: create-release
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

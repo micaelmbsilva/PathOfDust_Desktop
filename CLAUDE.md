@@ -41,6 +41,22 @@ landed in the `v32.2.0` release and no 32.3.0 was ever created. `.github/check-v
 now blocks that, and also checks `package-lock.json`, whose two version fields sat
 two releases behind before anyone noticed.
 
+**One tag can end up with two releases.** When both publish jobs let
+electron-builder create the release, they race: v4.3.0 became two non-draft
+releases on one tag — win assets (`latest.yml`, `PathOfDust-Setup.exe`) in one,
+mac assets in the other. GitHub's tag download URL
+(`releases/download/vX.Y.Z/latest.yml`) resolves to only one of them, so it
+404'd for Windows, and the UI shows a failed update check as "✅ Up to Date" —
+every Windows shell silently froze on its old version. Since then `release.yml`
+has a `create-release` job that creates the release once (title = tag minus
+`v` = package.json version) before either build job runs; build jobs only
+upload assets. The semver agreement rule therefore extends to the **release
+title**: if it ever disagrees with package.json's version, electron-builder
+creates a second release and the split comes back. If duplicates ever appear
+again: copy the missing assets into the release the tag URL resolves to
+(`gh release view v<X.Y.Z>` shows which one that is), then delete the orphan
+release by id — never the tag.
+
 To ship an installer:
 
 ```bash
