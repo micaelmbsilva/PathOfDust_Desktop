@@ -185,7 +185,10 @@
   /* .dcollapsed is the downtime auto-collapse — same visual as .collapsed but a
      separate class, so restoring it can't clobber what the user collapsed by hand. */
   .apanel:is(.collapsed, .dcollapsed) { height: auto !important; min-height: 0 !important; resize: none; }
-  .apanel:is(.collapsed, .dcollapsed) .abody { display: none; }
+  /* !important because #fightBody carries an inline display:flex, which an
+     id-free rule (and even an id one, being inline) would otherwise lose to —
+     Live Fight stayed fully drawn under its own collapsed title bar. */
+  .apanel:is(.collapsed, .dcollapsed) .abody { display: none !important; }
   .apanel:is(.collapsed, .dcollapsed) .cbar { border-bottom: 0; }
   .apanel .abody { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px; }
   .rolechips { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
