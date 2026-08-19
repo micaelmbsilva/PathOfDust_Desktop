@@ -1491,27 +1491,26 @@
       })
       .catch(() => { delete buildPending[pid]; });
   };
-  // Round numbers off a 1/2/5 ladder — so a notch is worth something you can say
-  // out loud ("100k a notch"), not 287,431. Up for the party-wide unit (keeps the
-  // biggest bar from turning into hatching), down for a small member's own unit.
-  const niceUp = (v) => { const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
-    return (n > 5 ? 10 : n > 2 ? 5 : n > 1 ? 2 : 1) * p; };
-  const niceDown = (v) => { const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
-    return (n >= 5 ? 5 : n >= 2 ? 2 : 1) * p; };
-  // Two-tier notches, LoL-style: a thin mark every `unit` HP and a bold one every
-  // 5 units. A single party-wide unit can't serve this roster — measured live it
-  // runs from 794 HP to 3.37M, 4000x — so anything that keeps the tankiest bar
-  // readable leaves most of the party under one notch, which is what v193 did.
-  // So: the party unit is used by everyone who has at least 3 of them, and a
-  // member below that gets their own smaller unit instead of a blank bar. Both
-  // are named in the bar's hover, so a bar never shows a scale you can't read.
-  // null only when the pool is too small for even that.
-  const notchOf = (max, partyUnit) => {
-    if (!(max > 0)) return null;
-    const unit = (partyUnit > 0 && max >= 3 * partyUnit) ? partyUnit : niceDown(Math.max(1, max / 3));
-    if (!(unit > 0) || max < unit * 1.2) return null;
-    return { unit, own: unit !== partyUnit, tick: unit / max * 100,
-      bold: max >= unit * 5 ? unit * 5 / max * 100 : null };
+  // Two-tier notches, LoL-style: thin marks every notch, bold ones splitting the
+  // bar into 4 or 5 chunks. Every bar divides into a WHOLE number of notches off
+  // this ladder — no ragged last segment — and each entry is divisible by 4 or 5
+  // so the bold marks always land on a thin one.
+  const NOTCH_STEPS = [4, 5, 8, 10, 12, 15, 16, 20, 24, 25, 32];
+  // Count is the member's share of the party's biggest pool — 32 notches is the
+  // tankiest bar in the pane, 4 the floor. Square root, not a straight ratio:
+  // measured live this party runs 794 HP to 3.37M, and on a straight ratio
+  // everything under 5% of the top (two thirds of the roster) flattens onto the
+  // floor and the pane says nothing. Sqrt keeps the small end apart at the cost
+  // of understating the big end, so what a notch is WORTH varies per bar — which
+  // is what the bar's hover is for.
+  // Under 6 notches the marks ARE the bold tier — subdividing four segments into
+  // four segments just draws every line twice.
+  const notchOf = (max, refMax) => {
+    if (!(max > 0) || !(refMax > 0)) return null;
+    const want = Math.sqrt(Math.min(1, max / refMax)) * 32;
+    const count = NOTCH_STEPS.reduce((a, b) => Math.abs(b - want) < Math.abs(a - want) ? b : a);
+    return count < 6 ? { count, unit: max / count, tick: null, bold: 100 / count }
+      : { count, unit: max / count, tick: 100 / count, bold: 100 / (count % 5 === 0 ? 5 : 4) };
   };
   function renderParty() {
     if (!lastRoster) return; // placeholder stays
@@ -1594,9 +1593,6 @@
     // tankiest member lands on ~10 notches; everyone else falls where their own
     // max puts them.
     const refMax = Math.max(0, ...cs.filter(c => !c.retreated).map(maxOf));
-    // /25 keeps the biggest bar near 25 thin marks — about 5px apart at a
-    // raid-frame cell, the point where they stop being separate marks.
-    const notchUnit = refMax > 0 ? niceUp(refMax / 25) : 0;
     // One state object drives both the rebuild string (hpBar) and the in-place
     // tick update (paintBar), so they can't drift. Downed = a dead bar; no live
     // unit = a full, green, glowing bar (with notches from best-known max).
@@ -1605,17 +1601,17 @@
       // Every bar says what its own notches are worth — the party unit is in the
       // header's "?", but a member on their own scale would otherwise be silent
       // about it.
-      const scale = (n) => n ? ` · notch ${fmtN(n.unit)}${n.bold ? ` · bold ${fmtN(n.unit * 5)}` : ''}${n.own ? ' (own scale)' : ''}` : '';
-      if (isDown(c)) { const n = notchOf(max, notchUnit);
+      const scale = (n) => n ? ` · ${n.count} notches, ~${fmtN(n.unit)} each` : '';
+      if (isDown(c)) { const n = notchOf(max, refMax);
         return { pct: 100, lvl: 'dead', shPct: 0, notch: n, title: '⬇️ Downed' + scale(n) }; }
       const u = unitOf(c);
-      if (!u || !u.max) { const n = notchOf(max, notchUnit);
+      if (!u || !u.max) { const n = notchOf(max, refMax);
         return { pct: 100, lvl: 'ok', shPct: 0, notch: n, title: `Full HP${max ? ` — ${fmtN(max)}` : ''}${scale(n)}` }; }
       const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
       const lvl = pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'low';
       const shPct = u.shield > 0 ? Math.max(0, Math.min(100, u.shield / u.max * 100)) : 0;
       const title = `${fmtN(u.hp)} / ${fmtN(u.max)} HP${u.shield > 0 ? ` · \u{1F6E1} ${fmtN(u.shield)} shield` : ''}`;
-      const n = notchOf(u.max, notchUnit);
+      const n = notchOf(u.max, refMax);
       return { pct, lvl, shPct, notch: n, title: title + scale(n) };
     };
     // Live HP% for the name row. Same clamp as barState's pct; only meaningful
@@ -1625,7 +1621,8 @@
       return (u && u.max && !isDown(c)) ? Math.round(Math.max(0, Math.min(100, u.hp / u.max * 100))) + '%' : ''; };
     const hpBar = (c) => {
       const s = barState(c);
-      const nv = s.notch ? ` style="--tick:${s.notch.tick.toFixed(2)}%${s.notch.bold ? `;--tickb:${s.notch.bold.toFixed(2)}%` : ''}"` : '';
+      const pct = (v) => (v == null ? '400' : v.toFixed(3)) + '%'; // 400% = past the bar's end, i.e. no marks
+      const nv = s.notch ? ` style="--tick:${pct(s.notch.tick)};--tickb:${pct(s.notch.bold)}"` : '';
       return `<div class="php ${s.lvl}${s.shPct > 0 ? ' sh' : ''}"${nv} title="${esc(s.title)}"
         ><div class="phpt" style="width:${s.pct.toFixed(1)}%"></div><div class="phpf ${s.lvl}" style="width:${s.pct.toFixed(1)}%"></div><div class="pshd" style="width:${s.shPct.toFixed(1)}%"></div></div>`;
     };
@@ -1635,8 +1632,9 @@
       const php = cell && cell.querySelector('.php'); if (!php) return;
       const s = barState(c);
       php.className = `php ${s.lvl}${s.shPct > 0 ? ' sh' : ''}`;
-      if (s.notch) php.style.setProperty('--tick', s.notch.tick.toFixed(2) + '%'); else php.style.removeProperty('--tick');
-      if (s.notch && s.notch.bold) php.style.setProperty('--tickb', s.notch.bold.toFixed(2) + '%'); else php.style.removeProperty('--tickb');
+      if (s.notch) { php.style.setProperty('--tick', s.notch.tick == null ? '400%' : s.notch.tick.toFixed(3) + '%');
+        php.style.setProperty('--tickb', s.notch.bold.toFixed(3) + '%'); }
+      else { php.style.removeProperty('--tick'); php.style.removeProperty('--tickb'); }
       php.title = s.title;
       const f = php.querySelector('.phpf'); if (f) { f.className = `phpf ${s.lvl}`; f.style.width = s.pct.toFixed(1) + '%'; }
       const t = php.querySelector('.phpt'); if (t) t.style.width = s.pct.toFixed(1) + '%';
@@ -1703,7 +1701,7 @@
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
       ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)} data-tip="Role coverage by class kit — dual-role classes (Warrior, Paladin, Druid, Monk) count in each of their roles, so the pips can sum past the party size.">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
       `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}` +
-      (notchUnit > 0 ? `<span class="chip nq" data-tip="Thin notch = ${fmtN(notchUnit)} HP, bold notch = ${fmtN(notchUnit * 5)}. Every bar is full-width at that member's OWN max Health, so the notch count is what tells you how big their pool is. Pools in this party run thousands of times apart, so anyone too small for three party notches is drawn on their own smaller unit rather than a blank bar — every bar names its own unit in its hover. Max Health comes from the live fight while one is playing, otherwise from their build page.">?</span>` : '') +
+      (refMax > 0 ? `<span class="chip nq" data-tip="Every bar splits into a whole number of notches — 32 for the biggest pool in the party, 4 for the smallest — so the notch COUNT is how you compare pools at a glance. Bold marks cut a bar into 4 or 5 chunks; bars with only a few notches skip the thin tier. The count follows the square root of a member's share of the biggest pool, because pools here run from a few hundred HP to millions and a straight ratio flattens most of the party onto the floor — so what one notch is worth differs per bar, and each bar's hover gives its own figure. Max Health comes from the live fight while one is playing, otherwise from their build page.">?</span>` : '') +
       `<select class="psel" id="partySortSel" title="How the grid is arranged. HP % re-ranks live during a fight (about once a second), most-hurt first, fallen and retreated last. Max HP is the health stat, so it holds still.">` +
       Object.entries(PARTY_SORTS).map(([k, label]) =>
         `<option value="${k}"${k === partySort ? ' selected' : ''}>${label}</option>`).join('') + '</select></div>' +
