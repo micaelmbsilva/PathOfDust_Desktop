@@ -1567,6 +1567,21 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     return count < 6 ? { count, unit: max / count, tick: null, bold: 100 / count }
       : { count, unit: max / count, tick: 100 / count, bold: 100 / (count % 5 === 0 ? 5 : 4) };
   };
+  // Raid-plate feel: a hit brightens the plate for a moment, a heal washes it
+  // green. Gated on the SIZE of the change, so the continuous glide between HP
+  // samples (fractions of a percent per frame) never fires one — only a real
+  // step does, which is exactly the per-hit motion a raid frame shows. Web
+  // Animations restarts cleanly on every call; a CSS class would need a forced
+  // reflow per plate to replay.
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const FLASH_PCT = 1.2;
+  const flashBar = (php, delta) => {
+    if (reducedMotion.matches || Math.abs(delta) < FLASH_PCT) return;
+    php.animate(delta < 0
+      ? [{ filter: 'brightness(2.4) saturate(1.4)' }, { filter: 'none' }]
+      : [{ filter: 'brightness(1.7) hue-rotate(-14deg)' }, { filter: 'none' }],
+      { duration: delta < 0 ? 220 : 340, easing: 'ease-out' });
+  };
   function renderParty() {
     if (!lastRoster) return; // placeholder stays
     // Class kit first; the WS role field is the fallback when the roster
@@ -1697,7 +1712,11 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         php.style.setProperty('--tickb', s.notch.bold.toFixed(3) + '%'); }
       else { php.style.removeProperty('--tick'); php.style.removeProperty('--tickb'); }
       php.title = s.title;
-      const f = php.querySelector('.phpf'); if (f) { f.className = `phpf ${s.lvl}`; f.style.width = s.pct.toFixed(1) + '%'; }
+      const f = php.querySelector('.phpf');
+      if (f) {
+        flashBar(php, s.pct - (parseFloat(f.style.width) || 0)); // before the width moves
+        f.className = `phpf ${s.lvl}`; f.style.width = s.pct.toFixed(1) + '%';
+      }
       const t = php.querySelector('.phpt'); if (t) t.style.width = s.pct.toFixed(1) + '%';
       const sh = php.querySelector('.pshd'); if (sh) sh.style.width = s.shPct.toFixed(1) + '%';
       const p = cell.querySelector('.ppct'); if (p) p.textContent = pctOf(c);
@@ -2187,12 +2206,17 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     startFightTimer();
     if (document.getElementById('partypanel').classList.contains('open')) renderParty();
   }
-  // Advance per-unit HP to the replay cursor. HP itself comes from the
-  // authoritative playerVitals timeline when the fight carries one (last sample
-  // with atMs <= cursor wins, a diedAtMs pins to 0) — the event walk then only
-  // feeds shields (buffSnapshot) and covers units without vitals. Without
-  // vitals (old server), the event walk is the HP source too — approximate,
-  // since thinning can drop HP-changing and Defeat events. Both walks are
+  // Advance per-unit HP to the replay cursor. Two sources, and the split is the
+  // difference between a plate that moves and one that sits still: the events
+  // carry the real per-hit HP (targetHpAfter, on every attack — 5338 of 11411
+  // events in a measured stage-1645 boss fight), while playerVitals is only a
+  // coarse anchor (SAME fight: 49 players, a median of 2 hpSamples each for the
+  // whole 7.7s replay, one player with a single sample at t=0). So the events
+  // drive the bar hit by hit, and a vitals sample re-anchors it whenever one
+  // lands — the anchor is authoritative, which is what keeps a thinned event
+  // log from drifting, but it is far too sparse to animate from. A unit with no
+  // events in a gap (thinning drops them) glides between anchors instead.
+  // diedAtMs still pins to 0. Both walks are
   // incremental (fight.hpIdx / per-player vitals idx) so the whole fight costs
   // O(total events + samples), not that per render. Shared by every party bar.
   function advanceHp(cursor) {
@@ -2201,8 +2225,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       const ev = fight.evs[fight.hpIdx++];
       const u = fight.unitHp[ev.target] || fight.unitHp[ev.unit];
       if (!u) continue;
-      const hasVitals = fight.vitals && (fight.vitals[ev.target] || fight.vitals[ev.unit]);
-      if (ev.kind === 'defeat') { if (!hasVitals) u.hp = 0; u.shield = 0; }
+      if (ev.kind === 'defeat') { u.hp = 0; u.shield = 0; u.evAt = ev.atMs || 0; }
       else if (ev.kind === 'buffSnapshot') {
         // shield_hp is the remaining absorb; its absence in a later snapshot
         // means the shield is gone, so a missing key reads as 0. Only present
@@ -2210,20 +2233,32 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         const s = (ev.buffs || []).find(b => b[0] === 'shield_hp');
         u.shield = s ? Math.max(0, +s[1] || 0) : 0;
       }
-      else if (ev.targetHpAfter != null && !hasVitals) u.hp = ev.targetHpAfter;
+      // evAt is the display time of the last event that moved this unit's HP —
+      // the vitals walk below reads it to know which source is the fresher one.
+      else if (ev.targetHpAfter != null) { u.hp = ev.targetHpAfter; u.evAt = ev.atMs || 0; }
     }
     for (const id in fight.vitals || {}) {
       const v = fight.vitals[id], u = fight.unitHp[id];
       if (!u) continue;
-      while (v.idx < v.samples.length && v.samples[v.idx][0] <= cursor) u.hp = v.samples[v.idx++][1];
+      // Re-anchor on each sample, but never with a sample OLDER than the last
+      // event applied: with 2 samples per fight and thousands of events, the
+      // events are usually the newer truth, and snapping back to a stale sample
+      // would undo every hit since it.
+      while (v.idx < v.samples.length && v.samples[v.idx][0] <= cursor) {
+        const [at, hp] = v.samples[v.idx++];
+        if (at >= (u.evAt || 0)) { u.hp = hp; u.evAt = at; }
+      }
       // The samples are a step function, so between two of them the bar sits
       // still and then jumps the whole gap in one 0.34s glide — at 1x the gaps
       // are short enough to read as movement, but a slowed replay stretches them
       // into seconds of nothing followed by a sprint. Walk toward the next
       // sample in display time instead: the sample times and values are
       // untouched, only the space between them is filled in.
-      const nxt = v.samples[v.idx];
-      if (nxt) {
+      const nxt = v.samples[v.idx], prevAt = v.idx ? v.samples[v.idx - 1][0] : 0;
+      // Only when this unit's own events have gone quiet since the last anchor —
+      // otherwise the hits are the motion and interpolating over them would
+      // smooth away the thing being watched.
+      if (nxt && (u.evAt || 0) <= prevAt) {
         const prev = v.idx ? v.samples[v.idx - 1] : [0, u.max];
         const span = nxt[0] - prev[0];
         if (span > 0) u.hp = prev[1] + (nxt[1] - prev[1]) * Math.max(0, Math.min(1, (cursor - prev[0]) / span));
