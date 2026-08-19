@@ -202,6 +202,9 @@
   .chip.bchip.unknown { border-color: rgba(160,140,255,0.3); }
   .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 3px 9px; font-size: 0.78rem; }
+  /* Party arrange picker — native select, pushed to the end of the chip row. */
+  .rolechips .psel { margin-left: auto; background: #1c1830; color: #c9bdf0; font-size: 0.72rem;
+    border: 1px solid rgba(160,140,255,0.25); border-radius: 8px; padding: 2px 4px; }
   /* MMO raid-frame grid: compact member cells, status-tinted */
   .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 6px; }
   /* Role-group heading: spans the whole grid row, with a hairline running out to
@@ -1433,6 +1436,10 @@
   // Composition pips are filters: click DPS/Heal/Tank/Retreated to show only
   // those members, click again (or Active) to clear.
   let partyFilter = null;
+  // How the grid is arranged. Role bands are the default (raid-frame habit);
+  // the rest are flat sorts. Persisted — it's a preference, not a per-fight one.
+  let partySort = LS.get('partySort', 'role');
+  const PARTY_SORTS = { role: 'Group by role', level: 'Sort by level', hp: 'Sort by HP', name: 'Sort by name' };
   // Fast-path bookkeeping: rebuilding the pane wipes CSS transitions/animations,
   // so it only happens when the signature below actually changed. When only the
   // bars move we mutate the existing nodes instead, and the fill glide, damage
@@ -1514,15 +1521,27 @@
     // dps. Retreated and out-of-fight members leave their role band and form
     // their own trailing groups — a dead healer next to the live ones is the
     // thing you're scanning for.
-    const GROUPS = { tank: '🛡️ Tanks', heal: '🩹 Healers', dps: '🗡️ DPS',
+    // 'act' is the unlabelled band the flat sorts drop everyone into — out and
+    // retreated stay their own bands whatever the sort, since that's status, not
+    // ordering.
+    const GROUPS = { tank: '🛡️ Tanks', heal: '🩹 Healers', dps: '🗡️ DPS', act: '',
       out: '💀 Out of the fight', ret: '🏳️ Retreated' };
-    const groupOf = (c) => { if (c.retreated) return 'ret'; if (isOut(c)) return 'out';
-      const rs = kitRolesOf(c) || [of(c)];
+    const roleOf = (c) => { const rs = kitRolesOf(c) || [of(c)];
       return rs.includes('tank') ? 'tank' : rs.includes('heal') ? 'heal' : 'dps'; };
+    const groupOf = (c) => c.retreated ? 'ret' : isOut(c) ? 'out'
+      : partySort === 'role' ? roleOf(c) : 'act';
     const GRANK = Object.keys(GROUPS);
-    // retreated last, then out-of-fight, then role band, then by level.
+    // Sort key by HP: the live bar fraction, so "Sort by HP" puts whoever is
+    // closest to dying first. Between fights everyone reads full and it falls
+    // through to level.
+    const hpFrac = (c) => { if (isDown(c)) return 0; const u = unitOf(c);
+      return (u && u.max) ? u.hp / u.max : 1; };
+    const SORTS = { level: (a, b) => b.level - a.level, hp: (a, b) => hpFrac(a) - hpFrac(b),
+      name: (a, b) => a.displayName.localeCompare(b.displayName) };
+    // retreated last, then out-of-fight, then the chosen arrangement, then level.
     const cs = [...lastRoster.characters].sort((a, b) =>
-      (GRANK.indexOf(groupOf(a)) - GRANK.indexOf(groupOf(b))) || (b.level - a.level));
+      (GRANK.indexOf(groupOf(a)) - GRANK.indexOf(groupOf(b)))
+      || (SORTS[partySort] ? SORTS[partySort](a, b) : 0) || (b.level - a.level));
     const counts = { dps: 0, heal: 0, tank: 0 };
     let retreated = 0;
     // pips count class-kit role coverage (dual-role classes count twice);
@@ -1599,7 +1618,7 @@
     // transition mid-glide. The tick path greys them in place instead, and the
     // sort catches up on the first render after the fight (the next state
     // message, or the revive repaint).
-    const sig = lastRoster.stage + '|' + (partyFilter || '') + '|' + rosterVer + '|' + shown.map(c =>
+    const sig = lastRoster.stage + '|' + (partyFilter || '') + '|' + partySort + '|' + rosterVer + '|' + shown.map(c =>
       c.displayName.toLowerCase() + c.level + (live ? '' : (isDown(c) ? 'D' : '') + (isOut(c) ? 'O' : '')) + (c.retreated ? 'R' : '')).join(',');
     // Signature unchanged = nothing structural to redraw, whoever asked. The
     // game pushes a `state` message on every roster change — measured at 30+ in
@@ -1629,12 +1648,15 @@
     document.getElementById('partyBody').innerHTML =
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
       ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)} data-tip="Role coverage by class kit — dual-role classes (Warrior, Paladin, Druid, Monk) count in each of their roles, so the pips can sum past the party size.">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
-      `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
+      `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}` +
+      `<select class="psel" id="partySortSel" title="How the grid is arranged. HP order only means anything while a fight is playing.">` +
+      Object.entries(PARTY_SORTS).map(([k, label]) =>
+        `<option value="${k}"${k === partySort ? ' selected' : ''}>${label}</option>`).join('') + '</select></div>' +
       // MMO raid-frame grid: compact cells, red = downed, greyed = retreated.
       // `shown` is already role-sorted, so a heading goes in wherever the band
       // changes — no second pass, no per-group array.
       `<div class="pgrid">` + (() => { let band = null; return shown.map(c => {
-        const g = groupOf(c), hd = g === band ? '' : `<div class="pghd">${GROUPS[g]}</div>`; band = g;
+        const g = groupOf(c), hd = (g === band || !GROUPS[g]) ? '' : `<div class="pghd">${GROUPS[g]}</div>`; band = g;
         return hd + `<div class="pcell${isDown(c) ? ' down' : ''}${isOut(c) ? ' out' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" data-pid="${esc(c.displayName.toLowerCase())}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
         <div class="pn"><span class="pnm">${esc(c.displayName)}</span><span class="ppct">${pctOf(c)}</span></div>
         <div class="ps">Lv ${c.level}${classOf(c) ? ` · <span class="pcls" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></span>` : ''}${isDown(c) ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
@@ -1646,6 +1668,9 @@
       partyFilter = (v === 'all' || partyFilter === v) ? null : v;
       renderParty();
     });
+    document.getElementById('partySortSel').onchange = (e) => {
+      partySort = e.target.value; LS.set('partySort', partySort); renderParty();
+    };
     document.querySelectorAll('#partyBody [data-char]').forEach(el => el.onclick = () => showCharacter(el.dataset.char));
     startPartyFrames(); // begin the smooth loop if a fight is live (e.g. panel just opened)
   }
