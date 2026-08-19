@@ -597,10 +597,17 @@
     if (!entries.length) return;
     box.innerHTML = '<p class="build__subtitle">Analyzing — fetching trees…</p>';
 
-    // Trees of the top 3, tolerating private/renamed characters.
-    const got = [];
+    // Trees of the top 3. A fetch is a live site scrape and fails transiently
+    // (busy game server, expiring session) — retry once, then NAME the failure
+    // instead of silently analyzing whoever happened to load, which read as
+    // "0 of 3 top trees" the first time it happened live.
+    const got = [], failed = [];
     for (const e of entries) {
-      try { got.push({ e, t: await loadTree(e.id, e.cls) }); } catch {}
+      try { got.push({ e, t: await loadTree(e.id, e.cls) }); }
+      catch {
+        try { got.push({ e, t: await loadTree(e.id, e.cls) }); }
+        catch { failed.push(e.name || e.id); }
+      }
     }
     // Consensus only means something within one class — use the role's modal
     // class (by fight record, the class that actually posted the numbers).
@@ -638,14 +645,18 @@
       const agrees = sugNames.has(name.toLowerCase());
       return `<li><span>${agrees ? '✓' : '◇'} ${esc(name)}</span><b>${c.n}/${same.length}${agrees ? '' : ' · players only'}</b></li>`;
     }).join('');
-    const unmapped = same.length < got.length || got.length < entries.length;
+    const emptyMsg = failed.length === entries.length
+      ? 'No tree could be fetched — the game site may be busy. Re-analyze below.'
+      : same.length === 0 && got.length
+        ? `None of the fetched trees plays ${esc(cls)} now — the numbers came from fights before a respec.`
+        : 'No shared class among the top players — no consensus to read.';
     box.innerHTML = `
       <article class="build" ${sug ? `data-src="sug" data-role="${role.key}" data-lvl="${L}"` : ''}>
         <header class="build__head">
           <div>
             <p class="role-label">Why they're on top · ${esc(cls || 'unknown class')}</p>
             <h3>${sug ? `Suggested ${esc(role.title.toLowerCase())} build · level ${L}` : 'Observed consensus'}</h3>
-            <p class="build__subtitle">${same.length} of ${entries.length} top trees are ${esc(cls)}.
+            <p class="build__subtitle">${same.length} of ${got.length} fetched trees are ${esc(cls)}${failed.length ? ` (${failed.length} of ${entries.length} failed to fetch)` : ''}.
               ✓ = the solver takes it too · ◇ = players run it but the closed-form score doesn't pick it
               (usually a per-fight proc — unmodeled upside worth keeping).</p>
           </div>
@@ -654,8 +665,9 @@
         <div class="build__grid">
           <section class="block">
             <h4>Their consensus picks <span>${consensus.length} nodes</span></h4>
-            <ul class="passives">${rows || '<li><span>No shared class among the top players — no consensus to read.</span></li>'}</ul>
-            ${unmapped ? '<p class="build__subtitle">Some trees could not be fetched or belong to another class now; consensus reads only the matching ones.</p>' : ''}
+            <ul class="passives">${rows || `<li><span>${emptyMsg}</span></li>`}</ul>
+            ${failed.length ? `<p class="build__subtitle">Could not fetch: ${esc(failed.join(', '))}.
+              <button class="btn-go" data-act="redo">Re-analyze</button></p>` : ''}
           </section>
           ${sug ? `
           <section class="block">
@@ -682,6 +694,9 @@
       </article>`;
     const btn = box.querySelector('button[data-act="apply"]');
     if (btn) btn.onclick = () => applyBuild(btn.closest('.build'), btn);
+    // Successes are cached in `trees`, so a redo only refetches the failures.
+    const redo = box.querySelector('button[data-act="redo"]');
+    if (redo) redo.onclick = () => analyzeRole(role);
     renderSlots();
   }
 
