@@ -158,6 +158,17 @@ app.get('/feedback-recent', h(async (req, res) => {
     `SELECT id, ts, version, message, contact FROM feedback ORDER BY id DESC LIMIT 50`)).rows);
 }));
 
+// Operator inbox clear — deletes handled feedback up to and including ?upTo=<id>,
+// so a message arriving mid-clear survives. Same OWNER_KEY gate as the feed.
+app.post('/feedback-clear', h(async (req, res) => {
+  if (!ownerOk(req)) return res.sendStatus(403);
+  if (!pool) return res.sendStatus(503);
+  const upTo = Number(req.query.upTo);
+  if (!Number.isInteger(upTo) || upTo <= 0) return res.sendStatus(400);
+  const { rowCount } = await pool.query(`DELETE FROM feedback WHERE id <= $1`, [upTo]);
+  res.json({ cleared: rowCount });
+}));
+
 // Dashboard JSON — guarded by ?token=STATS_TOKEN
 app.get('/stats', h(async (req, res) => {
   // Fail closed: without STATS_TOKEN configured this dump (install ids + full
