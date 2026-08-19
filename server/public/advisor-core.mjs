@@ -36,7 +36,9 @@ const OVERFLOW_CAP = { dr: 0.75, block: 0.75, evasion: 0.75, intervene: 0.5 };
 export const MODELED_SPECIAL_KEYS = new Set(['barrier', 'bloomingfield', 'colossus',
   'deadeye', 'deathwish', 'evergrowth', 'gloryhound', 'grimresolve', 'ironbark', 'juggernaut',
   'lifetap', 'momentousblow', 'overgrowth', 'overwhelmingforce', 'primalforce', 'reckless',
-  'recklessabandon', 'regrowth', 'secondskin', 'soulexchange', 'titansgrip', 'wildsurge']);
+  'recklessabandon', 'regrowth', 'secondskin', 'soulexchange', 'titansgrip', 'wildsurge',
+  'golemmaster', 'thundergolem', 'flamegolem', 'watergolem', 'gigantify', 'growing',
+  'terrifying', 'replenishing']);
 
 // Does the closed-form put a number on this node? FlatStat nodes mapped to a
 // bucket and OverflowConversion nodes are modeled generically; Special nodes only
@@ -245,7 +247,11 @@ export function classScore(cls, g, level, model, tree) {
     overflow += Math.max(0, gearRaw[b] - cap[b][1]) * R.overflowToInc;
   }
 
-  const elemTotal = ELEMS.reduce((s, e) => s + g[e], 0);
+  let elemTotal = ELEMS.reduce((s, e) => s + g[e], 0);
+  // Flame Golem: the OWNER's elemental-damage increases are multiplied
+  // 1.33/1.66/2.0× (passive_tree.rs "flamegolem"; golems inherit the result,
+  // which the per-golem output share below already reflects).
+  if (mag('flamegolem')) elemTotal *= mag('flamegolem');
   // Every bespoke conversion is its own multiplicative layer, not a term in
   // the tree's additive pool (character.rs combat_increased_damage).
   const layers = [
@@ -316,8 +322,8 @@ export function classScore(cls, g, level, model, tree) {
   const lingerPct = g.linger + mag('evergrowth') * healPower;
   const lingerF = 1 + lingerPct * model.proxies.lingerWeight; // total DoT = unmitigated hit × linger%
   const output = (baseHit * rate + helm) * (1 + inc) * critF * procF * aoeF * lingerF;
-  const dps = output * Math.max(0, 1 - healPower);
-  const hps = output * clamp(healPower, 0, 1);
+  let dps = output * Math.max(0, 1 - healPower);
+  let hps = output * clamp(healPower, 0, 1);
 
   const hp = (R.baseHp[0] + R.baseHp[1] * level + g.flatLife + g.bodyPower)
     * (1 + g.incLife + (B.incLife || 0)) * (1 + T.get('incLife'));
@@ -326,7 +332,39 @@ export function classScore(cls, g, level, model, tree) {
   const taken = (1 - Math.min(0.95, eff.evasion)) * (1 - eff.dr) * (1 - eff.block * blockReduction);
   const leech = Math.max(0, (1 + g.leech + (B.leech || 0)) * (1 + T.get('leech')) - 1);
   const leechHps = Math.min(leech * dps, R.leechCapPerSec * hp);
-  const ehp = hp / Math.max(0.01, taken) + leechHps * model.proxies.leechSeconds;
+  let ehp = hp / Math.max(0.01, taken) + leechHps * model.proxies.leechSeconds;
+
+  // --- Elementalist golems (combat.rs spawn_golem / thunder_golem_redirect;
+  // GOLEM_STAT_SCALE 0.33, dmg penalty 0.33 per golem, additive). One golem
+  // per Golem Master rank; a golem has 33% of the owner's base stats but
+  // inherits the damage MULTIPLIERS whole, so each golem's output ≈ 33% of
+  // the owner's — golems are pure attackers (no heal share). Golem TYPE is a
+  // character-page choice the tree can't see: assume one golem of each
+  // invested type spec, which is how anyone paying those points plays it.
+  const golems = rank('golemmaster');
+  if (golems) {
+    const gs = R.golemStatScale;
+    dps = dps * Math.max(0.01, 1 - R.golemDmgPenaltyPer * golems) + golems * gs * output;
+    // Thunder: absorbs ALL party-bound damage while alive and reforms on a
+    // timer (4/3/2s — mag is the delay), Growing compounding its max hp each
+    // reform. Closed form: the enemy must burn N incarnations' worth of pool
+    // per fight before damage reaches you — N scales inversely with the
+    // reform delay off the golemIncarnations proxy. The golem's own scaled
+    // mitigation is ignored (conservative).
+    if (rank('thundergolem')) {
+      const gHp = hp * gs * (1 + mag('gigantify'));
+      const N = model.proxies.golemIncarnations * 4 / Math.max(1, mag('thundergolem'));
+      const grow = mag('growing');
+      ehp += gHp * (N + grow * N * (N - 1) / 2);
+      // Terrifying: every death explodes for a fraction of that incarnation's hp.
+      dps += mag('terrifying') * gHp * (1 + grow * (N - 1) / 2) * N / (R.assumedFightDurationMs / 1000);
+    }
+    // Water: party regen of 3/6/9% of the golem's max hp per second
+    // (non-stacking), plus Replenishing converting its damage to healing.
+    if (rank('watergolem')) {
+      hps += mag('watergolem') * hp * gs + mag('replenishing') * gs * output;
+    }
+  }
 
   // Healing is converted damage, so a healer's output is real party value —
   // score it alongside dps rather than reading as zero damage.

@@ -1161,7 +1161,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
     inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
     fights: { label: '⚔️ Fight History', title: "Every recent fight, straight from the game's own records — exact totals, no estimates", act: () => toggleModal('fights'), isActive: panelOpen('fights') },
-    builds: { label: '📐 Build Dossier', title: 'Owner only — level-119 builds under ordinary four-mod gearing', act: () => openWin('/owner/builds', 'builds', 1260, 900) },
+    builds: { label: '📐 Build Dossier', title: 'Owner only — ladder-level builds under ordinary four-mod gearing', act: () => openWin('/owner/builds', 'builds', 1260, 900) },
     downtime: { label: '💤 Preview Downtime', title: 'Operator only — show the downtime curtain without the game being down (click again to clear)', act: () => toggleDownPreview(), isActive: () => downPreview },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the

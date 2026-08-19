@@ -257,4 +257,22 @@ assert.equal(pointsForLevel(119), 30);
   assert.ok(!sp.bySlot.boots.some((e) => /lightning damage/.test(e.match)), 'boots cannot roll elementals');
 }
 
+// Elementalist golems (combat.rs spawn_golem/thunder_golem_redirect): Thunder
+// absorb pool raises ehp, Water regen creates hps from zero, and a tank-objective
+// searchBuild must reach the golem cluster the ladder actually plays.
+{
+  const ele = tree.classes.Elementalist;
+  const g = emptyBuckets();
+  const bare = classScore('Elementalist', g, 231, model, { nodes: ele, alloc: {} });
+  const thunder = classScore('Elementalist', g, 231, model,
+    { nodes: ele, alloc: { golemmaster: 1, thundergolem: 1, gigantify: 3, growing: 3 } });
+  assert.ok(thunder.ehp > bare.ehp * 2, 'thunder golem pool must raise ehp substantially');
+  const water = classScore('Elementalist', g, 231, model,
+    { nodes: ele, alloc: { golemmaster: 1, watergolem: 3, replenishing: 3 } });
+  assert.equal(bare.hps, 0);
+  assert.ok(water.hps > 0, 'water golem regen must produce hps');
+  const tank = searchBuild('Elementalist', ele, 231, 231, model, { objective: (s) => s.ehp });
+  assert.ok(tank.alloc.thundergolem > 0 && tank.alloc.golemmaster > 0, 'tank solve must take the thunder golem line');
+}
+
 console.log('advisor-core tests passed');

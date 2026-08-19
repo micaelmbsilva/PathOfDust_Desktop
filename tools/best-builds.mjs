@@ -15,8 +15,22 @@ const read = (p) => JSON.parse(readFileSync(join(here, '..', 'server', 'public',
 const model = read('game-model.json');
 const tree = read('passive-tree.json');
 
-const LEVEL = +(process.argv[2] || 119);
-const TIER = +(process.argv[3] || 119);
+// Build level tracks the ladder: max roster level − 5, read from the running
+// overlay bridge (server.mjs, port 8787). An explicit argv still wins; with
+// neither, fail loudly rather than solve at a stale hardcoded level.
+async function ladderLevel() {
+  try {
+    const r = await fetch('http://127.0.0.1:8787/api/roster', { signal: AbortSignal.timeout(10000) });
+    const max = Math.max(0, ...(await r.json()).map((p) => +p.level || 0));
+    return max > 5 ? max - 5 : 0;
+  } catch { return 0; }
+}
+const LEVEL = +process.argv[2] || await ladderLevel();
+if (!LEVEL) {
+  console.error('No build level: pass one (node tools/best-builds.mjs 214) or start the overlay so /api/roster answers.');
+  process.exit(1);
+}
+const TIER = +(process.argv[3] || LEVEL);
 const POINTS = pointsForLevel(LEVEL);
 
 // The whole gear+tree search now lives in advisor-core's searchBuild (shared
@@ -38,6 +52,15 @@ const classes = Object.keys(model.archetypes).filter((c) => tree.classes[c] && t
 // not shipped with the app and this file already is.
 const out = {
   level: LEVEL, tier: TIER, points: POINTS, ruleset: model.note, results: {},
+  // Ruleset constants for the dossier UI — derived from the model, never
+  // hardcoded in the page: slot count, crafted-mod cap + Sacred, and the real
+  // action-interval floor (character.rs attack_interval_ms .max(50)).
+  constraints: {
+    slots: Object.keys(model.rules.slotBasePower).length,
+    modCap: model.rules.modCap,
+    sacred: model.rules.sacredExtra,
+    intervalFloorMs: model.rules.attackIntervalFloorMs,
+  },
   nodes: Object.fromEntries(classes.map((c) => [c, tree.classes[c].map(
     ({ key, name, tier: t, parent, unlockAt, max }) => ({ key, name, tier: t, parent, unlockAt, max }))])),
 };

@@ -66,7 +66,7 @@
     "Elementalist": {
       "role": "ranged",
       "splash": 0.15,
-      "src": "character.rs (2026-08-19) — ranged; root splash 0.15×(1+0.1×level) like Ranger, no baseline heal_power (healing earned through the Healing Flames tree). Most of its kit (Righteous Fire, elemental procs, golem summons) is per-fight sim, unscored here. Deliberately kept that way: Flame Golem's 1.33/1.66/2.0× is scoreable on its own, but it MULTIPLIES a kit classScore values at zero, so adding it to MODELED_SPECIAL_KEYS alone would recommend the node on the strength of damage the model cannot see — worse than the honest 'not scored' tag. Score the whole kit or none of it."
+      "src": "character.rs (2026-08-19) — ranged; root splash 0.15×(1+0.1×level) like Ranger, no baseline heal_power (healing earned through the Healing Flames tree). The golem branch IS scored now (2026-08-19, classScore's golem block: count/output share/damage penalty, Thunder absorb pool via the golemIncarnations proxy, Water regen + Replenishing, Flame Golem multiplying the owner's gear elemental increases) — the rest of the kit (Righteous Fire, elemental procs) stays per-fight sim, unscored."
     }
   },
   "affixes": [
@@ -199,6 +199,8 @@
     "overcritCurveA": 1.5,
     "overcritCurveH": 1.0,
     "attackIntervalFloorMs": 50,
+    "golemStatScale": 0.33,
+    "golemDmgPenaltyPer": 0.33,
     "leechCapPerSec": 0.2,
     "lingerTicks": 80,
     "lingerTickIntervalMs": 50,
@@ -309,6 +311,7 @@
     "splashWeight": 0.5,
     "lingerWeight": 1.5,
     "leechSeconds": 5,
+    "golemIncarnations": 4,
     "elemProcValue": {
       "elemCold": 0.5,
       "elemFire": 0.5,

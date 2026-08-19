@@ -289,8 +289,9 @@
 
     <aside class="runtime">
       <span class="utility-label">Live scheduler</span>
-      <p>Player actions are clamped to a <strong>200ms minimum</strong> during combat. Solver intervals
-        below that are pre-combat values and overstate real throughput.</p>
+      <p>The game floors a character's action interval at <strong id="intervalFloor">—</strong>
+        (character.rs <code>attack_interval_ms</code>); the solver uses the same floor, so the interval
+        figures below are realistic, not pre-combat overstatements.</p>
     </aside>
 
     <div id="observed"></div>
@@ -342,7 +343,35 @@
   let data = null;       // tools/best-builds.json
   let live = null;       // { cls, level, options, memories } — null while the game is unreachable
   let observed = null;   // { damage: [...], tank: [...], healing: [...], fights, from, to }
+  let target = null;     // { maxLevel, level } — ladder max − 5, the level builds should aim at
+  let core = null;       // advisor-core module + its data files, when this shell carries them
+  const suggested = {};  // role.key -> buildCard-shaped suggestion solved at target.level
   const trees = {};      // login -> { alloc, skipped, cls } once fetched
+
+  // The dossier's build level follows the ladder: max roster level − 5. The
+  // solver JSON was generated at data.level, which drifts as the ladder climbs;
+  // this is what "current" means today.
+  async function loadTarget() {
+    try {
+      const r = await fetch('/api/roster').then(x => x.json());
+      const max = Math.max(0, ...r.map(p => +p.level || 0));
+      if (max > 5) target = { maxLevel: max, level: max - 5 };
+    } catch {}
+  }
+
+  // Client-side solver: the same advisor-core the site and tools/best-builds.mjs
+  // use. Absent on shells that predate these files shipping — analysis degrades
+  // to observation-only and says so.
+  async function loadCore() {
+    try {
+      const [mod, model, tree] = await Promise.all([
+        import('/server/public/advisor-core.mjs'),
+        fetch('/server/public/game-model.json').then(r => r.json()),
+        fetch('/server/public/passive-tree.json').then(r => r.json()),
+      ]);
+      core = { ...mod, model, tree };
+    } catch { core = null; }
+  }
 
   async function api(endpoint, fields) {
     return fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -470,30 +499,32 @@
     return { alloc, skipped: skipped.concat(rows.map(r => r.name)) };
   }
 
+  async function loadTree(login, clsHint) {
+    if (trees[login]) return trees[login];
+    const p = await fetch('/api/character-passives?login=' + encodeURIComponent(login)).then(r => r.json());
+    if (p.notFound || p.noTree) throw new Error('no visible tree for this player');
+    // "2 / 4" -> 2. Unallocated nodes and the root node fall out here.
+    const ranked = (p.nodes || []).map(n => ({ name: String(n.name || '').replace(/\s*\(.*\)$/, ''),
+      rank: +(String(n.rank || '').match(/^(\d+)/) || [])[1] || 0 })).filter(n => n.name && n.rank > 0);
+    // The class on the fight record is HISTORICAL (recorded per fight, so a
+    // later respec can't rewrite it); the tree we just scraped belongs to
+    // whatever they play NOW. Map node names against the scraped class —
+    // using the fight's would silently drop every node — and say so when
+    // the two disagree, because then this tree is not the one that posted
+    // the numbers above it. "Berserker · Level 219" -> "Berserker".
+    const now = cap(String(p.archetype || '').split('·')[0].trim());
+    const cls = now || clsHint || '';
+    return trees[login] = { cls, was: clsHint || '', ...orderAlloc(cls, ranked),
+      // Equipped-but-empty doesn't count — only points actually parked there.
+      secondary: (p.secondary && p.secondary.nodes || []).some(n => /^[1-9]/.test(String(n.rank || ''))) };
+  }
+
   async function fetchTree(card, btn) {
     const login = card.dataset.login;
     const note = card.querySelector('.note');
     btn.disabled = true;
     try {
-      let t = trees[login];
-      if (!t) {
-        const p = await fetch('/api/character-passives?login=' + encodeURIComponent(login)).then(r => r.json());
-        if (p.notFound || p.noTree) throw new Error('no visible tree for this player');
-        // "2 / 4" -> 2. Unallocated nodes and the root node fall out here.
-        const ranked = (p.nodes || []).map(n => ({ name: String(n.name || '').replace(/\s*\(.*\)$/, ''),
-          rank: +(String(n.rank || '').match(/^(\d+)/) || [])[1] || 0 })).filter(n => n.name && n.rank > 0);
-        // The class on the fight record is HISTORICAL (recorded per fight, so a
-        // later respec can't rewrite it); the tree we just scraped belongs to
-        // whatever they play NOW. Map node names against the scraped class —
-        // using the fight's would silently drop every node — and say so when
-        // the two disagree, because then this tree is not the one that posted
-        // the numbers above it. "Berserker · Level 219" -> "Berserker".
-        const now = cap(String(p.archetype || '').split('·')[0].trim());
-        const cls = now || card.dataset.cls || '';
-        t = trees[login] = { cls, was: card.dataset.cls || '', ...orderAlloc(cls, ranked),
-          // Equipped-but-empty doesn't count — only points actually parked there.
-          secondary: (p.secondary && p.secondary.nodes || []).some(n => /^[1-9]/.test(String(n.rank || ''))) };
-      }
+      const t = await loadTree(login, card.dataset.cls);
       const points = t.alloc.reduce((a, n) => a + n.rank, 0);
       card.querySelector('.treeMeta').textContent = `${points} points · ${t.alloc.length} nodes`
         + (t.skipped.length ? ` · ${t.skipped.length} unmapped` : '');
@@ -529,7 +560,137 @@
         <h2>${esc(role.title)} — observed top 3
           <small>last ${observed.fights} fights · ${observed.players} players · ${esc(when)}</small></h2>
         ${(observed[role.key] || []).map((e, i) => obsCard(role, e, i)).join('')}
+        <div id="ana-${role.key}"></div>
       </section>`).join('');
+  }
+
+  // ---- Observed analysis + suggested builds --------------------------------
+  // Why are the observed top players top? Fetch their trees, find the picks
+  // they agree on, then let the solver answer at the ladder's current level:
+  // a fresh searchBuild for the class that dominates the role, with the
+  // consensus nodes marked as agreeing (✓) or as player wisdom the closed-form
+  // score doesn't take (per-fight procs are unmodeled upside — see the ruleset
+  // footer).
+  const OBJ = { damage: s => s.dps, tank: s => s.ehp, healing: s => s.hps };
+  // The observed tank metric is damage soaked (tps) — a solved build has no
+  // such number, so suggestions headline the solver's own role metric instead.
+  const SUG_METRIC = { damage: ['dps', 'Hypothetical DPS'], tank: ['ehp', 'Effective HP'], healing: ['hps', 'Hypothetical healing'] };
+
+  function orderKeys(cls, alloc) { // searchBuild alloc map -> game-legal ordered list
+    const byKey = new Map((core.tree.classes[cls] || []).map(n => [n.key, n]));
+    const rows = Object.entries(alloc).map(([key, rank]) => ({ key, rank, ...byKey.get(key) }));
+    rows.sort((a, z) => TIERS.indexOf(a.tier) - TIERS.indexOf(z.tier));
+    const out = [], done = new Set();
+    while (rows.length) {
+      const i = rows.findIndex(r => !r.parent || done.has(r.parent));
+      if (i < 0) break;
+      const [r] = rows.splice(i, 1);
+      done.add(r.key);
+      out.push({ key: r.key, name: r.name || r.key, rank: r.rank });
+    }
+    return out;
+  }
+
+  async function analyzeRole(role) {
+    const box = $('ana-' + role.key);
+    const entries = observed[role.key] || [];
+    if (!entries.length) return;
+    box.innerHTML = '<p class="build__subtitle">Analyzing — fetching trees…</p>';
+
+    // Trees of the top 3, tolerating private/renamed characters.
+    const got = [];
+    for (const e of entries) {
+      try { got.push({ e, t: await loadTree(e.id, e.cls) }); } catch {}
+    }
+    // Consensus only means something within one class — use the role's modal
+    // class (by fight record, the class that actually posted the numbers).
+    const tally = {};
+    for (const e of entries) if (e.cls) tally[e.cls] = (tally[e.cls] || 0) + 1;
+    const modal = Object.entries(tally).sort((a, z) => z[1] - a[1])[0];
+    const cls = modal ? modal[0] : '';
+    const same = got.filter(g => g.t.cls.toLowerCase() === cls.toLowerCase());
+    const counts = new Map(); // node name -> { n, rank: max seen }
+    for (const g of same) for (const n of g.t.alloc) {
+      const c = counts.get(n.name) || { n: 0, rank: 0 };
+      c.n++; c.rank = Math.max(c.rank, n.rank);
+      counts.set(n.name, c);
+    }
+    const consensus = [...counts].filter(([, c]) => c.n >= Math.min(2, same.length))
+      .sort((a, z) => z[1].n - a[1].n || z[1].rank - a[1].rank);
+
+    const L = target ? target.level : data.level;
+    let sug = null, sugNames = new Set();
+    if (core && core.tree.classes[cls]) {
+      // Yield once so the board paints before the solver blocks the thread.
+      await new Promise(r => setTimeout(r));
+      const r = core.searchBuild(cls, core.tree.classes[cls], L, L, core.model, { objective: OBJ[role.key] });
+      const s = r.score;
+      sug = suggested[role.key] = {
+        cls, dps: s.dps, hps: s.hps, ehp: s.ehp, hp: s.hp, inc: s.detail.inc,
+        critChance: s.detail.cc, critMult: s.detail.cm, eff: s.detail.eff,
+        intervalMs: s.interval, alloc: orderKeys(cls, r.alloc), gear: r.gear.picks, sacred: r.gear.sacred,
+        level: L, points: core.pointsForLevel(L),
+      };
+      sugNames = new Set(sug.alloc.map(n => n.name.toLowerCase()));
+    }
+
+    const rows = consensus.map(([name, c]) => {
+      const agrees = sugNames.has(name.toLowerCase());
+      return `<li><span>${agrees ? '✓' : '◇'} ${esc(name)}</span><b>${c.n}/${same.length}${agrees ? '' : ' · players only'}</b></li>`;
+    }).join('');
+    const unmapped = same.length < got.length || got.length < entries.length;
+    box.innerHTML = `
+      <article class="build" ${sug ? `data-src="sug" data-role="${role.key}" data-lvl="${L}"` : ''}>
+        <header class="build__head">
+          <div>
+            <p class="role-label">Why they're on top · ${esc(cls || 'unknown class')}</p>
+            <h3>${sug ? `Suggested ${esc(role.title.toLowerCase())} build · level ${L}` : 'Observed consensus'}</h3>
+            <p class="build__subtitle">${same.length} of ${entries.length} top trees are ${esc(cls)}.
+              ✓ = the solver takes it too · ◇ = players run it but the closed-form score doesn't pick it
+              (usually a per-fight proc — unmodeled upside worth keeping).</p>
+          </div>
+          ${sug ? `<div class="headline-metric"><span>${esc(SUG_METRIC[role.key][1])}</span><strong>${fmt(sug[SUG_METRIC[role.key][0]])}</strong></div>` : ''}
+        </header>
+        <div class="build__grid">
+          <section class="block">
+            <h4>Their consensus picks <span>${consensus.length} nodes</span></h4>
+            <ul class="passives">${rows || '<li><span>No shared class among the top players — no consensus to read.</span></li>'}</ul>
+            ${unmapped ? '<p class="build__subtitle">Some trees could not be fetched or belong to another class now; consensus reads only the matching ones.</p>' : ''}
+          </section>
+          ${sug ? `
+          <section class="block">
+            <h4>Solver tree at level ${L} <span>${sug.alloc.reduce((a, n) => a + n.rank, 0)} / ${sug.points}</span></h4>
+            <ul class="passives">${sug.alloc.map(n => `<li><span>${esc(n.name)}</span><b>${n.rank}</b></li>`).join('')
+              || '<li><span>No tree node moves this objective in the closed-form score — the role power of this class lives in the unmodeled ◇ picks. Copy an observed tree above instead.</span></li>'}</ul>
+          </section>
+          <section class="block">
+            <h4>Gear</h4>
+            <table class="gear"><tbody>${SLOTS.map(s => `<tr><th>${s}</th><td>${esc((sug.gear[s] || []).join(' · '))}</td></tr>`).join('')}</tbody></table>
+            <p class="build__subtitle">Sacred: ${esc(sug.sacred || '—')} · dps ${fmt(sug.dps)} · ehp ${fmt(sug.ehp)} · hps ${fmt(sug.hps)}</p>
+          </section>` : `
+          <section class="block">
+            <h4>Solver</h4>
+            <p class="build__subtitle">${core ? 'No modeled tree for this class — observation only.' : 'This shell does not carry the solver files yet — update the app to get suggested builds here.'}</p>
+          </section>`}
+        </div>
+        ${sug && sug.alloc.length ? `<div class="apply">
+          <span class="utility-label">Copy passives to</span>
+          <select class="slotSel" aria-label="Memory slot"></select>
+          <button class="btn-go" data-act="apply">Write build</button>
+          <span class="note"></span>
+        </div>` : ''}
+      </article>`;
+    const btn = box.querySelector('button[data-act="apply"]');
+    if (btn) btn.onclick = () => applyBuild(btn.closest('.build'), btn);
+    renderSlots();
+  }
+
+  async function analyze() {
+    if (!observed) return;
+    for (const role of OBS_ROLES) {
+      try { await analyzeRole(role); }
+      catch (e) { $('ana-' + role.key).innerHTML = `<p class="build__subtitle">Analysis failed: ${esc(e.message || e)}</p>`; }
+    }
   }
 
   function buildCard(role, b, rank) {
@@ -584,10 +745,23 @@
   function render() {
     $('railLevel').textContent = data.level;
     $('heroTitle').textContent = `Level-${data.level} ladder builds`;
+    // The solver JSON is a snapshot; the ladder keeps climbing. Say so when the
+    // ladder-derived target (max − 5) has moved past what the boards were solved at.
+    if (target && target.level !== data.level) {
+      $('heroTitle').insertAdjacentHTML('afterend',
+        `<p class="build__subtitle">Ladder max is Lv ${target.maxLevel} — target build level is ${target.level}, but the solver boards below were generated at ${data.level}. Suggested builds in the Observed sections already use ${target.level}; regenerate with <code>node tools/best-builds.mjs</code> to move the boards.</p>`);
+    }
+    // Every value here comes from the solver output (which derives them from the
+    // game model), so nothing drifts if the ruleset changes. `?? '—'` guards an
+    // older best-builds.json produced before `constraints` was emitted.
+    const c = data.constraints || {};
     $('railConstraints').innerHTML = [
       ['Passives', `${data.points} points`], ['Gear tier', `t${data.tier}`],
-      ['Items', '5 slots'], ['Modifiers', '4 + 1 Sacred'], ['Rare states', 'None'],
+      ['Items', c.slots != null ? `${c.slots} slots` : '—'],
+      ['Modifiers', c.modCap != null ? `${c.modCap} + ${c.sacred} Sacred` : '—'],
+      ['Rare states', 'None'],
     ].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
+    if (c.intervalFloorMs != null) $('intervalFloor').textContent = `${c.intervalFloorMs}ms`;
     $('ruleset').textContent = data.ruleset;
     $('sections').innerHTML = ROLES.map(role => `
       <section class="section section--${role.key}" id="${role.key}">
@@ -611,6 +785,7 @@
       `<option value="${m.slot}">Slot ${m.slot + 1} — ${esc(m.filled ? m.name : 'empty')}</option>`).join('');
     document.querySelectorAll('.build').forEach(card => {
       const sel = card.querySelector('.slotSel');
+      if (!sel) return; // a suggestion with no writable tree carries no apply row
       const btn = card.querySelector('button[data-act="apply"]');
       const keep = sel.value;
       sel.innerHTML = opts || '<option>—</option>';
@@ -628,6 +803,10 @@
   // Both boards end up as the same thing: a class plus an ordered list of
   // {key, name, rank}. Solver builds ship theirs; observed ones are scraped.
   function buildOf(card) {
+    if (card.dataset.src === 'sug') {
+      const b = suggested[card.dataset.role];
+      return b && { cls: b.cls, alloc: b.alloc, label: `${b.cls} ${card.dataset.role} L${b.level}` };
+    }
     if (card.dataset.src !== 'obs') {
       const b = data.results[card.dataset.role][+card.dataset.rank];
       return { cls: b.cls, alloc: b.alloc, label: `${b.cls} ${card.dataset.role}` };
@@ -672,7 +851,8 @@
       `• Allocates ${points} points across ${b.alloc.length} nodes and saves the tree.`,
       '• Your current build is replaced. Save it to another slot first if you want it back.',
     ];
-    if (card.dataset.src !== 'obs' && live.level && live.level < data.level) warn.push(`• You are level ${live.level}; this build is designed for ${data.level}. Nodes may not fit.`);
+    const designLvl = +card.dataset.lvl || data.level;
+    if (card.dataset.src !== 'obs' && live.level && live.level < designLvl) warn.push(`• You are level ${live.level}; this build is designed for ${designLvl}. Nodes may not fit.`);
     if (card.dataset.src === 'obs' && trees[card.dataset.login] && trees[card.dataset.login].secondary) warn.push('• Only their PRIMARY tree is copied — their 2nd class tree is not.');
     if (live.secondarySpent) warn.push('• Points spent in your 2nd class tree are NOT refunded by a respec and still count against the budget.');
     if (!confirm(warn.join('\n'))) return;
@@ -710,8 +890,9 @@
     document.title = `${window.GAME_NAME || 'Path of Dust'} — Owner Build Dossier`;
     try { data = await fetch('/tools/best-builds.json').then(r => r.json()); }
     catch { $('sections').innerHTML = '<p class="build__subtitle">No solver output — run <code>node tools/best-builds.mjs</code>.</p>'; return; }
-    await Promise.all([loadLive(), loadObserved()]);
+    await Promise.all([loadLive(), loadObserved(), loadTarget(), loadCore()]);
     render();
+    analyze(); // fire-and-forget: fetches top trees, then solves per role at the ladder level
   })();
 </script>
 <script src="/autoreload.js"></script>
