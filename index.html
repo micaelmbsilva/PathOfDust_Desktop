@@ -203,10 +203,27 @@
   .rolechips .chip { background: #1c1830; border: 1px solid rgba(160,140,255,0.25); border-radius: 8px;
     padding: 3px 9px; font-size: 0.78rem; }
   /* MMO raid-frame grid: compact member cells, status-tinted */
-  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 6px; }
+  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 6px; }
+  /* Role-group heading: spans the whole grid row, with a hairline running out to
+     the right edge so the groups read as bands. */
+  .pghd { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin: 3px 0 -1px;
+    font-size: 0.64rem; letter-spacing: 0.09em; text-transform: uppercase; color: #8a7fb0; }
+  .pghd:first-child { margin-top: 0; }
+  .pghd::after { content: ''; flex: 1; border-top: 1px solid rgba(160,140,255,0.18); }
   .pcell { border: 1px solid rgba(160,140,255,0.22); border-radius: 8px; padding: 4px 7px;
     font-size: 0.74rem; background: rgba(255,255,255,0.03); min-width: 0; }
-  .pcell .pn { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcell .pn { font-weight: 600; display: flex; align-items: center; gap: 5px; }
+  .pcell .pnm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* Live HP%, right-aligned in the name row — mid-fight you can't hover 40 cells
+     to read the bar's title. Empty between fights and for downed members (the
+     cell already says Downed). */
+  .pcell .ppct { margin-left: auto; font-size: 0.66rem; font-weight: 600; color: #9d93bd;
+    font-variant-numeric: tabular-nums; }
+  .pcell.down .ppct, .pcell.out .ppct { color: #ff9d9d; }
+  /* You: gold star + left rail + tint. A "YOU" chip would be more obvious still,
+     but it costs ~34px of a 130px name row and the longest names already fill it
+     — the star costs 11px and the rail nothing. */
+  .pcell.mme .pnm::before { content: '★ '; color: #ffcf5a; }
   .pcell .ps { color: #8a7fb0; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pcell .ps .pcls { color: #c9bdf0; }
   .pcell .pr { font-size: 0.6rem; margin-left: 3px; opacity: 0.85; }
@@ -215,7 +232,8 @@
   .pcell.ret { opacity: 0.45; filter: grayscale(0.6); }
   /* Downed or dropped to 0 HP: greyed and sorted to the back of the grid. */
   .pcell.out { opacity: 0.5; filter: grayscale(0.9); }
-  .pcell.mme { border-color: #ffcf5a; box-shadow: 0 0 0 1px rgba(255,207,90,0.25); }
+  .pcell.mme { border-color: #ffcf5a; background: rgba(255,207,90,0.07);
+    box-shadow: inset 3px 0 0 #ffcf5a, 0 0 0 2px rgba(255,207,90,0.3); }
   /* HP bar — fed by the live/last fight replay; width transitions so the
      server-thinned samples glide rather than jump. Only meaningful during a
      fight; full/neutral otherwise. */
@@ -239,7 +257,10 @@
      tankier, units). Period is --tick (a %). z-index:2 paints them over the HP
      fill/ghost but UNDER the shield (z-index:3), so the shield reads as one clean
      glow with no notch lines cutting through it. */
-  .pcell .php::after { content: ''; position: absolute; inset: 0; border-radius: 2px; pointer-events: none; z-index: 2;
+  /* inset right -1px: the last notch lands exactly at 100%, where it merges with
+     the bar's own edge and reads as a stray divider — overflowing it by 1px lets
+     overflow:hidden clip it away. */
+  .pcell .php::after { content: ''; position: absolute; inset: 0 -1px 0 0; border-radius: 2px; pointer-events: none; z-index: 2;
     background: repeating-linear-gradient(90deg, transparent 0 calc(var(--tick, 25%) - 1px),
       rgba(0,0,0,0.42) calc(var(--tick, 25%) - 1px) var(--tick, 25%)); }
   /* HP bar glow, coloured by remaining HP — the same energy-shield treatment,
@@ -1454,14 +1475,16 @@
       .catch(() => { delete buildPending[pid]; });
   };
   // Notch period as a % of a member's own bar. One fixed HP-per-notch across the
-  // party (refMax/16, so the tankiest shows ~16), but each bar's notch COUNT is
+  // party (refMax/10, so the tankiest shows ~10), but each bar's notch COUNT is
   // rounded to a whole number and the period is 100/count — so notches always
   // spread evenly edge to edge (no ragged last segment) while a higher-max member
-  // still shows more of them. Floor of 4 so even the squishiest bar reads as a
-  // bar, not one block. null when there's no HP scale yet.
+  // still shows more of them. Floor of 3 so even the squishiest bar reads as a
+  // bar, not one block. The cap was 16/18: at a ~110px cell that is a notch
+  // every 6px, which reads as hatching rather than segments — 10/12 keeps them
+  // legible at raid-frame width. null when there's no HP scale yet.
   const tickPctOf = (refMax, max) => {
     if (!(refMax > 0) || !(max > 0)) return null;
-    const count = Math.max(4, Math.min(18, Math.round(max / (refMax / 16))));
+    const count = Math.max(3, Math.min(12, Math.round(max / (refMax / 10))));
     return 100 / count;
   };
   function renderParty() {
@@ -1485,9 +1508,21 @@
     // "Out of the fight": downed (authoritative, survives between fights) or at
     // 0 HP during the live replay. These grey out and sort to the back.
     const isOut = (c) => { if (isDown(c)) return true; const u = unitOf(c); return !!(u && u.max && u.hp <= 0); };
-    // retreated last, then out-of-fight, then by level.
+    // Raid-frame grouping: one bucket per member, tanks first. Dual-role classes
+    // (Warrior, Paladin, Druid, Monk) count in BOTH role pips up top but need a
+    // single home here, so the most-specialised role wins: tank, then heal, then
+    // dps. Retreated and out-of-fight members leave their role band and form
+    // their own trailing groups — a dead healer next to the live ones is the
+    // thing you're scanning for.
+    const GROUPS = { tank: '🛡️ Tanks', heal: '🩹 Healers', dps: '🗡️ DPS',
+      out: '💀 Out of the fight', ret: '🏳️ Retreated' };
+    const groupOf = (c) => { if (c.retreated) return 'ret'; if (isOut(c)) return 'out';
+      const rs = kitRolesOf(c) || [of(c)];
+      return rs.includes('tank') ? 'tank' : rs.includes('heal') ? 'heal' : 'dps'; };
+    const GRANK = Object.keys(GROUPS);
+    // retreated last, then out-of-fight, then role band, then by level.
     const cs = [...lastRoster.characters].sort((a, b) =>
-      (a.retreated - b.retreated) || (isOut(a) - isOut(b)) || (b.level - a.level));
+      (GRANK.indexOf(groupOf(a)) - GRANK.indexOf(groupOf(b))) || (b.level - a.level));
     const counts = { dps: 0, heal: 0, tank: 0 };
     let retreated = 0;
     // pips count class-kit role coverage (dual-role classes count twice);
@@ -1530,6 +1565,11 @@
       const title = `${fmtN(u.hp)} / ${fmtN(u.max)} HP${u.shield > 0 ? ` · \u{1F6E1} ${fmtN(u.shield)} shield` : ''}`;
       return { pct, lvl, shPct, tick: tickPctOf(refMax, u.max), title };
     };
+    // Live HP% for the name row. Same clamp as barState's pct; only meaningful
+    // while a fight plays, and a downed member's bar is forced full-red so a
+    // number there would lie.
+    const pctOf = (c) => { const u = unitOf(c);
+      return (u && u.max && !isDown(c)) ? Math.round(Math.max(0, Math.min(100, u.hp / u.max * 100))) + '%' : ''; };
     const hpBar = (c) => {
       const s = barState(c);
       return `<div class="php ${s.lvl}${s.shPct > 0 ? ' sh' : ''}"${s.tick != null ? ` style="--tick:${s.tick.toFixed(1)}%"` : ''} title="${esc(s.title)}"
@@ -1546,6 +1586,7 @@
       const f = php.querySelector('.phpf'); if (f) { f.className = `phpf ${s.lvl}`; f.style.width = s.pct.toFixed(1) + '%'; }
       const t = php.querySelector('.phpt'); if (t) t.style.width = s.pct.toFixed(1) + '%';
       const sh = php.querySelector('.pshd'); if (sh) sh.style.width = s.shPct.toFixed(1) + '%';
+      const p = cell.querySelector('.ppct'); if (p) p.textContent = pctOf(c);
     };
     const pf = (k) => `class="chip pf${partyFilter === k ? ' on' : ''}" data-pf="${k}"`;
     // retreated are hidden by default; the Retreated pip is the only way to see them
@@ -1589,12 +1630,16 @@
       `<div class="rolechips"><span class="chip">Stage <b>${lastRoster.stage}</b></span>` +
       ['dps', 'heal', 'tank'].map(k => `<span ${pf(k)} data-tip="Role coverage by class kit — dual-role classes (Warrior, Paladin, Druid, Monk) count in each of their roles, so the pips can sum past the party size.">${CLASS_ICON[k]} ${k === 'dps' ? 'DPS' : k[0].toUpperCase() + k.slice(1)} × ${counts[k]}</span>`).join('') +
       `<span class="chip pf${!partyFilter ? ' on' : ''}" data-pf="all">Active ${cs.length - retreated}</span>${retreated ? `<span ${pf('ret')}>🏳️ ${retreated} Retreated</span>` : ''}</div>` +
-      // MMO raid-frame grid: compact cells, red = downed, greyed = retreated
-      `<div class="pgrid">` + shown.map(c => `<div class="pcell${isDown(c) ? ' down' : ''}${isOut(c) ? ' out' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" data-pid="${esc(c.displayName.toLowerCase())}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
-        <div class="pn">${esc(c.displayName)}</div>
+      // MMO raid-frame grid: compact cells, red = downed, greyed = retreated.
+      // `shown` is already role-sorted, so a heading goes in wherever the band
+      // changes — no second pass, no per-group array.
+      `<div class="pgrid">` + (() => { let band = null; return shown.map(c => {
+        const g = groupOf(c), hd = g === band ? '' : `<div class="pghd">${GROUPS[g]}</div>`; band = g;
+        return hd + `<div class="pcell${isDown(c) ? ' down' : ''}${isOut(c) ? ' out' : ''}${c.retreated ? ' ret' : ''}${c.displayName.toLowerCase() === myName.toLowerCase() ? ' mme' : ''}" data-pid="${esc(c.displayName.toLowerCase())}"${loginOf(c) ? ` data-char="${esc(loginOf(c))}" style="cursor:pointer"` : ''} title="${esc(c.displayName)} — ${status(c).replace(/^\S+ ?/, '') || 'Active'}${loginOf(c) ? ' · click to view their character' : ''}">
+        <div class="pn"><span class="pnm">${esc(c.displayName)}</span><span class="ppct">${pctOf(c)}</span></div>
         <div class="ps">Lv ${c.level}${classOf(c) ? ` · <span class="pcls" title="${esc(classOf(c))} — kit roles: ${(kitRolesOf(c) || []).join(' + ')}">${esc(classOf(c))}<span class="pr">${(kitRolesOf(c) || []).map(r => CLASS_ICON[r]).join('')}</span></span>` : ''}${isDown(c) ? ' · ⬇️ Downed' : c.retreated ? ' · 🏳️ Retreated' : ''}</div>
         ${hpBar(c)}
-      </div>`).join('') +
+      </div>`; }).join(''); })() +
       (shown.length ? '' : '<p class="muted">Nobody matches this filter.</p>') + '</div>';
     document.querySelectorAll('#partyBody [data-pf]').forEach(el => el.onclick = () => {
       const v = el.dataset.pf;
