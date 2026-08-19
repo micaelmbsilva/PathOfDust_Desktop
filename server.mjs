@@ -38,7 +38,7 @@ async function ping() {
     if (m.reforge) snap.reforgeAvailable = m.reforge.available;
     try {
       const inv = await inventory();
-      snap.dust = inv.dust; snap.sand = inv.sand; snap.tokens = inv.tokens;
+      snap.dust = inv.dust; snap.sand = inv.sand; snap.divineDust = inv.divineDust; snap.tokens = inv.tokens;
       const gear = (it) => ({ slot: it.slot, name: it.name, tier: it.tier, quality: it.quality,
         primary: it.primary, mods: it.mods, sacred: it.sacred, implicits: it.implicits,
         krangled: it.krangled, unique: it.unique, protected: it.protected });
@@ -433,6 +433,26 @@ export function nameItemOf(text) {
   };
 }
 
+// The /inventory page POSTs more than one form to /craft since Aug '26 — the
+// Divine Dust recipe row renders FIRST, so "the chunk after the first
+// action=/craft" is now the recipe, not the item form, which silently emptied
+// every craft option and button. Pick each by what it actually contains.
+// The recipe's dust/sand costs are admin-tunable server-side, so they're read
+// off its label rather than hardcoded here. Exported for the scrape smoke-test.
+export function craftFormsOf(text) {
+  const chunks = text.split('action="/craft"').slice(1).map(s => s.split('</form>')[0]);
+  const craftForm = chunks.find(s => s.includes('name="item_a"')) || '';
+  const dd = chunks.find(s => s.includes('value="divine dust craft"'));
+  if (!dd) return { craftForm, divineDustRecipe: null };
+  const cost = dd.match(/Craft Divine Dust \((\d+)d \+ (\d+)s\s*→\s*(\d+)/);
+  return { craftForm, divineDustRecipe: {
+    action: 'divine dust craft',
+    dustCost: +(cost?.[1] ?? 0), sandCost: +(cost?.[2] ?? 0), output: +(cost?.[3] ?? 0),
+    tip: tipOf((dd.match(/class="muted"([^>]*)>/) || [])[1] || ''),
+    affordable: !/<button[^>]*\sdisabled/.test(dd),
+  } };
+}
+
 // Full inventory: currencies, tokens, equipped gear, bag, and the craft form's
 // item options + action buttons. Enough to drive a custom Bag page.
 export async function inventory() { // exported for scrape smoke-tests
@@ -444,6 +464,11 @@ export async function inventory() { // exported for scrape smoke-tests
     ?? (nav.match(/💰\s*([\d.KM]+)/) || [])[1] ?? '?';
   const sand = (text.match(/data-sand="(\d+)"/) || [])[1]
     ?? (nav.match(/🪵\s*([\d.KM]+)/) || [])[1] ?? '?';
+  // Divine Dust (Aug '26): a third currency, spent 2-per-tier to make an item
+  // Sacred or reroll an already-Sacred item's sacred affix. Exact balance rides
+  // on the apply button; nav fallback for a page that doesn't render one.
+  const divineDust = (text.match(/data-divine-dust="(\d+)"/) || [])[1]
+    ?? (nav.match(/✨\s*([\d.KM]+)/) || [])[1] ?? '?';
   // Token pills carry a data-tip between the class and the '>' — an anchored
   // `class="token-pill">` matched nothing and read every player as tokenless.
   // Text: "🎫 Celestial Shard → Celestial Conversion ×2".
@@ -472,8 +497,7 @@ export async function inventory() { // exported for scrape smoke-tests
     });
   }
 
-  // Craft form: item_a options + action buttons.
-  const craftForm = (text.split('action="/craft"')[1] || '').split('</form>')[0];
+  const { craftForm, divineDustRecipe } = craftFormsOf(text);
   const selA = (craftForm.match(/<select name="item_a">([\s\S]*?)<\/select>/) || [])[1] || '';
   // Attribute-order independent (the site appends new data-* attrs, e.g.
   // data-polish-room in Aug '26). polishRoom: null = attr absent (old site).
@@ -487,6 +511,8 @@ export async function inventory() { // exported for scrape smoke-tests
       const at = m[3], num = (n) => { const v = (at.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
       return { id: m[2], group, affixes: num('data-affixes') ?? 0, tier: num('data-tier') ?? 0,
         quality: num('data-quality') ?? 0, perfect: num('data-perfect') === 1,
+        // Sacred already? Then Divine Dust rerolls the affix instead of granting one.
+        sacred: num('data-sacred') === 1,
         polishRoom: num('data-polish-room'), label: strip(m[4]),
         // The site preselects whatever you crafted last.
         selected: /\bselected\b/.test(at) };
@@ -502,7 +528,8 @@ export async function inventory() { // exported for scrape smoke-tests
         base: num('data-base'), veilExtra: num('data-veil-extra'),
         dataLabel: (a.match(/data-label="([^"]*)"/) || [])[1] || strip(m[3]).replace(/\s*\(.*\)\s*$/, ''),
         recombine: /data-recombine/.test(a), polish: /data-polish(?!-)/.test(a), reforge: /data-reforge/.test(a),
-        dust: num('data-dust'), sand: num('data-sand'),
+        divineDustApply: /data-divine-dust-apply/.test(a),
+        dust: num('data-dust'), sand: num('data-sand'), divineDust: num('data-divine-dust'),
         confirm: /data-confirm/.test(a), // site marks destructive/committing crafts itself
       };
     });
@@ -529,7 +556,7 @@ export async function inventory() { // exported for scrape smoke-tests
   // keeps prompting, and submitting an EMPTY value is how you decline (it
   // records "asked and skipped" so it stops). Only one pending item is offered
   // at a time even if several are waiting.
-  return { dust, sand, tokens, bagCap, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle }, veil, autoDisenchant, nameItem: nameItemOf(text) };
+  return { dust, sand, divineDust, tokens, bagCap, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle, divineDustRecipe }, veil, autoDisenchant, nameItem: nameItemOf(text) };
 }
 
 // One passive canvas out of a page fragment. The site renders the same

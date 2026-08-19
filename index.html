@@ -909,13 +909,14 @@
   // Residual: a poll finishing with post-battle currency BEFORE the WS message
   // arrives poisons the base; unfixable client-side (payload lacks reward/repair
   // fields), hence the delta is labeled "net".
-  let lastDust = null, lastSand = null, battleToastT = null, pendingBattle = null;
+  let lastDust = null, lastSand = null, lastDivine = null, battleToastT = null, pendingBattle = null;
   let currencyPollSeq = 0, lastPollStart = 0; // provenance of lastDust/lastSand
   const lastCraftAt = () => +localStorage.getItem('lastCraftAt') || 0;
   const stampCraft = () => localStorage.setItem('lastCraftAt', Date.now());
   function trackCurrency(inv, seq, startedAt) {
     if (/^\d+$/.test(String(inv.dust))) lastDust = +inv.dust; // exact ints only — abbreviated can't diff
     if (/^\d+$/.test(String(inv.sand))) lastSand = +inv.sand;
+    if (/^\d+$/.test(String(inv.divineDust))) lastDivine = +inv.divineDust;
     lastPollStart = startedAt;
     const pb = pendingBattle;
     // freeze only from a request STARTED after arming — an in-flight pre-battle
@@ -924,14 +925,15 @@
       const delta = (now, was, label) => now != null && was != null && now !== was
         ? [`${now > was ? '+' : ''}${(now - was).toLocaleString()} ${label}`] : [];
       pb.frozen = {
-        parts: [...delta(lastDust, pb.base.dust, 'dust'), ...delta(lastSand, pb.base.sand, 'sand')],
+        parts: [...delta(lastDust, pb.base.dust, 'dust'), ...delta(lastSand, pb.base.sand, 'sand'),
+          ...delta(lastDivine, pb.base.divine, '✨ divine dust')],
         dirty: lastCraftAt() > pb.baseObservedFrom, // any currency action since the base was observed
       };
     }
   }
   function armBattleToast(d) {
     const battle = pendingBattle = {
-      won: !!d.won, base: { dust: lastDust, sand: lastSand },
+      won: !!d.won, base: { dust: lastDust, sand: lastSand, divine: lastDivine },
       baseObservedFrom: lastPollStart, afterSeq: currencyPollSeq, frozen: null,
     };
     clearTimeout(battleToastT); // back-to-back fights: newest wins

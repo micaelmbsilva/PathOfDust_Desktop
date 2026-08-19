@@ -562,7 +562,7 @@ function parseCharacter(text) {
   const stats = {};
   for (const m of text.matchAll(/class="stat-label"[^>]*>(.*?)<\/div>\s*<div class="stat-value"[^>]*>(.*?)<\/div>/gs)) {
     const k = strip(m[1]);
-    if (k && !/^(Dust|Sand)$/i.test(k)) stats[k] = strip(m[2]); // currency stays out of public stats
+    if (k && !/^(Divine )?(Dust|Sand)$/i.test(k)) stats[k] = strip(m[2]); // currency stays out of public stats
   }
   const level = +String(stats.Level || '').replace(/\D/g, '') || null;
   // The character page draws Gear and Bag with identical gear-slot markup; the

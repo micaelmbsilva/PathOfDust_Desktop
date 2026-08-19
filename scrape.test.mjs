@@ -4,7 +4,7 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf } from './server.mjs';
+import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf, craftFormsOf } from './server.mjs';
 import { netKey, firstBody, redirectNote } from './actions.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -360,3 +360,33 @@ assert.deepEqual(redirectNote('/passives?memory_note=You%27re%20now%20playing%20
   { note: "You're now playing Druid." });
 assert.equal(redirectNote('/passives'), null);
 assert.equal(redirectNote(null), null);
+
+// --- Two forms POST to /craft since Divine Dust (Aug '26), and the recipe row
+// renders FIRST. Taking "the chunk after the first action=/craft" therefore
+// picked the recipe and left the item form — every craft option and button —
+// empty. Markup mirrors render_divine_dust_recipe_row/render_crafting_card.
+const inventoryPage = (disabled) => `
+  <div class="card" id="crafting-card">
+  <form method="post" action="/craft"><input type="hidden" name="action" value="divine dust craft">
+    <div class="craft-actions">
+      <span class="muted" data-tip="Costs dust + sand, not Divine Dust itself.">Craft Divine Dust (1000d + 10s → 1 ✨):</span>
+      <label class="batch-check"><input type="radio" name="times" value="1" checked> x1</label>
+      <button class="btn-sm" type="submit"${disabled ? ' disabled' : ''}>Craft</button>
+    </div></form>
+  <form method="post" action="/craft">
+    <select name="item_a"><option value="itm_1" data-tier="7" data-sacred="1">Hood</option></select>
+    <div class="craft-actions">
+      <button class="btn-sm" type="submit" name="action" value="divine dust" data-divine-dust-apply="1" data-divine-dust="50" data-tip="2 per tier.">Apply Divine Dust</button>
+    </div></form></div>`;
+
+const cf = craftFormsOf(inventoryPage(false));
+assert.match(cf.craftForm, /name="item_a"/, 'the item form is the one carrying item_a, not the recipe');
+assert.match(cf.craftForm, /data-divine-dust-apply/, 'and it keeps the apply button');
+assert.deepEqual({ ...cf.divineDustRecipe, tip: undefined },
+  { action: 'divine dust craft', dustCost: 1000, sandCost: 10, output: 1, affordable: true, tip: undefined });
+assert.match(cf.divineDustRecipe.tip, /^Costs dust \+ sand/);
+assert.equal(craftFormsOf(inventoryPage(true)).divineDustRecipe.affordable, false, 'a disabled Craft button = cannot afford');
+// A pre-Divine-Dust page (one craft form, no recipe) must still parse.
+const old = craftFormsOf('<form method="post" action="/craft"><select name="item_a"></select></form>');
+assert.equal(old.divineDustRecipe, null);
+assert.match(old.craftForm, /name="item_a"/);

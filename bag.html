@@ -297,6 +297,9 @@
       const sand = Math.round(numCur(after.sand) - numCur(before.sand));
       if (dust) parts.push(`<b>${dust > 0 ? '+' : ''}${dust.toLocaleString()}</b> dust`);
       if (sand) parts.push(`<b>${sand > 0 ? '+' : ''}${sand.toLocaleString()}</b> sand`);
+      // Only a Sacred item's disenchant can roll it, so it's never loot noise.
+      const dd = Math.round(numCur(after.divineDust) - numCur(before.divineDust));
+      if (dd) parts.push(`<b>${dd > 0 ? '+' : ''}${dd.toLocaleString()}</b> ✨ divine dust`);
     }
     // Pill text is "🎫 Scour ×3", or "🎫 Celestial Shard → Celestial Conversion ×2"
     // for the shard tokens — the name is the part before the arrow.
@@ -365,6 +368,7 @@
     const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
     const ad = inv.autoDisenchant;
     $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
+      (inv.divineDust != null ? `<span class="chip" title="Spent 2 per item tier to make an item Sacred, or reroll an already-Sacred item's sacred affix">✨ ${full(inv.divineDust)} divine dust</span>` : '') +
       inv.tokens.map(t => `<span class="chip">${esc(t)}</span>`).join('') +
       `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-Repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
       // Site omits the whole form when nothing is damaged, so no chip either.
@@ -439,6 +443,17 @@
     lastBag = inv.bag;
     renderBag();
 
+    // Divine Dust recipe: a pure dust+sand -> ✨ conversion, so it stands apart
+    // from the item crafts below (it's its own form on the site too) and stays
+    // visible even with an empty bag. Its own x1/x10/x50, not the polish/reforge
+    // batch — the site treats them as separate radio groups.
+    const ddRecipeHtml = (r) => !r ? '' : `
+      <div class="acts" style="align-items:center;margin:4px 0 8px"${tip(r.tip)}>
+        <span class="muted">✨ Craft Divine Dust (${r.dustCost}d + ${r.sandCost}s → ${r.output}):</span>
+        ${[1, 10, 50].map(n => `<label class="hint"><input type="radio" name="ddtimes" class="ddx" value="${n}"${n === (cbGet('ddtimes') || 1) ? ' checked' : ''}> ×${n}</label>`).join('')}
+        <button id="ddCraft"${r.affordable ? '' : ' disabled'}>Craft</button>
+      </div>`;
+
     // crafting form — keep the selection across reloads AND app restarts (localStorage fallback)
     // Your in-page choice wins over the stored one, and the site's own
     // preselection (whatever you crafted last) is the final fallback — that's
@@ -467,6 +482,7 @@
         <label class="hint" title="Run Polishing/Reforge 10 times in one go"><input type="checkbox" class="batchx" value="10"${cbGet('batch') === 10 ? ' checked' : ''}> ×10</label>
         <label class="hint" title="Run Polishing/Reforge 50 times in one go — the site's cap. It stops early if you run out of sand/dust and reports how many landed"><input type="checkbox" class="batchx" value="50"${cbGet('batch') === 50 ? ' checked' : ''}> ×50</label>
       </div>
+      ${ddRecipeHtml(inv.craft.divineDustRecipe)}
       <div id="craftSections"></div>
       </div>
       <div class="craft-pips" id="craftPips" title="Sort and filter the Item A / Item B pickers"></div>`;
@@ -477,6 +493,16 @@
       cbSet('batch', b.checked ? +b.value : 0);
       updateCosts();
     });
+    document.querySelectorAll('.ddx').forEach(b => b.onchange = () => cbSet('ddtimes', +b.value));
+    const ddBtn = $('ddCraft');
+    if (ddBtn) ddBtn.onclick = async () => {
+      const times = +([...document.querySelectorAll('.ddx')].find(b => b.checked)?.value || 1);
+      // Batches stop at the first shortfall and keep whatever landed, so the
+      // currency diff is the only honest report of how many actually went through.
+      await craftAct('craft', { action: 'divine dust craft', ...(times > 1 ? { times: String(times) } : {}) },
+        'Craft Divine Dust', { currency: true });
+      refresh();
+    };
     const keep = (sel, v) => { if (v && [...sel.options].some(o => o.value === v)) sel.value = v; };
     keep($('itemA'), prevA); keep($('itemB'), prevB);
 
@@ -690,7 +716,7 @@
   const DEFAULT_SECTIONS = [
     { name: 'Modify', items: ['transmute', 'augment', 'regal', 'exalt'] },
     { name: 'Risky', items: ['scour', 'annulment', 'krangle', 'chancing'] },
-    { name: 'Improve', items: ['polishing', 'reforge', 'recombine'] },
+    { name: 'Improve', items: ['polishing', 'reforge', 'recombine', 'divine dust'] },
   ];
   const loadSections = () => { try { const s = JSON.parse(localStorage.getItem(SEC)); return Array.isArray(s) && s.length ? s : null; } catch { return null; } };
   const saveSections = (s) => localStorage.setItem(SEC, JSON.stringify(s));
@@ -790,6 +816,11 @@
       if (!btn) continue;
       if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c || A?.polishRoom === 0; continue; }
       if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
+      // 2 ✨ per tier, never batched (the ×N above is the recipe's own thing).
+      // Already-Sacred items reroll the affix instead of gaining one.
+      if (a.divineDustApply) { const c = 2 * tierA;
+        btn.textContent = `${A?.sacred ? 'Reroll Sacred Affix' : 'Apply Divine Dust'} (${c} ✨)`;
+        btn.disabled = (a.divineDust ?? 0) < c; continue; }
       if (a.base == null) { btn.textContent = a.label; btn.disabled = false; continue; } // Regal/Krangle: token label
       let cost = a.recombine ? a.base : a.base + 3 * tierA;
       if (veiled && a.veilExtra != null) { cost += a.veilExtra; if (a.recombine) cost += 500 * pool; }
@@ -986,6 +1017,11 @@
       // The site marks committing/destructive crafts itself (data-confirm);
       // scour/krangle stay as a fallback for an old bridge without that field.
       const aDef = (lastCraft.actions || []).find(x => x.action === action);
+      // Rerolling replaces the existing sacred affix with a different one and
+      // can't be undone; the site doesn't mark it data-confirm, so ask here.
+      if (action === 'divine dust' &&
+          (lastCraft.options || []).find(o => o.id === $('itemA').value)?.sacred &&
+          !confirm('Reroll this item’s sacred affix? The current one is lost.')) return;
       if ((aDef?.confirm || action === 'scour' || action === 'krangle') &&
           !confirm(`${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
       if (action === 'recombine') {
