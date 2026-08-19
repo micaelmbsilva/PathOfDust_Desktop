@@ -29,14 +29,35 @@
   h2 { font-size: 0.95rem; margin: 18px 0 6px; color: #a394c7; }
   select { background: #1c1830; color: #eae6f5; border: 1px solid rgba(160,140,255,0.3);
     border-radius: 6px; padding: 2px 6px; font-size: 0.78rem; max-width: 340px; }
-  .muted { color: #8a7fb0; } #err { color: #ff8080; }
+  .muted { color: #8a7fb0; } #err { color: #ff8080; } #note { color: #ffd76b; font-size: 0.82rem; }
+  /* Memories — saved builds. One card per slot, kept to the same pill/chip
+     language as the bar so the page still reads as one thing. */
+  .mem { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+  .slot { flex: 1 1 240px; min-width: 240px; background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(160,140,255,0.18); border-radius: 10px; padding: 8px 10px;
+    display: flex; flex-direction: column; gap: 6px; }
+  .slot.filled { border-color: rgba(255,215,107,0.35); }
+  .shead { display: flex; align-items: center; gap: 8px; }
+  .num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+    border-radius: 50%; background: rgba(160,140,255,0.15); color: #a394c7; font-size: 0.7rem; flex: none; }
+  .snm { font-weight: 700; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .slot.filled .snm { color: #ffd76b; }
+  .meta { font-size: 0.72rem; color: #8a7fb0; }
+  .srow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+  .srow .btn-respec, .srow .btn-save { padding: 4px 10px; font-size: 0.72rem; }
+  .danger { color: #ff8080; border-color: rgba(255,128,128,0.35); }
+  .mname { flex: 1 1 120px; min-width: 0; background: #1c1830; color: #eae6f5;
+    border: 1px solid rgba(160,140,255,0.3); border-radius: 999px; padding: 4px 10px; font-size: 0.72rem; }
 </style>
 </head>
 <body>
   <h1>🌳 Passives <button class="chip" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
   <div class="bar" id="bar"></div>
-  <div id="legend"></div>
   <div id="err"></div>
+  <div id="note"></div>
+  <h2 id="memHead" style="display:none">🧠 Memories <span class="muted" style="font-weight:400">— saved builds, free to swap out of combat</span></h2>
+  <div class="mem" id="mem"></div>
+  <div id="legend"></div>
   <div id="stage"></div>
   <div id="secBar" class="bar"></div>
   <div id="secStage"></div>
@@ -51,7 +72,9 @@
   async function api(endpoint, fields) {
     const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
-    if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
+    // The bridge decodes the site's ?passive_failed= redirect into `reason` —
+    // without it a refused allocate/load looked like a success and did nothing.
+    if (!r.ok) $('err').textContent = r.reason || `${endpoint} -> ${r.status}`;
     return r;
   }
   // refresh now, then again once the server settles the action
@@ -87,15 +110,31 @@
 
     $('bar').innerHTML =
       `<span class="chip">🪓 <strong>${esc(p.points)}</strong></span>
+       <span id="zoom"></span>
        <button class="btn-save" id="save" ${p.canSave ? '' : 'disabled'}>Save Changes</button>
        ${p.canReset ? '<button class="btn-respec" id="reset">Reset Preview</button>' : ''}
        <button class="btn-respec" id="respec">${esc(p.respecLabel)}</button>
        ${p.dirty ? '<span class="chip" style="color:#ffd76b;border-color:rgba(255,215,107,0.4)">Unsaved Changes</span>' : ''}`;
+    PodTree.mountZoom($('zoom')); // tree-only zoom; both trees share one level
     $('save').onclick = async () => { await api('passives/save', {}); refresh(); };
     loadArchetype(); // class switcher chip (async, appended to the bar)
     const rst = $('reset');
     if (rst) rst.onclick = async () => { await api('passives/reset', {}); refresh(); }; // discard unsaved allocations
-    $('respec').onclick = async () => { if (confirm('Respec — reset all points?')) { await api('passives/respec', {}); refresh(); } };
+    // Respec warning: the game clears the PRIMARY tree only (a known,
+    // owner-acknowledged bug in respec_passive_tree) while charging the full
+    // free-token/1000-dust cost, so a Split Personality build loses the dust
+    // and keeps its 2nd-class points spent against the shared pool. Say so
+    // before the click rather than after the refund doesn't arrive.
+    const secondarySpent = (p.secondary?.nodes || [])
+      .some(n => +(String(n.rank || '').match(/^(\d+)\s*\//) || [])[1] > 0);
+    $('respec').onclick = async () => {
+      const warn = secondarySpent
+        ? '\n\nWarning: the game only refunds your PRIMARY tree. Points already spent in your 2nd class tree stay spent, and you are charged in full either way.'
+        : '';
+      if (!confirm('Respec — reset all points?' + warn)) return;
+      await api('passives/respec', {}); refresh();
+    };
+    renderMemories(p.memories);
 
     // Both trees allocate through the same endpoint; `secondary` is the only
     // thing that tells the server which one the point lands in.
@@ -121,14 +160,69 @@
       const v = $('secSel').value;
       if (!v || v === cur) return;
       if (!confirm(`Set your 2nd class to ${v}?`)) { $('secSel').value = cur; return; }
+      // Refusals arrive as ?passive_failed=<reason>; the bridge decodes that
+      // into r.reason for every endpoint now, and api() has already shown it.
       const r = await api('passives/set-secondary', { archetype: v });
-      // The site reports refusals by bouncing to /passives?passive_failed=<reason>
-      const why = (r.location || '').match(/passive_failed=([^&]*)/);
-      if (why) { $('err').textContent = decodeURIComponent(why[1].replace(/\+/g, ' ')); $('secSel').value = cur; return; }
+      if (!r.ok) { $('secSel').value = cur; return; }
       refresh();
     };
     PodTree.render($('secStage'), s, wiring);
   }
+  // Memories — the site's saved-build slots (docs/memories_spec.md). Slot
+  // identity comes from the site, never from our array index: an empty slot 1
+  // beside a filled slot 3 has to stay slot 3. Empty slots always render —
+  // they're the feature's only entry point.
+  function renderMemories(mem) {
+    const has = !!(mem && mem.length);
+    $('memHead').style.display = has ? '' : 'none';
+    $('mem').innerHTML = !has ? '' : mem.map(m => m.filled ? `
+      <div class="slot filled">
+        <div class="shead"><span class="num">${m.slot + 1}</span><span class="snm" title="${esc(m.name)}">${esc(m.name)}</span></div>
+        <div class="meta">${esc(m.meta)}</div>
+        <div class="srow">
+          <button class="btn-save" data-act="load" data-slot="${m.slot}">Load</button>
+          <button class="btn-respec" data-act="over" data-slot="${m.slot}" data-name="${esc(m.name)}">Overwrite</button>
+          <button class="btn-respec" data-act="rename" data-slot="${m.slot}" data-name="${esc(m.name)}">Rename</button>
+          <button class="btn-respec danger" data-act="del" data-slot="${m.slot}">Delete</button>
+        </div>
+      </div>` : `
+      <div class="slot empty">
+        <div class="shead"><span class="num">${m.slot + 1}</span><span class="snm muted">Empty slot</span></div>
+        <div class="meta">Saves your class, both trees and golem types.</div>
+        <div class="srow">
+          <input class="mname" id="mn${m.slot}" maxlength="150" placeholder="${esc(m.placeholder)}">
+          <button class="btn-save" data-act="save" data-slot="${m.slot}">Save Build</button>
+        </div>
+      </div>`).join('');
+    $('mem').querySelectorAll('button[data-act]').forEach(b => b.onclick = () => memAction(b));
+  }
+
+  // One handler for all five slot actions — they differ only in endpoint,
+  // fields and which confirmation they need. A load can succeed and STILL have
+  // something to say (class changed, stale nodes refunded, 2nd tree skipped
+  // because Split Personality came off), which arrives as r.note.
+  async function memAction(b) {
+    const slot = b.dataset.slot, act = b.dataset.act;
+    $('note').textContent = '';
+    let endpoint, fields;
+    if (act === 'load') { endpoint = 'passives/memories/load'; fields = { slot }; }
+    else if (act === 'save') { endpoint = 'passives/memories/save'; fields = { slot, name: ($('mn' + slot).value || '').trim() }; }
+    else if (act === 'over') {
+      if (!confirm('Overwrite this Memory with your current build?')) return;
+      endpoint = 'passives/memories/save'; fields = { slot, name: b.dataset.name };
+    } else if (act === 'rename') {
+      const v = prompt('New name for this Memory:', b.dataset.name);
+      if (v == null) return;
+      endpoint = 'passives/memories/rename'; fields = { slot, name: v };
+    } else {
+      if (!confirm('Delete this Memory? This cannot be undone.')) return;
+      endpoint = 'passives/memories/delete'; fields = { slot };
+    }
+    const r = await api(endpoint, fields);
+    refresh();
+    if (r.note) $('note').textContent = r.note; // survives load(), which only clears #err
+  }
+
   load();
 </script>
 <script src="/tooltip.js"></script>

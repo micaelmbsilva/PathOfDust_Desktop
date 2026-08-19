@@ -43,8 +43,27 @@ export async function post(endpoint, fields = {}) {
     body: new URLSearchParams(fields).toString(),
     redirect: 'manual',
   });
-  return { status: res.status, location: res.headers.get('location'), ok: res.status < 400 };
+  const location = res.headers.get('location');
+  const n = redirectNote(location);
+  return { status: res.status, location, ok: res.status < 400 && !n?.reason, ...(n || {}) };
 }
+
+// The site refuses an action by 303ing to `...?passive_failed=<reason>` — a
+// <400 status, so `ok` alone read every refusal as a success and the UI showed
+// nothing. That is how an allocate the server rejected (no points left, node
+// locked, in a fight) silently did nothing, and it bites hardest with Split
+// Personality, where two trees draw down one shared point pool. Decoded once
+// here so allocate/save/respec/set-secondary/set-golem-type and every Memory
+// action are covered, not just the one call site that hand-parsed it.
+// `memory_note` is the mirror image: a SUCCESS the site wants to explain
+// (class changed, stale nodes refunded, 2nd tree skipped).
+export const redirectNote = (location) => {
+  const q = String(location || '').split('?')[1];
+  if (!q) return null;
+  const p = new URLSearchParams(q);
+  const reason = p.get('passive_failed'), note = p.get('memory_note');
+  return reason ? { reason } : note ? { note } : null;
+};
 
 // The game's page shell currently renders each page body TWICE (its own
 // templates/base.html emits it in two places). Every whole-page sweep in

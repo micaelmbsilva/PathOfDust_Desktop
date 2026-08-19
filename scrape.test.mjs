@@ -4,8 +4,8 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed } from './server.mjs';
-import { netKey, firstBody } from './actions.mjs';
+import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf } from './server.mjs';
+import { netKey, firstBody, redirectNote } from './actions.mjs';
 import { readFileSync } from 'node:fs';
 
 // Owner dossier: exact normalized login only. UI hiding is convenience; this
@@ -248,3 +248,106 @@ assert.ok(characterOf(twice(sheet), 'afrosenbo').stats.length > one.stats.length
 
 console.log('ok');
 process.exit(0); // importing server.mjs opens the bridge listener
+
+// --- /passives, as the site renders it since Memories (2026-08-19): a Memory
+// slot card above the tree, and — with Split Personality equipped — a whole
+// second tree below it. Markup copied from render_memories_section /
+// render_passive_tree_page / render_ptree_body in PathofDust's adventure_web.rs.
+const ptreeBody = (key, rank, secondaryTree) =>
+  `<div class="tree-wrap"><div style="width:1180px;height:463px;position:relative;">` +
+  `<svg class="connectors" width="1180" height="463">` +
+  `<line x1="10.0" y1="20.0" x2="30.0" y2="40.0" stroke="#7a6ba8" stroke-width="2"></line></svg>` +
+  `<div class="node node-root" style="left:480px;top:58px;width:220px;" data-tip="Big.">` +
+  `<div class="node-kind">Class Passive &middot; Always Active</div>` +
+  `<div class="node-name">${secondaryTree ? 'DRUID' : 'WARRIOR'}</div><div class="node-desc">Big.</div></div>` +
+  `<div class="node node-skill node--invested" style="left:120px;top:180px;width:140px;" data-tip="Hits harder.">` +
+  `<div class="node-kind">Tier 1</div><div class="node-name">${key}</div>` +
+  `<div class="dots"><span class="dot filled"></span></div>` +
+  `<form method="post" action="/passives/allocate" class="node-buttons">` +
+  `<input type="hidden" name="node_key" value="${key}">` +
+  `<input type="hidden" name="secondary" value="${secondaryTree}">` +
+  `<button class="btn-sm" type="submit" name="delta" value="-1">-</button>` +
+  `<span class="node-rank">${rank}</span>` +
+  `<button class="btn-sm" type="submit" name="delta" value="1">+</button></form></div></div></div>`;
+
+const memorySlot = (n, name) => name
+  ? `<div class="memory-slot filled"><div class="memory-head">` +
+    `<span class="memory-number">${n + 1}</span><span class="memory-name">${name}</span></div>` +
+    `<div class="memory-meta">Warrior &amp; Druid &middot; 12 points spent</div>` +
+    `<div class="memory-actions">` +
+    `<form method="post" action="/passives/memories/load"><input type="hidden" name="slot" value="${n}">` +
+    `<button class="btn-sm" type="submit">Load</button></form>` +
+    `<form method="post" action="/passives/memories/save"><input type="hidden" name="slot" value="${n}">` +
+    `<input type="hidden" name="name" value="${name}"><button class="btn-sm" type="submit">Overwrite</button></form>` +
+    `</div></div>`
+  : `<div class="memory-slot empty"><div class="memory-head">` +
+    `<span class="memory-number">${n + 1}</span><span class="memory-name muted">Empty slot</span></div>` +
+    `<form method="post" action="/passives/memories/save" class="memory-actions">` +
+    `<input type="hidden" name="slot" value="${n}">` +
+    `<input type="text" name="name" placeholder="Memories of an Elementalist" maxlength="150" aria-label="Name for Memory ${n + 1}">` +
+    `<button class="btn-sm" type="submit">Save Current Build</button></form></div>`;
+
+const passivesPage = (dirty, withSecondary) =>
+  `<nav class="top-nav"><a class="top-nav-link" href="/">Home</a></nav><div class="ptree-page">` +
+  `<div class="masthead"><div class="eyebrow">Live &middot; Warrior</div><h1>Passives</h1></div>` +
+  `<div class="current-row"><div class="side-chips">` +
+  `<div class="points-chip">&#129683; <span>Skill Points</span> &middot; <strong>3/12 unspent</strong></div>` +
+  `<div class="preview-row">` +
+  `<form method="post" action="/passives/save"><button class="btn-save" type="submit"${dirty ? '' : ' disabled'}>Save Changes</button></form>` +
+  `<form method="post" action="/passives/reset"><button class="btn-respec" type="submit"${dirty ? '' : ' disabled'}>Reset Preview</button></form>` +
+  `</div><p class="preview-note${dirty ? ' dirty' : ''}">${dirty ? 'Unsaved changes.' : 'No unsaved changes.'}</p>` +
+  `<form method="post" action="/passives/respec"><button class="btn-respec" type="submit">Respec (Free)</button></form>` +
+  `</div></div>` +
+  `<div class="ptree-memories"><div class="masthead"><h1>Memories</h1></div><div class="memory-slots">` +
+  memorySlot(0, 'Fire &amp; Fury') + memorySlot(1, null) + memorySlot(2, null) + `</div></div>` +
+  ptreeBody('cleave', '2/3', false) +
+  (withSecondary
+    ? `<div class="ptree-secondary"><div class="masthead"><h1>2nd Class</h1></div>` +
+      `<form method="post" action="/passives/set-secondary" class="secondary-picker">` +
+      `<select id="secondary-archetype-select" name="archetype">` +
+      `<option value="druid" selected>Druid</option><option value="rogue">Rogue</option></select>` +
+      `<button class="btn-sm" type="submit">Change</button></form>` +
+      ptreeBody('barkskin', '1/3', true) + `</div>`
+    : ``) +
+  `<footer>Root passive numbers mirror <code>Archetype::bonus()</code>.</footer></div>`;
+
+const pv = passivesOf(passivesPage(true, true));
+assert.equal(pv.points, '3/12 unspent');
+assert.equal(pv.respecLabel, 'Respec (Free)');
+assert.equal(pv.canSave, true);
+assert.equal(pv.canReset, true);
+assert.equal(pv.dirty, true);
+// The Memories card sits ABOVE the tree — it must not leak into either canvas.
+assert.deepEqual(pv.memories.map(m => [m.slot, m.filled, m.name]),
+  [[0, true, 'Fire & Fury'], [1, false, ``], [2, false, ``]]);
+assert.equal(pv.memories[0].meta, 'Warrior & Druid · 12 points spent');
+assert.equal(pv.memories[1].placeholder, 'Memories of an Elementalist');
+// Two trees, never mixed: the primary canvas must not pick up the 2nd class's
+// nodes, and the 2nd class's must not pick up the primary's.
+assert.deepEqual(pv.nodes.map(n => n.name), ['WARRIOR', 'cleave']);
+assert.equal(pv.nodes.every(n => n.secondary === false), true);
+assert.deepEqual(pv.secondary.nodes.map(n => n.name), ['DRUID', 'barkskin']);
+assert.equal(pv.secondary.nodes.every(n => n.secondary === true), true);
+assert.deepEqual(pv.secondary.options.map(o => [o.value, o.selected]), [['druid', true], ['rogue', false]]);
+assert.equal(pv.secondary.buttonLabel, 'Change');
+
+// No Split Personality equipped: no 2nd tree at all, and the Memories card
+// still parses (empty slots are the feature's entry point, always rendered).
+const solo = passivesOf(passivesPage(false, false));
+assert.equal(solo.secondary, null);
+assert.equal(solo.memories.length, 3);
+// The reset form is ALWAYS rendered and merely disabled — testing for the form
+// alone reported "resettable" on every load.
+assert.equal(solo.canReset, false, 'a disabled Reset Preview is not resettable');
+assert.equal(solo.canSave, false);
+assert.equal(solo.dirty, false);
+
+// --- A refused action 303s to ?passive_failed=<reason>. That is a <400 status,
+// so `ok` alone read every refusal as success and the click silently did
+// nothing — worst with Split Personality, where two trees share one point pool.
+assert.deepEqual(redirectNote('/passives?passive_failed=You%20have%20no%20points%20left.'),
+  { reason: 'You have no points left.' });
+assert.deepEqual(redirectNote('/passives?memory_note=You%27re%20now%20playing%20Druid.'),
+  { note: "You're now playing Druid." });
+assert.equal(redirectNote('/passives'), null);
+assert.equal(redirectNote(null), null);

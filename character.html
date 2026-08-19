@@ -225,7 +225,9 @@
       return;
     }
     $('treeBar').innerHTML = `<span class="chip">${esc(p.archetype)}</span><span class="chip">🪓 ${esc(p.points)}</span>
+      <span id="zoom"></span>
       <span class="muted">Read-only — this is their saved build.</span>`;
+    PodTree.mountZoom($('zoom')); // same zoom level as /passives - one shared setting
     $('legend').innerHTML = PodTree.legend;
     PodTree.render($('stage'), p);          // no onAllocate = read-only
     if (p.secondary && (p.secondary.nodes || []).length) {

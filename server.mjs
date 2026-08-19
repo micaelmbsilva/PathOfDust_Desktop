@@ -575,18 +575,42 @@ export function treeOf(html, secondary = false) { // exported for scrape smoke-t
   return { stage, connectors: svg, edges, nodes };
 }
 
-// Passive tree: points chip, respec/save availability, and every node. When
-// Split Personality is equipped the page carries a SECOND tree below the first;
-// both are parsed separately so their nodes and canvases never get mixed.
-async function passives() {
-  const { text } = await getAuthed('/passives');
+// Memory slots (saved builds) off the /passives page's own card. Slot identity
+// is the site's `slot` field, not our array index — an empty slot 1 with a
+// filled slot 3 has to stay slot 3, so every action re-sends the site's number.
+// `name` is decoded (not stripped) because we POST it back verbatim on
+// Overwrite/Rename; `meta` is display text only.
+export function memoriesOf(html) { // exported for scrape smoke-tests
+  return html.split('class="memory-slot ').slice(1).map((chunk, i) => {
+    const filled = chunk.startsWith('filled');
+    return {
+      slot: +((chunk.match(/name="slot" value="(\d+)"/) || [])[1] ?? i),
+      filled,
+      // Filled slots print the name as element text; empty ones carry the
+      // default we'd get by saving with a blank name as the input placeholder.
+      name: filled ? decode((chunk.match(/class="memory-name"[^>]*>([^<]*)</) || [])[1] || '') : '',
+      placeholder: filled ? '' : decode((chunk.match(/placeholder="([^"]*)"/) || [])[1] || ''),
+      meta: strip((chunk.match(/class="memory-meta"[^>]*>([\s\S]*?)<\/div>/) || [])[1] || ''),
+    };
+  });
+}
+
+// Passive tree: points chip, respec/save availability, memory slots, and every
+// node. When Split Personality is equipped the page carries a SECOND tree below
+// the first; both are parsed separately so their nodes and canvases never get
+// mixed.
+export function passivesOf(text) { // exported for scrape smoke-tests
   const si = text.indexOf('class="ptree-secondary"');
   const primaryHtml = si >= 0 ? text.slice(0, si) : text;
   const points = strip((primaryHtml.match(/points-chip[^]*?<strong>([^<]+)<\/strong>/) || [])[1] || '');
   const respecLabel = strip((text.match(/action="\/passives\/respec">\s*<button[^>]*>([^<]*)</) || [])[1] || 'Respec');
   const canSave = /action="\/passives\/save">\s*<button(?![^>]*disabled)/.test(text);
-  const canReset = /action="\/passives\/reset"/.test(text); // "Reset Preview" — discard unsaved changes
+  // "Reset Preview" — discard unsaved changes. The site ALWAYS renders this
+  // form and disables the button instead, so testing for the form alone (which
+  // is what this did) reported "you can reset" on every single load.
+  const canReset = /action="\/passives\/reset">\s*<button(?![^>]*disabled)/.test(text);
   const dirty = /preview-note dirty/.test(text);            // site's "Unsaved changes." flag
+  const memories = memoriesOf(primaryHtml);
 
   // 2nd class picker — only rendered while the Split Personality unique is
   // equipped. Its tree section stays empty until a class is actually chosen.
@@ -601,8 +625,9 @@ async function passives() {
       ...treeOf(secHtml, true),
     };
   }
-  return { points, respecLabel, canSave, canReset, dirty, ...treeOf(primaryHtml), secondary };
+  return { points, respecLabel, canSave, canReset, dirty, memories, ...treeOf(primaryHtml), secondary };
 }
+async function passives() { return passivesOf((await getAuthed('/passives')).text); }
 
 // Another player's tree — same canvas, no controls. Commoners have none.
 async function characterPassives(login) {

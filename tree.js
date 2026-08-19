@@ -14,7 +14,12 @@
   const targetW = () => Math.min(1780, Math.max(560, (document.documentElement.clientWidth || screen.availWidth) - 40));
 
   const CSS = `
-  .pod-tree { position: relative; margin: 0 auto; }
+  /* The stage element becomes the SCROLLER and the tree canvas moves inside it,
+     so zooming past the fit width scrolls the tree instead of the whole page —
+     the points chip, Memories card and 2nd-class picker stay where they are. */
+  .pod-tree-wrap { overflow: auto; max-width: 100%; }
+  .pod-tree-zoom { position: relative; margin: 0 auto; }
+  .pod-tree { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
   /* left/top only — NOT inset:0, which would stretch the SVG to the whole
      stage and break the connector-to-node alignment. Its width/height are set
      in JS to match the node coordinate scale exactly. */
@@ -54,7 +59,15 @@
   .pod-legend .li { display: flex; align-items: center; gap: 6px; }
   .pod-legend .ld { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #766a99; display: inline-block; }
   .pod-legend .ld.on { background: #ff3b4e; border-color: #ff3b4e; }
-  .pod-legend .ld.spec { background: #ffd76b; border-color: #ffd76b; }`;
+  .pod-legend .ld.spec { background: #ffd76b; border-color: #ffd76b; }
+
+  .pod-zoom { display: inline-flex; align-items: center; gap: 2px; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(160,140,255,0.18); border-radius: 999px; padding: 2px 4px; }
+  .pod-zoom button { font: inherit; font-size: 0.8rem; line-height: 1; color: #a394c7; background: none;
+    border: 0; border-radius: 999px; padding: 4px 8px; cursor: pointer; }
+  .pod-zoom button:hover:not(:disabled) { background: rgba(160,140,255,0.15); color: #eae6f5; }
+  .pod-zoom button:disabled { opacity: 0.35; cursor: default; }
+  .pod-zoom .lvl { min-width: 42px; font-size: 0.72rem; color: #a394c7; font-variant-numeric: tabular-nums; }`;
 
   if (!document.getElementById('pod-tree-css')) {
     const s = document.createElement('style');
@@ -144,13 +157,77 @@
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+  // Zoom, applied on TOP of the fit-to-width scale and to the tree canvas only —
+  // never the page — so the points chip, Memories card and 2nd-class picker
+  // don't move. Kept here rather than per-page because both trees on /passives
+  // (primary and Split Personality's) have to zoom together, and the character
+  // sheet draws the same two. Persisted: a player who shrinks a big tree once
+  // means it, and re-picking the zoom after every refresh() would be the whole
+  // annoyance again.
+  const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5, ZOOM_STEP = 0.15;
+  const clampZoom = (z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
+  let Z = clampZoom(+localStorage.getItem('podTreeZoom') || 1);
+  // Every stage we've drawn, so a zoom change can redraw them all without the
+  // page handing the data back. Same elements every time (#stage / #secStage).
+  const drawn = new Map();
+
+  function setZoom(z) {
+    const next = clampZoom(z);
+    if (next === Z) return;
+    Z = next;
+    try { localStorage.setItem('podTreeZoom', String(Z)); } catch {} // private mode
+    for (const [el, r] of drawn) draw(el, r.tree, r.opts);
+    // Live DOM query rather than a registry of mounted bars: the pages rebuild
+    // their bars on every load, and a registry would just accumulate detached ones.
+    document.querySelectorAll('.pod-zoom').forEach(syncZoomBar);
+  }
+
+  function syncZoomBar(bar) {
+    bar.querySelector('.lvl').textContent = Math.round(Z * 100) + '%';
+    bar.querySelector('[data-z="out"]').disabled = Z <= ZOOM_MIN;
+    bar.querySelector('[data-z="in"]').disabled = Z >= ZOOM_MAX;
+  }
+
+  // Drop a zoom control into a page's own bar. The pages rebuild those bars on
+  // every load, so this runs again each time and just re-renders at the
+  // current level - there's no state here to lose.
+  function mountZoom(bar) {
+    bar.classList.add('pod-zoom');
+    bar.innerHTML = '<button type="button" data-z="out" title="Zoom out">&minus;</button>' +
+      '<button type="button" class="lvl" data-z="fit" title="Reset to fit"></button>' +
+      '<button type="button" data-z="in" title="Zoom in">+</button>';
+    bar.querySelector('[data-z="out"]').onclick = () => setZoom(Z - ZOOM_STEP);
+    bar.querySelector('[data-z="in"]').onclick = () => setZoom(Z + ZOOM_STEP);
+    bar.querySelector('[data-z="fit"]').onclick = () => setZoom(1);
+    syncZoomBar(bar);
+    return bar;
+  }
+
   // tree: { stage:{w,h}, nodes, connectors } straight off the bridge.
   // opts.onAllocate(node, delta) -> Promise<boolean keepGoing>; omit for read-only.
+  // Remembered so setZoom can redraw without the caller re-fetching.
   function render(el, tree, opts) {
-    opts = opts || {};
+    drawn.set(el, { tree, opts: opts || {} });
+    draw(el, tree, opts || {});
+  }
+
+  function draw(el, tree, opts) {
     const nodes = tree.nodes || [];
-    el.classList.add('pod-tree');
-    el.classList.toggle('live', !!opts.onAllocate);
+    // `el` is the SCROLLER; the canvas is an inner div sized in real pixels, so
+    // a zoomed-in tree scrolls inside its own box instead of stretching the page.
+    el.classList.add('pod-tree-wrap');
+    // Ctrl/Cmd+wheel is the gesture people reach for first. Bound to the
+    // scroller once (innerHTML replacement below doesn't clear listeners on the
+    // element itself, so re-binding every draw would stack them), and
+    // preventDefault matters: without it the Electron shell zooms the whole UI.
+    if (!el.dataset.zoomWired) {
+      el.dataset.zoomWired = '1';
+      el.addEventListener('wheel', (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        setZoom(Z + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+      }, { passive: false });
+    }
     if (!nodes.length) { el.innerHTML = ''; el.style.height = '0px'; return; }
 
     const offY = Math.max(0, Math.min(...nodes.map(n => n.y)) - 30); // trim empty top band
@@ -162,11 +239,24 @@
     const S = Math.min(1.6, Math.max(1.05, targetW() / contentW));
     const SW = contentW * S;
     const SH = Math.max((tree.stage.h - offY) * S, (maxY - offY) * S + NODE_H + 14);
-    el.style.width = SW + 'px';
-    el.style.height = SH + 'px';
+    // Zoom is a CSS transform on the finished canvas, NOT another factor in S.
+    // S only scales x/width — node height and every font size are fixed px — so
+    // folding zoom into it would stretch the cards sideways instead of zooming.
+    // The spacer carries the scaled box so the scroller still sees the overflow
+    // (a transform doesn't affect layout size).
+    const ZW = SW * Z, ZH = SH * Z;
+    // Keep whatever the player was looking at centred across a zoom or a
+    // post-action redraw — innerHTML resets scroll, and a big tree that jumps
+    // back to the top-left after every click is the thing zoom is here to fix.
+    const cx = (el.scrollLeft + el.clientWidth / 2) * (ZW / (+el.dataset.canvasW || ZW)) - el.clientWidth / 2;
+    const cy = (el.scrollTop + el.clientHeight / 2) * (ZH / (+el.dataset.canvasH || ZH)) - el.clientHeight / 2;
+    el.dataset.canvasW = ZW; el.dataset.canvasH = ZH;
+    el.style.height = '';
     // Draw our own connectors from the real node positions — the site's SVG
     // stops short of the cards by non-constant offsets, so it can't be reused.
-    el.innerHTML = connectorsSVG(nodes, S, offY, SW, SH, tree.connectors) + nodes.map((n, i) => {
+    el.innerHTML = `<div class="pod-tree-zoom" style="width:${ZW}px;height:${ZH}px;">` +
+      `<div class="pod-tree${opts.onAllocate ? ' live' : ''}" style="width:${SW}px;height:${SH}px;transform:scale(${Z});">` +
+      connectorsSVG(nodes, S, offY, SW, SH, tree.connectors) + nodes.map((n, i) => {
       const specialized = n.cls.includes('specialized');                        // gold: took the 4th point
       const maxed = !specialized && n.cls.includes('maxed');                    // red: full ranks
       const locked = n.cls.includes('locked');
@@ -181,7 +271,8 @@
         ${kind ? `<div class="tr">${esc(kind)}</div>` : ''}
         <div class="acts">${root ? `<span class="tr">${esc(n.desc)}</span>` : pips(n, i)}</div>
       </div>`;
-    }).join('');
+    }).join('') + '</div></div>';
+    el.scrollLeft = Math.max(0, cx); el.scrollTop = Math.max(0, cy);
 
     if (!opts.onAllocate) return;
     // Click a pip to jump to that rank (clicking the current top pip steps down
@@ -209,5 +300,5 @@
     <span class="li">Dashed — not implemented yet (points still bank)</span>
   </div>`;
 
-  window.PodTree = { render, legend: LEGEND };
+  window.PodTree = { render, mountZoom, legend: LEGEND };
 })();
