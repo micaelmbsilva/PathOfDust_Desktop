@@ -582,12 +582,20 @@
   const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
   const slotFromLabel = (l) => ((l || '').match(/\(([^,)]+)/) || [])[1]?.trim().toLowerCase() || '';
   const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
-  const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'], ['plain', '◦', 'Plain (not sacred/perfect)']];
-  // sacred (from the resolved item) / perfect (item or craft-option meta) / plain
-  const rarityOf = (o, m) => { const it = itemForOption(o.value);
-    if (it && (it.sacred || it.quality === 'Sacred')) return 'sacred';
-    if ((it && (it.quality || '').includes('Perfect')) || m[o.value]?.perfect) return 'perfect';
-    return 'plain'; };
+  const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'],
+    ['krangled', '🔒', 'Krangled'], ['plain', '◦', 'Plain (not sacred/perfect/krangled)']];
+  // Rarity predicates from the resolved item (+ craft-option meta for perfect).
+  // These are independent — a Krangled item can also be Sacred — so quality pips
+  // OR together rather than bucketing each item into one class.
+  const isSacred = (it) => !!it && (it.sacred || it.quality === 'Sacred');
+  const isPerfect = (it, md) => (!!it && (it.quality || '').includes('Perfect')) || !!md?.perfect;
+  const isKrangled = (it) => !!it && it.krangled;
+  const QUAL_TEST = {
+    sacred: (it) => isSacred(it),
+    perfect: (it, md) => isPerfect(it, md),
+    krangled: (it) => isKrangled(it),
+    plain: (it, md) => !isSacred(it) && !isPerfect(it, md) && !isKrangled(it),
+  };
 
   // Shared sort/filter state driving BOTH item pickers, edited from the pip card
   // beside the craft form. Session-scoped (persists across reloads like the
@@ -603,15 +611,25 @@
     el.innerHTML =
       `<div class="pip-h"><span>Sort · Filter</span>${active ? '<button type="button" class="pip-clear" data-clear>Clear</button>' : ''}</div>` +
       sec('Sort', SORTS.map(([k, lbl]) =>
-        pip(pipState.sort === k, `data-sort="${k}"`, lbl + (pipState.sort === k ? (pipState.dir > 0 ? ' ▼' : ' ▲') : ''),
-          pipState.sort === k ? 'Click again to reverse' : `Sort by ${lbl}`)).join('')) +
+        pip(pipState.sort === k, `data-sort="${k}"`, lbl,
+          pipState.sort === k ? 'Click again to clear this sort' : `Sort by ${lbl}`)).join('')) +
+      // Direction is its own control rather than a hidden re-click, and says
+      // which way it means for the active sort (A–Z reads the opposite way).
+      // dir 1 puts the "top" value first: highest number, or A for names.
+      (pipState.sort ? sec('Order', [[1, pipState.sort === 'name' ? 'A → Z' : 'High → Low'],
+        [-1, pipState.sort === 'name' ? 'Z → A' : 'Low → High']]
+        .map(([d, lbl]) => pip(pipState.dir === d, `data-dir="${d}"`, lbl)).join('')) : '') +
       sec('Quality', QUALS.map(([k, em, t]) => pip(pipState.quals.has(k), `data-qual="${k}"`, em, t, true)).join('')) +
       sec('Slot', SLOTS.map(s => pip(pipState.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join(''));
     el.onclick = (e) => {
       if (e.target.closest('[data-clear]')) { pipState.sort = ''; pipState.dir = 1; pipState.slots.clear(); pipState.quals.clear(); }
       else {
-        const sb = e.target.closest('[data-sort]'), fb = e.target.closest('[data-slot]'), qb = e.target.closest('[data-qual]');
-        if (sb) { const k = sb.dataset.sort; if (pipState.sort === k) pipState.dir = -pipState.dir; else { pipState.sort = k; pipState.dir = 1; } }
+        const sb = e.target.closest('[data-sort]'), fb = e.target.closest('[data-slot]'),
+              qb = e.target.closest('[data-qual]'), db = e.target.closest('[data-dir]');
+        // Re-clicking the active sort clears it (back to the site's grouped
+        // order); direction is set explicitly by the Order pips.
+        if (sb) { const k = sb.dataset.sort; if (pipState.sort === k) pipState.sort = ''; else pipState.sort = k; }
+        else if (db) pipState.dir = +db.dataset.dir;
         else if (fb) { const s = fb.dataset.slot; pipState.slots.has(s) ? pipState.slots.delete(s) : pipState.slots.add(s); }
         else if (qb) { const q = qb.dataset.qual; pipState.quals.has(q) ? pipState.quals.delete(q) : pipState.quals.add(q); }
         else return;
@@ -639,13 +657,23 @@
           const sl = slotFromLabel((m[o.value] || {}).label || o.textContent);
           if (!pipState.slots.has(sl)) return false;
         }
-        if (pipState.quals.size && !pipState.quals.has(rarityOf(o, m))) return false;
+        // Quality pips OR together — picking Sacred + Krangled shows either.
+        if (pipState.quals.size) {
+          const it = itemForOption(o.value), md = m[o.value];
+          if (![...pipState.quals].some(q => QUAL_TEST[q]?.(it, md))) return false;
+        }
         return true;
       });
       if (pipState.sort) {
-        const val = (o) => { const md = m[o.value] || {};
-          return pipState.sort === 'tier' ? (md.tier || 0) : pipState.sort === 'quality' ? (md.quality || 0)
-            : pipState.sort === 'mods' ? (md.affixes || 0) : 0; };
+        // Quality sorts above the 0-100 scale for Perfect/Sacred, matching the
+        // bag's own numQual — otherwise a Sacred item ranks by a raw int that
+        // doesn't represent it.
+        const val = (o) => { const md = m[o.value] || {}, it = itemForOption(o.value);
+          if (pipState.sort === 'tier') return md.tier || 0;
+          if (pipState.sort === 'mods') return md.affixes || 0;
+          if (pipState.sort === 'quality')
+            return isSacred(it) ? 102 : isPerfect(it, md) ? 101 : (md.quality || 0);
+          return 0; };
         rows.sort((a, b) => {
           if (!a.value) return -1; if (!b.value) return 1;      // "None" stays first
           return pipState.dir * (pipState.sort === 'name' ? a.textContent.localeCompare(b.textContent) : val(b) - val(a));
