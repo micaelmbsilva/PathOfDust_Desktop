@@ -1054,7 +1054,7 @@
     settings: { label: '⚙️ Settings', title: 'App options — notifications, display, performance, history retention', act: () => toggleModal('settings'), isActive: panelOpen('settings') },
     wiki: { label: '📖 Wiki', title: 'Open the game wiki in your browser', act: () => openPage('wiki') },
     'patch-notes': { label: '📜 Patch Notes', title: "Open the game's patch notes in your browser", act: () => openPage('patch-notes') },
-    refresh: { label: '🔄 Refresh', title: 'Refresh now', act: () => { loadStats(); pollBag(); pullInterface(false); } },
+    refresh: { label: '🔄 Reload App', title: 'Fully reload the app', act: () => location.reload() },
     update: { label: '⬆️ Check for Updates', title: 'Check for updates', act: () => updateAction() },
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
