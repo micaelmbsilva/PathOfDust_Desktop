@@ -24,7 +24,11 @@
   .chip.repair.on { border-color: #4a8a5a; background: rgba(120,255,160,0.12); }
   .chip.repair.off { border-color: #a04a4a; background: rgba(200,70,70,0.12); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
-  .item { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 10px; }
+  .item { background: rgba(24,20,40,0.9); border: 1px solid rgba(160,140,255,0.25); border-radius: 10px; padding: 10px;
+    display: flex; flex-direction: column; }
+  /* Cards in a grid row stretch to the tallest; push the buttons to the card
+     floor so they line up across a row regardless of mod-count. */
+  .item .acts { margin-top: auto; }
   .item .n { font-weight: 700; }
   .item .s { font-size: 0.72rem; color: #b0a2d9; }
   .perfect { color: #ffd76b; font-weight: 700; } /* Perfect Quality gold — site's .gear-quality--perfect */
@@ -140,12 +144,17 @@
       <option value="tier">Tier</option>
       <option value="quality">Quality</option>
       <option value="roll">Best Roll</option>
+      <option value="mods">Mod Count</option>
+      <option value="durability">Durability (worn first)</option>
       <option value="name">Name</option>
       <option value="slot">Slot</option>
     </select></label>
     <label>Group <select id="groupBy">
       <option value="">None</option>
       <option value="slot">Slot</option>
+      <option value="tier">Tier</option>
+      <option value="quality">Quality</option>
+      <option value="rarity">Rarity</option>
     </select></label>
     <button id="disAll" class="danger" title="Disenchant every bag item. 🔒 Keep-marked items are skipped. Can't be undone.">Disenchant All</button>
   </div>
@@ -696,6 +705,17 @@
   const numTier = (i) => +(i.tier?.match(/\d+/) || [0])[0];
   const numQual = (i) => i.sacred || i.quality === 'Sacred' ? 102 : i.quality?.includes('Perfect') ? 101 : +(i.quality?.match(/\d+/) || [0])[0];
   const bestRoll = (i) => Math.max(0, ...(i.mods || []).map(m => rollOf(m.tip) || 0));
+  const modCount = (i) => (i.mods || []).length;
+  const durPct = (i) => i.durability?.indestructible ? 100 : (i.durability?.pct ?? 100);
+  // Group definitions: key(it) buckets an item, label(key) is the header text,
+  // order sorts the buckets. Grouping keeps the active sort's order within each.
+  const GROUPERS = {
+    slot: { key: (i) => i.slot, label: slotOf, order: (a, b) => String(a).localeCompare(String(b)) },
+    tier: { key: numTier, label: (t) => `Tier ${t}`, order: (a, b) => b - a },
+    quality: { key: numQual, label: (q) => q >= 102 ? 'Sacred' : q >= 101 ? 'Perfect' : `Quality ${q}`, order: (a, b) => b - a },
+    rarity: { key: (i) => i.krangled ? 'Krangled' : i.sacred ? 'Sacred' : i.unique ? 'Unique' : 'Normal',
+      label: (s) => s, order: (a, b) => String(a).localeCompare(String(b)) },
+  };
   // chat-ready one-liner, e.g.
   // "✨ Ascended Hood 【Helm · T17 · ⭐92%】 +80 dps ➤ +50% dmg dealt (T5·45%)"
   // The two separators are also how the share handler splits the line back into
@@ -758,16 +778,18 @@
   function renderBag() {
     const items = [...lastBag];
     const cmp = { tier: (a, b) => numTier(b) - numTier(a), quality: (a, b) => numQual(b) - numQual(a),
-      roll: (a, b) => bestRoll(b) - bestRoll(a), name: (a, b) => a.name.localeCompare(b.name),
+      roll: (a, b) => bestRoll(b) - bestRoll(a), mods: (a, b) => modCount(b) - modCount(a),
+      durability: (a, b) => durPct(a) - durPct(b), name: (a, b) => a.name.localeCompare(b.name),
       slot: (a, b) => a.slot.localeCompare(b.slot) }[$('sortBy').value] || (() => 0);
     items.sort(cmp);
     $('bagh').textContent = `Bag (${items.length}${lastCap ? '/' + lastCap : ''})`;
     if (!items.length) { $('bag').innerHTML = '<p class="muted">Empty.</p>'; return; }
-    if ($('groupBy').value === 'slot') {
-      const g = {};
-      for (const it of items) (g[it.slot] ||= []).push(it);
-      $('bag').innerHTML = Object.keys(g).sort().map(s =>
-        `<h3 class="grouphdr">${slotOf(s)} (${g[s].length})</h3><div class="grid">${g[s].map(bagCard).join('')}</div>`).join('');
+    const gr = GROUPERS[$('groupBy').value];
+    if (gr) {
+      const g = new Map();
+      for (const it of items) { const k = gr.key(it); (g.get(k) || g.set(k, []).get(k)).push(it); }
+      $('bag').innerHTML = [...g.keys()].sort(gr.order).map(k =>
+        `<h3 class="grouphdr">${gr.label(k)} (${g.get(k).length})</h3><div class="grid">${g.get(k).map(bagCard).join('')}</div>`).join('');
     } else {
       $('bag').innerHTML = `<div class="grid">${items.map(bagCard).join('')}</div>`;
     }
