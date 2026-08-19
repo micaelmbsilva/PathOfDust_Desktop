@@ -1018,7 +1018,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
     lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true, passiveRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
-    logToDisk: true, feedCat: 'all', notifyVol: 33 };
+    logToDisk: true, feedCat: 'all', notifyVol: 33, notifySnd: 'ding' };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
   const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
   (function migrateSettings() { // one-time: rev-78 preset selects -> per-kind checkboxes
@@ -1876,7 +1876,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       row('Battle Results', chks([['battleWins', 'Wins'], ['battleLosses', 'Losses']]), 'The battle-end toast with the dust/sand readout.') +
       row('Reforge Reminder', chk('reforgeRemind'), 'The hourly ⚒️ Reforge Gear Ready toast.') +
       row('Passive Points Reminder', chk('passiveRemind'), 'The 🌳 toast when you have unspent passive tree points. Snoozable.') +
-      row('Notification Sound', sel('notifyVol', [[0, 'Off'], [10, '10%'], [33, '33%'], [66, '66%'], [100, '100%']]), 'Plays on loot drops, battle results and operator broadcasts. Repeats within a second are collapsed into one.') +
+      row('Notification Sound', sel('notifySnd', [['ding', 'Ding'], ['chime', 'Chime'], ['blip', 'Blip'], ['knock', 'Knock']]) + ' ' +
+        sel('notifyVol', [[0, 'Off'], [10, '10%'], [33, '33%'], [66, '66%'], [100, '100%']]), 'Plays on loot drops, battle results and operator broadcasts. Repeats within a second are collapsed into one. Changing either plays a preview.') +
       `<div class="fhead" style="margin-top:10px">🖥️ Display</div>` +
       row('Show Next-Battle ETA', chk('showEta'), 'Countdown estimated from recent battle cadence.') +
       row('Operator Broadcasts', chk('showBroadcasts'), 'Announcements from the app operator. Restart and update warnings always show.') +
@@ -1920,6 +1921,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       setS(el.dataset.set, el.type === 'checkbox' ? el.checked : (/^\d+$/.test(el.value) ? +el.value : el.value));
       rerenderIfOpen('party', renderParty); // role classification reads the latest report
       if (el.dataset.set === 'passiveRemind') reconcilePassives(); // apply now, not on next poll
+      if (el.dataset.set === 'notifySnd' || el.dataset.set === 'notifyVol')
+        playSound(S().notifySnd, +S().notifyVol / 100); // preview, bypassing ding's throttle
       renderSettings(); // refresh counts (keeps focus loss acceptable — selects just changed)
     });
     // two-click confirm, same pattern as the loot toast's Disenchant
@@ -2829,6 +2832,38 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // The mp3 is bundled, never hot-pulled (the interface updater fetches files
   // as text), so on a client still on an older shell the fetch 404s and play()
   // just rejects.
+  // 'ding' is the bundled mp3; the rest are WebAudio-synthesized so they arrive
+  // as text via hot-pull and work even on old shells where the mp3 404s.
+  const SOUNDS = { // name -> [freq Hz, start s, dur s] per note
+    chime: [[880, 0, 0.5], [1318.5, 0.12, 0.6]],
+    blip: [[1200, 0, 0.09]],
+    knock: [[180, 0, 0.1], [140, 0.13, 0.12]],
+  };
+  let AC; // one shared AudioContext, created on first synth play
+  function playSound(name, vol) {
+    vol = Math.min(1, vol);
+    if (!(vol > 0)) return; // 0/NaN — also keeps the synth's exponential ramp off a zero start
+    if (!SOUNDS[name]) {
+      const a = new Audio('/assets/notification.mp3');
+      a.volume = vol;
+      a.play().catch(() => {}); // autoplay blocked, or asset missing on an old install
+      return;
+    }
+    try {
+      AC = AC || new AudioContext();
+      for (const [f, t0, d] of SOUNDS[name]) {
+        const o = AC.createOscillator(), g = AC.createGain();
+        o.type = name === 'knock' ? 'triangle' : 'sine';
+        o.frequency.value = f;
+        const t = AC.currentTime + t0;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(vol * 0.6, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, t + d);
+        o.connect(g).connect(AC.destination);
+        o.start(t); o.stop(t + d);
+      }
+    } catch {} // no AudioContext before first user gesture — same failure mode as Audio.play
+  }
   const ding = (() => {
     let last = 0;
     return () => {
@@ -2836,9 +2871,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       const vol = +S().notifyVol; // 0 = off
       if (!vol || Date.now() - last < 800) return; // one bag poll can pop several toasts at once
       last = Date.now();
-      const a = new Audio('/assets/notification.mp3');
-      a.volume = Math.min(1, vol / 100);
-      a.play().catch(() => {}); // autoplay blocked, or asset missing on an old install
+      playSound(S().notifySnd, vol / 100);
     };
   })();
   // Pull newer interface files through the bridge and reload to show them —
