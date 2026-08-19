@@ -985,7 +985,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       const money = f && f.parts.length
         ? ` — 💰 net ${f.dirty ? '~' : ''}${f.parts.join(' · ')}${f.dirty ? ' (mixed with crafting)' : ''}` : '';
       infoToast(`${battle.won ? '🏆 Battle Won' : '💀 Battle Lost'}${money}`); ding();
-    }, Math.min(fightTotalMs(d.displayDurationMs), 120000)); // charge + replay + resolve
+    }, Math.min(fightTotalMs(d.displayDurationMs), 180000)); // charge + replay + resolve
   }
 
   // Next-battle countdown: the game exposes no schedule, but fights land on a
@@ -1018,7 +1018,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
     lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true, passiveRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
-    logToDisk: true, feedCat: 'all', notifyVol: 33, notifySnd: 'ding' };
+    logToDisk: true, feedCat: 'all', notifyVol: 33, notifySnd: 'ding', replaySpeed: 100 };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
   const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
   (function migrateSettings() { // one-time: rev-78 preset selects -> per-kind checkboxes
@@ -1882,6 +1882,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       row('Show Next-Battle ETA', chk('showEta'), 'Countdown estimated from recent battle cadence.') +
       row('Operator Broadcasts', chk('showBroadcasts'), 'Announcements from the app operator. Restart and update warnings always show.') +
       row('Stream Starts Muted', chk('streamMuted'), 'Unmuted autoplay may still be blocked by the player.') +
+      row('Replay Speed', sel('replaySpeed', [[100, '1× (in sync)'], [50, '0.5×'], [33, '0.33×'], [25, '0.25×']]),
+        'Slows this app\'s replay of a fight — the Live Fight feed, Party HP bars and Buffs pane. The game\'s own overlay keeps the server\'s pace, so the two drift apart. Applies to the next fight; the battle-result toast waits for the slower replay to finish.') +
       row('Overlay Background', `<input type="range" id="bgOp" min="0" max="100" step="5" value="${Math.round(bgOpacity() * 100)}" style="vertical-align:middle;width:110px">
         <span id="bgOpVal" style="display:inline-block;min-width:34px;text-align:right">${Math.round(bgOpacity() * 100)}%</span>`,
         'Fades the game overlay\'s own backdrop so more of the app shows through. The overlay reloads when you let go of the slider.') +
@@ -2042,7 +2044,11 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // ceiling at 20 lines/second, just above what a saturated fight produces, so
   // the log keeps up while lines still land one at a time.
   const FEED_TICK_MS = 100;
-  const fightTotalMs = (durMs) => CHARGE_MS + (durMs || 0) + RESOLVE_MS;
+  // App-side replay speed (settings, percent). 1 = the server's own pace, which
+  // is what the game overlay always plays at; below 1 the app's panels lag it on
+  // purpose so a saturated fight can be read.
+  const replaySpeed = () => (+S().replaySpeed || 100) / 100;
+  const fightTotalMs = (durMs) => CHARGE_MS + (durMs || 0) / replaySpeed() + RESOLVE_MS;
   let fight = null, fightTimer = null;
   const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   function startFight(d) {
@@ -2162,7 +2168,11 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       for (const g of feed) { const s = Math.floor(g.at / 1000); if (!bySec.has(s)) bySec.set(s, []); bySec.get(s).push(g); }
       for (const [s, gs] of bySec) gs.forEach((g, i) => { g.at = s * 1000 + Math.round((i + 0.5) * 1000 / gs.length); });
     }
-    fight = { t0: Date.now(), dur, maxAt, evs, idx: 0, mySnaps,
+    // Speed is captured per fight, not read per frame: changing the setting
+    // mid-replay would otherwise jump the cursor.
+    // ponytail: a new fight replaces this one, so a heavily slowed replay can be
+    // cut off by the next encounter arriving. Queue fights only if that bites.
+    fight = { t0: Date.now(), sp: replaySpeed(), dur, maxAt, evs, idx: 0, mySnaps,
       players, feed, won: !!d.won, stage: d.stage, kind: d.kind,
       thinned: thinningOf(d), unitHp, nameToId, hpIdx: 0, vitals, downed: [...downed], enemySnaps, myShieldsOut, myId, names };
     // A fresh fight replays from full HP for the party bars too. The timer runs
@@ -2209,8 +2219,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // them can drift from what the stream overlay is showing.
   // Negative during the charge phase — every consumer tests `at <= cursor`, so
   // nothing plays until the overlay's battle phase actually starts.
-  const fightCursor = () => fight ? Math.min(fight.maxAt, Date.now() - fight.t0 - CHARGE_MS) : 0;
-  const fightLive = () => !!fight && Date.now() - fight.t0 < CHARGE_MS + fight.dur;
+  const fightCursor = () => fight ? Math.min(fight.maxAt, (Date.now() - fight.t0 - CHARGE_MS) * fight.sp) : 0;
+  const fightLive = () => !!fight && Date.now() - fight.t0 < CHARGE_MS + fight.dur / fight.sp;
   const fightPanelOpen = () => document.getElementById('fightpanel')?.classList.contains('open');
   const partyPanelOpen = () => document.getElementById('partypanel')?.classList.contains('open');
   // One replay timer feeds both the Live Fight feed and the Party HP bars; each
@@ -2457,7 +2467,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
           clearTimeout(encDoneT); // back-to-back fights: newest wins
           encDoneT = setTimeout(() => {
             try { podChannel?.postMessage({ type: 'encounter', at: Date.now(), ...done }); } catch {}
-          }, Math.min(fightTotalMs(d.displayDurationMs), 120000));
+          }, Math.min(fightTotalMs(d.displayDurationMs), 180000));
           if (myName && (d.participants || []).some(p => p.toLowerCase() === myName.toLowerCase())) {
             armBattleToast(d);
             // fightRecord reads startFight's feed, so it has to run after it.
