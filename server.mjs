@@ -57,7 +57,14 @@ const PORT = 8787;
 const SITE = 'https://adventure.lokati.net'; // for absolute asset URLs (sprites)
 // Rev of the RUNNING bridge code (vs version.json, which is the pulled files' rev).
 // The UI compares them: hot-pulled pages on an old bridge -> "restart your client".
-const BRIDGE_REV = 94; // 94: staged rev in /api/version; 93: hot-updates write to userData/app, never the read-only install dir
+const BRIDGE_REV = 95; // 95: legacy-shell API cutoff; 94: staged rev in /api/version; 93: hot-updates write to userData/app, never the read-only install dir
+// Pre-4.0.0 shells are discontinued: the 4.0.0 renumber left them unable to
+// shell-update (electron-updater refuses downgrades), so game features are cut
+// off and only the update flow + Twitch chat (external iframe) remain. Legacy =
+// folded-scheme shell semver (major >= 10) or no shell semver at all.
+// ponytail: breaks when the app reaches major 10 — raise the bound then.
+const legacyShell = () => { const m = parseInt(globalThis.__version || '', 10); return !(m >= 1 && m < 10); };
+const LEGACY_API_OK = new Set(['/api/version', '/api/update-status', '/api/apply-update', '/api/check-update', '/api/pull-interface']);
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
@@ -854,6 +861,11 @@ const srv = createServer(async (req, res) => {
       res.writeHead(403); return res.end('forbidden');
     }
     res.setHeader('Cache-Control', 'no-store'); // never cache app files — always serve the current (updated) version
+    // Legacy shells: every game API answers 410 — the hot-pulled UI sees the
+    // `legacy` flag on /api/version and locks itself down to chat + update.
+    if (legacyShell() && url.pathname.startsWith('/api/') && !LEGACY_API_OK.has(url.pathname)) {
+      res.writeHead(410, { 'Content-Type': 'application/json' }); return res.end('{"error":"discontinued"}');
+    }
     if (url.pathname === '/config.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
       // POD_OPERATOR: this install holds the operator key (main.cjs), so the UI
@@ -892,6 +904,7 @@ const srv = createServer(async (req, res) => {
       // response alone carried it exactly once and the auto pulls discard it.
       const staged = globalThis.__appDir && !servingFrom(globalThis.__appDir) ? await revOf(globalThis.__appDir) : 0;
       return json(res, { version, ui: webRev, ...(man.display ? { display: man.display } : {}),
+        ...(legacyShell() ? { legacy: true } : {}),
         autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV,
         fightLogs: !!globalThis.__fightLogsDir, // shell capability — old main.cjs never sets the dir
         ...(staged > webRev ? { staged } : {}) });
