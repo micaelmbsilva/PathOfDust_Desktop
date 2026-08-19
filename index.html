@@ -507,10 +507,11 @@
 
 <script src="/feed.js"></script>
 <script>
-  document.getElementById('appTitle').textContent = GAME_NAME;
+  const TITLE = GAME_NAME + ' — ALPHA'; // ALPHA is a display-only label, never in the semver
+  document.getElementById('appTitle').textContent = TITLE;
   let appVersion = '';
   const setTitle = (name) => {
-    document.title = GAME_NAME + (appVersion ? ` v${appVersion}` : '') + (name ? ` — ${name}` : '');
+    document.title = TITLE + (appVersion ? ` v${appVersion}` : '') + (name ? ` — ${name}` : '');
   };
   setTitle();
 
@@ -945,7 +946,7 @@
       const f = battle.frozen; // no qualified poll landed -> plain result, no stale recompute
       const money = f && f.parts.length
         ? ` — 💰 net ${f.dirty ? '~' : ''}${f.parts.join(' · ')}${f.dirty ? ' (mixed with crafting)' : ''}` : '';
-      infoToast(`${battle.won ? '🏆 Battle Won' : '💀 Battle Lost'}${money}`);
+      infoToast(`${battle.won ? '🏆 Battle Won' : '💀 Battle Lost'}${money}`); ding();
     }, Math.min(fightTotalMs(d.displayDurationMs), 120000)); // charge + replay + resolve
   }
 
@@ -979,7 +980,7 @@
   const SET_DEFAULTS = { lootNormal: true, lootPerfect: true, lootSacred: true, lootUnique: true,
     lootTtl: 0, battleWins: true, battleLosses: true, reforgeRemind: true, passiveRemind: true,
     showEta: true, showBroadcasts: true, streamMuted: true, refresh: 'resp', chatUnload: false,
-    logToDisk: true, feedCat: 'all' };
+    logToDisk: true, feedCat: 'all', notifyVol: 33 };
   const S = () => ({ ...SET_DEFAULTS, ...LS.get('settings', {}) });
   const setS = (k, v) => LS.set('settings', { ...LS.get('settings', {}), [k]: v });
   (function migrateSettings() { // one-time: rev-78 preset selects -> per-kind checkboxes
@@ -1823,6 +1824,7 @@
       row('Battle Results', chks([['battleWins', 'Wins'], ['battleLosses', 'Losses']]), 'The battle-end toast with the dust/sand readout.') +
       row('Reforge Reminder', chk('reforgeRemind'), 'The hourly ⚒️ Reforge Gear Ready toast.') +
       row('Passive Points Reminder', chk('passiveRemind'), 'The 🌳 toast when you have unspent passive tree points. Snoozable.') +
+      row('Notification Sound', sel('notifyVol', [[0, 'Off'], [10, '10%'], [33, '33%'], [66, '66%'], [100, '100%']]), 'Plays on loot drops, battle results and operator broadcasts. Repeats within a second are collapsed into one.') +
       `<div class="fhead" style="margin-top:10px">🖥️ Display</div>` +
       row('Show Next-Battle ETA', chk('showEta'), 'Countdown estimated from recent battle cadence.') +
       row('Operator Broadcasts', chk('showBroadcasts'), 'Announcements from the app operator. Restart and update warnings always show.') +
@@ -2468,6 +2470,7 @@
     const dismissAll = document.getElementById('dismissAll');
     dismissAll.after(el); // newest just below the dismiss-all bar
     updateDismissAll();
+    ding();
     const ttl = +S().lootTtl; // 0 = keep until dismissed
     if (ttl) setTimeout(close, ttl * 1000);
   }
@@ -2603,10 +2606,11 @@
   fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
     // App version and interface revision are separate numbers — the second only
     // moves on a hot-pull, so it's the one that tells you a same-shell update landed.
-    appVersion = v.version + (v.ui ? ` · ui${v.ui}` : '');
+    appVersion = fmtV(v.version);
     const ver = document.getElementById('ver');
-    ver.textContent = 'v' + appVersion;
-    ver.title = `App ${v.version}${v.ui ? ` · interface revision ${v.ui}` : ''}`;
+    // Old bridge in-process after a hot-pull has no `display` — fall back to the bare revision.
+    ver.textContent = 'v' + appVersion + (v.display ? ` · UI ${fmtV(v.display)}` : v.ui ? ` · ui${v.ui}` : '');
+    ver.title = `App ${v.version} ALPHA${v.display ? ` · UI ${v.display}` : ''}${v.ui ? ` · interface revision ${v.ui}` : ''}`;
     const n = document.getElementById('hname').textContent;
     setTitle(n && n !== 'Character' ? n : '');
     if (v.autoUpdate !== true) showLegacyBanner(); // old portable shell — no auto-updates
@@ -2691,6 +2695,7 @@
     el.querySelector('[data-sb="x"]').onclick = () => { el.remove(); if (onDismiss) onDismiss(); };
     if (action) el.querySelector('[data-sb="act"]').onclick = action.onClick;
     document.body.appendChild(el);
+    return el; // falsy when the id was already up — the broadcast caller chimes only on a new one
   }
   const showRestartBanner = () => sysBanner('restartBanner', '#c0392b', '#fff',
     '⚠️ RESTART YOUR CLIENT — this update needs a full restart to finish. Close the app and reopen it.');
@@ -2715,9 +2720,11 @@
         // Broadcasts announce new versions, so carry the update action itself
         // rather than making people find it in the toolbar. Same call as the
         // ⬆️ Check for Updates item: interface pull first, then the shell.
-        sysBanner('bc-' + b.id, '#7c5cff', '#fff', '📢 ' + esc(b.message),
+        // Chimes once: the poll re-runs every minute while the banner sits
+        // undismissed, and sysBanner returns nothing when the id is already up.
+        if (sysBanner('bc-' + b.id, '#7c5cff', '#fff', '📢 ' + esc(b.message),
           () => localStorage.setItem('bcSeen', b.id),
-          { label: '⬆️ Update Now', onClick: () => updateAction() });
+          { label: '⬆️ Update Now', onClick: () => updateAction() })) ding();
     } catch {} // backend down / offline — try next tick
   }
   setTimeout(checkBroadcast, 5000);
@@ -2739,6 +2746,24 @@
     if (opts.timeout) setTimeout(close, opts.timeout);
   }
   const infoToast = (msg) => mkToast(msg, '', [], { dismissLabel: 'OK', timeout: 8000 });
+
+  // Notification sound — only the three that are worth looking up for: a loot
+  // drop, a battle result, an operator broadcast. Deliberately not wired into
+  // mkToast/sysBanner themselves, or every "Checking for Updates…" would chime.
+  // The mp3 is bundled, never hot-pulled (the interface updater fetches files
+  // as text), so on a client still on an older shell the fetch 404s and play()
+  // just rejects.
+  const ding = (() => {
+    let last = 0;
+    return () => {
+      const vol = +S().notifyVol; // 0 = off
+      if (!vol || Date.now() - last < 800) return; // one bag poll can pop several toasts at once
+      last = Date.now();
+      const a = new Audio('/assets/notification.mp3');
+      a.volume = Math.min(1, vol / 100);
+      a.play().catch(() => {}); // autoplay blocked, or asset missing on an old install
+    };
+  })();
   // Pull newer interface files through the bridge and reload to show them —
   // no app restart needed (bridge-code changes still arrive via restart).
   async function pullInterface(manual) {
@@ -2768,8 +2793,8 @@
   // ---- shell (installer) update via electron-updater: toast when downloading /
   // ready, and let the user restart to apply.
   let _shellSeen = '';
-  // Raw updater semver -> displayed style: major 29 reads as "2.9", 30 as "3.0".
-  const fmtV = (v) => { const m = +String(v).split('.')[0]; return m ? `${Math.floor(m / 10)}.${m % 10}` : v; };
+  // Displayed style: trailing zero components hidden ("4.0.0" -> "4", "4.1.0" -> "4.1").
+  const fmtV = (v) => String(v).replace(/(\.0)+$/, '');
   const showShellUpdateToast = (v) => mkToast(`⬆️ Update v${fmtV(v)} Ready`,
     'Restart to install — your login and layout are kept.',
     // Mac bridges answer { manual, url } instead of installing (unsigned app,

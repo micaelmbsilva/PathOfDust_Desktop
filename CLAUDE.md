@@ -11,6 +11,28 @@ tidy.
 | interface revision | `version.json` `version` (integer) | whether running clients re-fetch the web UI | `.githooks/pre-commit` |
 | app version | `package.json` `version` (semver) | what electron-builder names the GitHub release | CI `verify` job |
 | release tag | `git tag vX.Y.Z` | what triggers the release workflow | CI `verify` job |
+| UI display version | `version.json` `display` (semver string) | the "UI x.y.z" the user sees | nothing — bump by hand |
+
+### Versioning is plain SemVer (repo-wide rule, as of 4.0.0)
+
+App version, tag and `display` are plain SemVer, shown to the user as-is except
+that **trailing zero components are hidden**: `4.0.0` reads "v4", `4.1.0` reads
+"v4.1", `4.1.2` reads "v4.1.2" (client-side `fmtV` in `index.html` is the only
+formatter — never add a second). The old digit-folding (`32.4.0` shown as
+"3.2.4") is gone; do not reintroduce derived display math. "ALPHA" is a
+display-only label in `index.html` — it never goes into the semver, the tag, or
+`package.json` (a prerelease suffix would move electron-updater onto a
+different channel and fail the CI tag regex).
+
+`display` is bumped **by hand, only when the UI meaningfully changes** — it is
+independent of the interface revision, which keeps auto-bumping on every
+shipped change. Be mindful when bumping: all the numbers in this table must
+agree with each other per their own rules before tagging.
+
+**History note:** 4.0.0 was a deliberate renumber *down* from 32.4.0.
+electron-updater refuses downgrades, so shells installed at 32.x never see
+shell updates again (UI hot-pull still works there); never renumber downward
+again.
 
 **The tag does not name the release — `package.json` does.** electron-builder
 uploads to a release named after `package.json`, so a tag that disagrees silently

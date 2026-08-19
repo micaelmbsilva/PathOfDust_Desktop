@@ -1,7 +1,7 @@
 {
   "name": "lokati_overlay",
   "productName": "Path of Dust",
-  "version": "32.4.0",
+  "version": "4.0.0",
   "description": "Custom overlay + dashboard app for adventure.lokati.net",
   "main": "main.cjs",
   "author": "Kibukah",

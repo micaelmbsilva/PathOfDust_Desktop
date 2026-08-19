@@ -61,7 +61,8 @@ const BRIDGE_REV = 94; // 94: staged rev in /api/version; 93: hot-updates write 
 const ROOT = new URL('./', import.meta.url);
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
-  '.gif': 'image/gif', '.webm': 'video/webm', '.mp4': 'video/mp4', '.ico': 'image/x-icon' };
+  '.gif': 'image/gif', '.webm': 'video/webm', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg',
+  '.ico': 'image/x-icon' };
 
 // The build dossier is an owner tool, not another public static page. Both the
 // friendly endpoint and the template's filename pass through this server-side
@@ -879,25 +880,19 @@ const srv = createServer(async (req, res) => {
       return res.end(page);
     }
     if (url.pathname === '/api/version') {
-      let webRev = 0;
-      try { webRev = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')).version; } catch {}
-      // Displayed version is derived, not the raw semver: the shell major splits
-      // into major.minor (29 -> "2.9", 30 -> "3.0") and the rest of the semver
-      // follows, so 30.0.0 reads "3.0.0". The real semver keeps rising so
-      // electron-updater ordering and release tags are untouched; this is purely
-      // the user-facing number. The interface revision is reported SEPARATELY as
-      // `ui` rather than occupying the patch slot — parking it there meant a
-      // fresh 30.0.0 shell announced itself as "3.0.99", which reads like a
-      // 99th patch of a release that just came out.
+      let man = {};
+      try { man = JSON.parse(await readFile(new URL('./version.json', import.meta.url), 'utf8')); } catch {}
+      const webRev = man.version || 0;
+      // Raw semver — formatting (hide trailing zeros) is the client's job.
       // Old shells without global.__version fall back to the bare revision.
-      const [maj, min, patch] = (globalThis.__version || '').split('.').map(Number);
-      const version = maj ? `${Math.floor(maj / 10)}.${maj % 10}.${min || 0}${patch ? '.' + patch : ''}` : String(webRev);
+      const version = globalThis.__version || String(webRev);
       // `staged`: a newer interface already downloaded to userData/app but not
       // being served (bridge running from the bundled install dir). Reported on
       // every poll so the UI's restart banner survives reloads — the pull
       // response alone carried it exactly once and the auto pulls discard it.
       const staged = globalThis.__appDir && !servingFrom(globalThis.__appDir) ? await revOf(globalThis.__appDir) : 0;
-      return json(res, { version, ui: webRev, autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV,
+      return json(res, { version, ui: webRev, ...(man.display ? { display: man.display } : {}),
+        autoUpdate: !!globalThis.__autoUpdate, bridgeRev: BRIDGE_REV,
         fightLogs: !!globalThis.__fightLogsDir, // shell capability — old main.cjs never sets the dir
         ...(staged > webRev ? { staged } : {}) });
     }
