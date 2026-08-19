@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf } from './server.mjs';
 import { netKey, firstBody, redirectNote } from './actions.mjs';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // Owner dossier: exact normalized login only. UI hiding is convenience; this
 // pure predicate backs the bridge route and guards the template filename too.
@@ -95,7 +95,9 @@ assert.deepEqual(f.fights[0].buffs, [['a', 'Rage', '5', '2.00', '3.00']]);
 
 // --- Roster (render_character_list). The login lives ONLY in the href — the
 // card prints the display name, which is a different string.
-const rosterPage = `<div class="roster-grid">
+// The leading top-nav is what the real page carries and what firstBody's own
+// test below cuts on — one per body copy.
+const rosterPage = `<div class="top-nav"></div><div class="roster-grid">
   <a class="roster-card" href="/characters/lokati_gaming">
     <img class="roster-sprite" src="/sprites/knight.png" alt="">
     <div class="roster-name">Lokati</div>
@@ -228,23 +230,30 @@ const twice = (html) => {
   assert.ok(i > 0, 'fixture must carry exactly one top nav to be doubled');
   return html.slice(0, i) + html.slice(i) + html.slice(i);
 };
+for (const [label, page, parse] of [
+  ['roster', rosterPage, (h) => rosterOf(h)],
+  ['sheet', charPage, (h) => characterOf(h, 'lokati_gaming')],
+]) {
+  assert.equal(firstBody(page), page, `${label}: a single-copy page is returned unchanged`);
+  assert.equal(firstBody(twice(page)), page, `${label}: the second copy is cut off`);
+  assert.deepEqual(parse(firstBody(twice(page))), parse(page), `${label}: guarded, it parses once`);
+}
+// ...and would have doubled without the guard, which is the whole point.
+assert.equal(rosterOf(twice(rosterPage)).length, rosterOf(rosterPage).length * 2, 'unguarded, the roster doubles');
+assert.ok(characterOf(twice(charPage), 'lokati_gaming').stats.length > characterOf(charPage, 'lokati_gaming').stats.length,
+  'unguarded, the stat sweep doubles');
+
+// The captured pages under authed/ are real scrapes of live players, so they're
+// gitignored and exist only on a machine that has actually pulled them. Run the
+// same two assertions against that real markup when they're there — reading
+// them unconditionally is what failed the v32.4.0 release build on a checkout
+// that never had them. CI's coverage is the inline pair above.
 for (const f of ['authed/characters.html', 'authed/characters_afrosenbo.html']) {
+  if (!existsSync(f)) continue;
   const single = readFileSync(f, 'utf8');
   assert.equal(firstBody(single), single, `${f}: a single-copy page is returned unchanged`);
   assert.equal(firstBody(twice(single)), single, `${f}: the second copy is cut off`);
 }
-const roster = readFileSync('authed/characters.html', 'utf8');
-assert.ok(rosterOf(roster).length > 1, 'roster fixture has cards to duplicate');
-assert.equal(rosterOf(twice(roster)).length, rosterOf(roster).length * 2, 'unguarded, the sweep doubles');
-assert.deepEqual(rosterOf(firstBody(twice(roster))), rosterOf(roster), 'guarded, the roster parses once');
-
-const sheet = readFileSync('authed/characters_afrosenbo.html', 'utf8');
-const one = characterOf(sheet, 'afrosenbo');
-assert.ok(one.stats.length > 1 && one.bag.length > 0, 'sheet fixture has stats and a bag');
-assert.deepEqual(characterOf(firstBody(twice(sheet)), 'afrosenbo'), one,
-  'stats, gear and bag all parse once from a doubled page');
-assert.ok(characterOf(twice(sheet), 'afrosenbo').stats.length > one.stats.length,
-  'and would have doubled without the guard');
 
 console.log('ok');
 process.exit(0); // importing server.mjs opens the bridge listener
