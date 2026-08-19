@@ -163,7 +163,7 @@
   #chatpanel { top: 60px; right: 16px; z-index: 36; width: 360px; height: 560px;
     min-width: 280px; min-height: 260px; }
   .apanel .cwrap { flex: 1; min-height: 0; }
-  .apanel.collapsed .cwrap, .apanel.collapsed .swrap { display: none; }
+  .apanel:is(.collapsed, .dcollapsed) .cwrap, .apanel:is(.collapsed, .dcollapsed) .swrap { display: none; }
   .apanel iframe { width: 100%; height: 100%; border: 0; }
   #topbar .tbtn.active { background: rgba(120,90,255,0.45); }
 
@@ -182,9 +182,11 @@
   .apanel .cbtns { margin-left: auto; display: flex; gap: 2px; }
   .apanel .cbtns button { background: none; border: 0; color: #c9bdf0; cursor: pointer;
     font-size: 1rem; line-height: 1; padding: 2px 6px; }
-  .apanel.collapsed { height: auto !important; min-height: 0 !important; resize: none; }
-  .apanel.collapsed .abody { display: none; }
-  .apanel.collapsed .cbar { border-bottom: 0; }
+  /* .dcollapsed is the downtime auto-collapse — same visual as .collapsed but a
+     separate class, so restoring it can't clobber what the user collapsed by hand. */
+  .apanel:is(.collapsed, .dcollapsed) { height: auto !important; min-height: 0 !important; resize: none; }
+  .apanel:is(.collapsed, .dcollapsed) .abody { display: none; }
+  .apanel:is(.collapsed, .dcollapsed) .cbar { border-bottom: 0; }
   .apanel .abody { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px; }
   .rolechips { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .rolechips .chip[data-pf] { cursor: pointer; }
@@ -571,7 +573,8 @@
       const r = el.getBoundingClientRect(), prev = LS.get(key, {}), collapsed = el.classList.contains('collapsed');
       LS.set(key, {
         left: Math.round(r.left), top: Math.round(r.top), width: Math.round(el.offsetWidth),
-        height: collapsed ? (prev.height || 0) : Math.round(el.offsetHeight), // keep expanded height while collapsed
+        // keep the expanded height while collapsed — by hand OR by the downtime curtain
+        height: collapsed || el.classList.contains('dcollapsed') ? (prev.height || 0) : Math.round(el.offsetHeight),
         collapsed,
       });
     };
@@ -825,9 +828,19 @@
       logo.removeAttribute('src');
     }
   }
+  // While the curtain is up every panel is showing stale data, so fold them all
+  // down to their title bars and give the artwork the screen. Twitch chat stays
+  // open — it's the one panel that still works (and is where people ask what
+  // happened). Uses its own class, so a panel the user had collapsed by hand
+  // stays collapsed when the game comes back.
+  function downPanes(on) {
+    for (const el of document.querySelectorAll('.apanel'))
+      if (el.id !== 'chatpanel') el.classList.toggle('dcollapsed', on);
+  }
   function applyDown(on) {
     document.getElementById('down').classList.toggle('open', on);
     downArt(on);
+    downPanes(on);
     if (!on) { const ov = document.getElementById('overlay'); ov.setAttribute('src', ov.getAttribute('src')); } // revive iframe
   }
   function setDown(on) {
