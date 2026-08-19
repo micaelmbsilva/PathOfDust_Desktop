@@ -584,18 +584,21 @@
   const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
   const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'],
     ['krangled', '🔒', 'Krangled'], ['plain', '◦', 'Plain (not sacred/perfect/krangled)']];
-  // Rarity predicates from the resolved item (+ craft-option meta for perfect).
-  // These are independent — a Krangled item can also be Sacred — so quality pips
-  // OR together rather than bucketing each item into one class.
-  const isSacred = (it) => !!it && (it.sacred || it.quality === 'Sacred');
-  const isPerfect = (it, md) => (!!it && (it.quality || '').includes('Perfect')) || !!md?.perfect;
-  const isKrangled = (it) => !!it && it.krangled;
-  const QUAL_TEST = {
-    sacred: (it) => isSacred(it),
-    perfect: (it, md) => isPerfect(it, md),
-    krangled: (it) => isKrangled(it),
-    plain: (it, md) => !isSacred(it) && !isPerfect(it, md) && !isKrangled(it),
-  };
+  // One bucket per row, Krangled > Sacred > Perfect > plain — the same precedence
+  // GROUPERS.rarity and numQual use, and the same one the game's own label uses
+  // (Quality% < Perfect < Sacred). These were independent predicates, which is
+  // what let Sacred rows answer the Perfect pip: the site sets data-perfect AND
+  // data-sacred on a Sacred item, while its label reads "Sacred".
+  // md is authoritative and always present — resolving the item is unnecessary
+  // here (and unreliable for equipped gear, which matches on a name prefix).
+  // In an option label 🔒 is the locked=Krangled marker; ✦ is unique, a different
+  // axis. Works item-side (it, no md) or option-side (md, no it).
+  const qualOf = (it, md) =>
+      (md?.label || '').includes('🔒') || it?.krangled ? 'krangled'
+    : md?.sacred || it?.sacred || it?.quality === 'Sacred' ? 'sacred'
+    : md?.perfect || (it?.quality || '').includes('Perfect') ? 'perfect'
+    : 'plain';
+  const QUAL_RANK = { krangled: 103, sacred: 102, perfect: 101 };
 
   // Shared sort/filter state driving BOTH item pickers, edited from the pip card
   // beside the craft form. Session-scoped (persists across reloads like the
@@ -657,22 +660,17 @@
           const sl = slotFromLabel((m[o.value] || {}).label || o.textContent);
           if (!pipState.slots.has(sl)) return false;
         }
-        // Quality pips OR together — picking Sacred + Krangled shows either.
-        if (pipState.quals.size) {
-          const it = itemForOption(o.value), md = m[o.value];
-          if (![...pipState.quals].some(q => QUAL_TEST[q]?.(it, md))) return false;
-        }
+        // One bucket per row; selecting several pips shows the union.
+        if (pipState.quals.size && !pipState.quals.has(qualOf(null, m[o.value]))) return false;
         return true;
       });
       if (pipState.sort) {
-        // Quality sorts above the 0-100 scale for Perfect/Sacred, matching the
-        // bag's own numQual — otherwise a Sacred item ranks by a raw int that
-        // doesn't represent it.
-        const val = (o) => { const md = m[o.value] || {}, it = itemForOption(o.value);
+        // Quality sorts above the 0-100 scale for Krangled/Sacred/Perfect,
+        // matching numQual — a raw int doesn't represent those at all.
+        const val = (o) => { const md = m[o.value] || {};
           if (pipState.sort === 'tier') return md.tier || 0;
           if (pipState.sort === 'mods') return md.affixes || 0;
-          if (pipState.sort === 'quality')
-            return isSacred(it) ? 102 : isPerfect(it, md) ? 101 : (md.quality || 0);
+          if (pipState.sort === 'quality') return QUAL_RANK[qualOf(null, md)] ?? (md.quality || 0);
           return 0; };
         rows.sort((a, b) => {
           if (!a.value) return -1; if (!b.value) return 1;      // "None" stays first
