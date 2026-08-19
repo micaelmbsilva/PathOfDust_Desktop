@@ -44,8 +44,17 @@
   .slot.filled .snm { color: #ffd76b; }
   .meta { font-size: 0.72rem; color: #8a7fb0; }
   .srow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
-  .srow .btn-respec, .srow .btn-save { padding: 4px 10px; font-size: 0.72rem; }
-  .danger { color: #ff8080; border-color: rgba(255,128,128,0.35); }
+  .srow .btn-respec, .srow .btn-go { padding: 4px 10px; font-size: 0.72rem; }
+  /* Three roles, three colours: violet commits (Load, Save Build), outline is
+     secondary (Overwrite, Rename), red is destructive (Delete). Load used to
+     borrow .btn-save's salmon, which put the safe action and the irreversible
+     one in the same red family — the salmon stays on the bar's Save Changes,
+     which is the tree's own primary and a different thing entirely. */
+  .btn-go { font: inherit; font-size: 0.78rem; font-weight: 600; color: #fff; background: #7c5cff;
+    border: 1px solid #7c5cff; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .btn-go:hover:not(:disabled) { background: #9375ff; border-color: #9375ff; }
+  .danger { color: #ff6b6b; border-color: rgba(255,59,78,0.45); }
+  .danger:hover { background: #ff3b4e; border-color: #ff3b4e; color: #fff; }
   .mname { flex: 1 1 120px; min-width: 0; background: #1c1830; color: #eae6f5;
     border: 1px solid rgba(160,140,255,0.3); border-radius: 999px; padding: 4px 10px; font-size: 0.72rem; }
 </style>
@@ -82,8 +91,17 @@
 
   // Archetype switcher — the site's /change-archetype select, as a bar chip.
   // Re-added after every bar re-render (load() wipes #bar's innerHTML).
+  //
+  // /api/me is a full scrape of the game's dashboard (~290ms, ~16KB measured),
+  // and the only thing this page wants from it is the class list, which cannot
+  // change without a reload — picking a new class calls location.reload(), and
+  // nothing else here touches it. So fetch it ONCE and rebuild the chip from
+  // the cached copy on every later load. refresh() runs load() twice, so this
+  // was four dashboard scrapes per action for a dropdown that never moved.
+  let meCache = null;
   async function loadArchetype() {
-    let me; try { me = await fetch('/api/me').then(r => r.json()); } catch { return; }
+    let me = meCache;
+    if (!me) { try { me = meCache = await fetch('/api/me').then(r => r.json()); } catch { return; } }
     if (me.name) document.title = `${GAME_NAME} — Passives — ${me.name}`;
     const a = me.archetype;
     if (!a || !a.options?.length || $('archSel')) return;
@@ -180,7 +198,7 @@
         <div class="shead"><span class="num">${m.slot + 1}</span><span class="snm" title="${esc(m.name)}">${esc(m.name)}</span></div>
         <div class="meta">${esc(m.meta)}</div>
         <div class="srow">
-          <button class="btn-save" data-act="load" data-slot="${m.slot}">Load</button>
+          <button class="btn-go" data-act="load" data-slot="${m.slot}">Load</button>
           <button class="btn-respec" data-act="over" data-slot="${m.slot}" data-name="${esc(m.name)}">Overwrite</button>
           <button class="btn-respec danger" data-act="del" data-slot="${m.slot}">Delete</button>
         </div>
@@ -194,7 +212,7 @@
         <div class="meta">Saves your class, both trees and golem types.</div>
         <div class="srow">
           <input class="mname" id="mn${m.slot}" maxlength="150" placeholder="${esc(m.placeholder)}">
-          <button class="btn-save" data-act="save" data-slot="${m.slot}">Save Build</button>
+          <button class="btn-go" data-act="save" data-slot="${m.slot}">Save Build</button>
         </div>
       </div>`).join('');
     $('mem').querySelectorAll('button[data-act]').forEach(b => b.onclick = () => memAction(b));
