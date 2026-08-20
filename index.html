@@ -398,7 +398,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 </style>
 </head>
 <body>
-<iframe id="overlay" src="https://adventure.lokati.net/overlay"></iframe>
+<iframe id="overlay" src="https://adventure.lokati.net/overlay?embed=app&amp;feed=parent"></iframe>
 <div id="zoomcapture" title="Wheel to zoom · double-click to reset"></div>
 
 <div id="down">
@@ -675,6 +675,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 
   // Overlay source. The iframe URL carries every overlay display setting:
   // embed=app always (tells the website to suppress its own settings tray),
+  // feed=parent always (we relay the socket in — see the overlay bridge below),
   // ?highlight=<name> dims other players (needs our character name, from
   // /api/me), ?bgOpacity=<0-1> fades the overlay's backdrop, and
   // ?bossSize=<0.05-1.5> scales real boss sprites (2026-08-18). The game
@@ -687,7 +688,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // so toggling any one setting never drops the others.
   function applyOverlaySettings() {
     const on = localStorage.getItem('highlight') === '1';
-    const q = new URLSearchParams({ embed: 'app' });
+    const q = new URLSearchParams({ embed: 'app', feed: 'parent' });
     if (on && myName) q.set('highlight', myName);
     if (bgOpacity() !== 1) q.set('bgOpacity', String(bgOpacity()));
     if (bossSize() !== 1) q.set('bossSize', String(bossSize()));
@@ -2497,11 +2498,51 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const podChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('pod') : null;
   let encDoneT = null; // pending "the replay has finished" broadcast
 
+  // ---- overlay bridge: one socket per app, not two -------------------------
+  // The overlay iframe opens its own /ws to the same server we are already
+  // connected to, so every desktop pulled each encounter twice — measured at
+  // 6.67 MB per fight, ~9 GB/day per running copy, all of it identical bytes.
+  // We relay our socket into the frame instead; the overlay, given feed=parent,
+  // skips its own connect and reads these.
+  //
+  // Contract (both directions carry `source` so neither side mistakes another
+  // embed's chatter for ours; v is the envelope version, bumped only if the
+  // shape below changes):
+  //   app -> overlay  { source:'pod-app', v:1, type:'hello' }        we are relaying
+  //                   { source:'pod-app', v:1, type:'ws', data }     one raw frame
+  //                   { source:'pod-app', v:1, type:'link', up }     our socket's state
+  //   overlay -> app  { source:'pod-overlay', type:'ready' }         listener is live
+  //
+  // `data` is the raw string off the wire, not the parsed object: the overlay
+  // parses for itself either way, and structured-cloning a 50k-event object
+  // graph across the frame boundary costs far more than cloning the string.
+  // The `link` signal exists so the overlay can fall back to its own socket
+  // while ours is down rather than sitting frozen.
+  const OVERLAY_ORIGIN = new URL(OVERLAY).origin;
+  function toOverlay(msg) {
+    // Targeted at the overlay's origin, never '*' — these frames carry the full
+    // party's encounter and must not be readable by whatever else the frame may
+    // have navigated to.
+    try { document.getElementById('overlay')?.contentWindow?.postMessage(msg, OVERLAY_ORIGIN); } catch {}
+  }
+  const overlayHello = () => toOverlay({ source: 'pod-app', v: 1, type: 'hello' });
+  // Both races are covered: we greet the frame when it finishes loading, and we
+  // greet it again if it announces itself first (a hello sent before its
+  // listener exists is simply lost, and only the frame knows when that is).
+  document.getElementById('overlay').addEventListener('load', overlayHello);
+  window.addEventListener('message', (e) => {
+    if (e.origin !== OVERLAY_ORIGIN) return;
+    if (e.data && e.data.source === 'pod-overlay' && e.data.type === 'ready') overlayHello();
+  });
+
   function watchEvents() {
     let ws, t = null;
     try { ws = new WebSocket('wss://adventure.lokati.net/ws'); } catch { return; }
-    ws.onopen = () => { wsOk = true; };
+    ws.onopen = () => { wsOk = true; toOverlay({ source: 'pod-app', v: 1, type: 'link', up: true }); };
     ws.onmessage = (e) => {
+      // Relayed before we parse anything: the overlay's copy of this frame must
+      // not depend on our own handling of it succeeding.
+      toOverlay({ source: 'pod-app', v: 1, type: 'ws', data: e.data });
       // Battle end: an encounter we took part in just resolved — arm the dust
       // readout (checkBattleDust) for the refresh below.
       try {
@@ -2549,7 +2590,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       } catch {}
       clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700);
     };
-    ws.onclose = () => { wsOk = false; setTimeout(watchEvents, 3000); };
+    ws.onclose = () => { wsOk = false; toOverlay({ source: 'pod-app', v: 1, type: 'link', up: false }); setTimeout(watchEvents, 3000); };
     ws.onerror = () => ws.close();
   }
   watchEvents();
