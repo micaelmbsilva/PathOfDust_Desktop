@@ -158,7 +158,7 @@
 </head>
 <body>
   <div id="hdr">
-    <h1>🎒 Bag &amp; Crafting <button class="chip" id="reloadBtn" style="cursor:pointer" onclick="load(true)" title="Refresh">🔄</button></h1>
+    <h1>🎒 Bag &amp; Crafting <button class="chip" id="reloadBtn" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
     <div class="bar" id="cur"></div>
   </div>
   <div id="err"></div>
@@ -166,11 +166,9 @@
   <div id="nameItem"></div>
   <div id="veilChoice"></div>
 
-  <section id="craftWrap">
-    <h2 id="craftHead">Crafting</h2>
-    <div id="craftPick"></div>
-    <div class="craft" id="craft"></div>
-  </section>
+  <h2>Crafting</h2>
+  <div id="craftPick"></div>
+  <div class="craft" id="craft"></div>
 
   <h2>Equipped</h2>
   <div class="grid" id="equipped"></div>
@@ -363,12 +361,10 @@
     if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
     if (before) {
       let parts = [];
-      for (let i = 0; i < 6; i++) { // read-after-write lag — ~3.1s before calling it rejected
+      for (let i = 0; i < 5; i++) { // read-after-write lag — ~3.0s before calling it rejected
         // Front-loaded backoff: the typical craft settles in one short beat, so
-        // don't make every action wait a flat 800ms to find that out. The first
-        // retry is the one a real user feels — it's the common lagging case —
-        // so it's short, at the price of one extra scrape when it misses.
-        if (i) await new Promise(z => setTimeout(z, 100 * 2 ** (i - 1))); // 100,200,400,800,1600
+        // don't make every action wait a flat 800ms to find that out.
+        if (i) await new Promise(z => setTimeout(z, 200 * 2 ** (i - 1))); // 200,400,800,1600
         // Retries re-read the SAME state waiting out the game's read-after-write
         // lag, so they must skip the bridge's TTL cache or they'd just re-read
         // their own cached body and every action would report "no change".
@@ -376,12 +372,9 @@
         let after; try { after = await fetch('/api/inventory' + (i ? '?fresh=1' : ''), { cache: 'no-store' }).then(x => x.json()); } catch { continue; }
         // A veiled/token craft doesn't change the inventory — it parks a pending
         // 3-outcome choice. Don't sit in the retry loop: render it right away.
-        if (after.veil && !before.veil) { toast('🔮 Veiled — pick your outcome below'); freshInv = after; load(); return r; }
+        if (after.veil && !before.veil) { toast('🔮 Veiled — pick your outcome below'); load(); return r; }
         parts = craftSummary(before, after, opts);
-        // This read IS /api/inventory's body and it's the one that proved the
-        // craft landed, so the reload below renders it instead of scraping the
-        // game page a second time for the same state.
-        if (parts.length) { lastInv = after; freshInv = after; break; } // chain back-to-back crafts without waiting for refresh()
+        if (parts.length) { lastInv = after; break; } // chain back-to-back crafts without waiting for refresh()
       }
       // Empty diff is NOT success: the site 303s on business failures too (e.g.
       // not enough dust), so nothing changing usually means it was rejected.
@@ -401,26 +394,22 @@
   // partway through, so an interleaved pair leaves picker closures bound to
   // detached DOM. Same busy/again shape as index.html's pollBag.
   let loadBusy = false, loadAgain = false;
-  async function load(force) {
+  async function load() {
     if (loadBusy) { loadAgain = true; return; }
     loadBusy = true;
     const rb = $('reloadBtn'); if (rb) { rb.disabled = true; rb.textContent = '⏳'; }
-    try { await loadNow(force); }
+    try { await loadNow(); }
     finally {
       loadBusy = false;
       const b = $('reloadBtn'); if (b) { b.disabled = false; b.textContent = '🔄'; }
       if (loadAgain) { loadAgain = false; load(); }
     }
   }
-  async function loadNow(force) {
+  async function loadNow() {
     $('err').textContent = '';
     let inv, meData;
-    // craftAct already read the settled inventory to build its toast, so use
-    // that instead of scraping the same state again. Refresh always re-reads.
-    const pre = force ? null : freshInv;
-    freshInv = null;
     try { [inv, meData] = await Promise.all([
-      pre || fetch('/api/inventory').then(r => r.json()),
+      fetch('/api/inventory').then(r => r.json()),
       fetch('/api/me').then(r => r.json()).catch(() => ({})),
     ]); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
@@ -430,10 +419,8 @@
     if (meData.name) document.title = `${GAME_NAME} — Bag — ${meData.name}`;
     const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
     const ad = inv.autoDisenchant;
-    // The numbers sit in their own spans so spend() can move them on click —
-    // see its comment for why that's the only part of a craft we can predict.
-    $('cur').innerHTML = `<span class="chip">💰 <span id="curDust">${full(inv.dust)}</span> dust</span><span class="chip">🪵 <span id="curSand">${full(inv.sand)}</span> sand</span>` +
-      (inv.divineDust != null ? `<span class="chip" title="Spent 2 per item tier to make an item Sacred, or reroll an already-Sacred item's sacred affix">✨ <span id="curDD">${full(inv.divineDust)}</span> divine dust</span>` : '') +
+    $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
+      (inv.divineDust != null ? `<span class="chip" title="Spent 2 per item tier to make an item Sacred, or reroll an already-Sacred item's sacred affix">✨ ${full(inv.divineDust)} divine dust</span>` : '') +
       inv.tokens.map(t => `<span class="chip">${esc(t)}</span>`).join('') +
       `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-Repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
       // Site omits the whole form when nothing is damaged, so no chip either.
@@ -520,24 +507,11 @@
         <button id="ddCraft"${r.affordable ? '' : ' disabled'}>Craft</button>
       </div>`;
 
-    // A pending choice replaces the whole crafting card on the site, so the
-    // scrape comes back with no options and no actions. Keep the last real set:
-    // the form built from it is hidden anyway, but the pick card is not, and
-    // itemForOption resolves EQUIPPED gear through these labels (bag items go
-    // by id and don't need them).
-    if (inv.veil && !inv.craft.options.length && lastCraft.options.length) inv.craft = lastCraft;
     // crafting form — keep the selection across reloads AND app restarts (localStorage fallback)
     // Your in-page choice wins over the stored one, and the site's own
     // preselection (whatever you crafted last) is the final fallback — that's
     // what the game does when it re-renders after a craft.
-    // Keep (🔒) is a bag-only flag, and per Item::disenchant_protected it
-    // guards disenchant ONLY — crafting a Keep'd item is normal, and those are
-    // exactly the items that get polished over and over. So they stay in the
-    // pickers, marked. Krangled items are hidden, but by renderOpts (behind the
-    // 🔒 pip) rather than here: dropping them from the <select> itself meant a
-    // just-Krangled item couldn't be restored as the selection at all.
     const siteSel = (inv.craft.options.find(o => o.selected) || {}).id;
-    const keepIds = new Set(inv.bag.filter(i => i.protected).map(i => i.id));
     // Candidates in preference order — read now, before the form below
     // replaces the selects.
     const prevA = [$('itemA')?.value, localStorage.getItem('craftItemA'), siteSel];
@@ -547,14 +521,7 @@
       let out = lead || '', group = null;
       for (const o of list) {
         if (o.group !== group) { if (group !== null) out += '</optgroup>'; group = o.group; if (group) out += `<optgroup label="${esc(group)}">`; }
-        // The "Equipped" optgroup is the only equipped signal, and it's gone
-        // in the sorted (flat) list and on the closed picker button. Fold it
-        // into the option text so it survives both — same for Keep, which the
-        // site's own option markup doesn't mention at all. Words, not a 🔒:
-        // in an option label that emoji is the site's own Krangled marker, and
-        // craftable() reads it as exactly that.
-        const marks = [keepIds.has(o.id) && 'keep', o.group === 'Equipped' && 'equipped'].filter(Boolean);
-        out += `<option value="${o.id}">${esc(o.label)}${marks.length ? ' — ' + marks.join(' · ') : ''}</option>`;
+        out += `<option value="${o.id}">${esc(o.label)}</option>`;
       }
       return out + (group ? '</optgroup>' : '');
     };
@@ -585,9 +552,6 @@
     const ddBtn = $('ddCraft');
     if (ddBtn) ddBtn.onclick = async () => {
       const times = +([...document.querySelectorAll('.ddx')].find(b => b.checked)?.value || 1);
-      // This recipe's per-craft cost is fixed, so ×N is exact and safe to spend
-      // up front (unlike polish/reforge — see spend()).
-      if (lastDD) spend({ dust: lastDD.dustCost * times, sand: lastDD.sandCost * times });
       // Batches stop at the first shortfall and keep whatever landed, so the
       // currency diff is the only honest report of how many actually went through.
       await craftAct('craft', { action: 'divine dust craft', ...(times > 1 ? { times: String(times) } : {}) },
@@ -612,7 +576,7 @@
     // picked items THROUGH this cache. Clearing it further down left the
     // Crafting card drawing the pre-craft item until it was re-picked.
     itemForCache.clear(); // lastBag/lastEquipped/lastCraft are all assigned by now
-    lastDD = inv.craft.divineDustRecipe; lastDustN = numCur(inv.dust); lastSandN = numCur(inv.sand); lastDDN = numCur(inv.divineDust);
+    lastDD = inv.craft.divineDustRecipe; lastDustN = numCur(inv.dust); lastSandN = numCur(inv.sand);
     updateCosts();
     updateDD(); // reflect a stored ×10/×50 pick on first render
     $('itemA').onchange = () => {
@@ -632,12 +596,13 @@
     dropdown($('itemA')); dropdown($('itemB'), () => $('itemA').value);
     renderCraftPips();
 
-    // While a choice is pending the site rejects every craft, so the form goes
-    // away until the pending card above is answered. The pick card stays: the
-    // item is untouched until you choose, and its mods/tier/quality are what
-    // the three outcomes have to be judged against. Its own caption reads
-    // "Crafting", so the heading goes with the form.
-    $('craftHead').hidden = $('craft').hidden = !!inv.veil;
+    // While a choice is pending the site rejects every craft — lock the form so
+    // "nothing happened" clicks can't pile up, and point at the pending card.
+    if (inv.veil) {
+      $('craft').querySelectorAll('button,select,input').forEach(el => el.disabled = true);
+      $('craft').insertAdjacentHTML('afterbegin',
+        '<p class="muted">⏳ Crafting is locked until you finish the pending choice above.</p>');
+    }
   }
 
   // ---- item picker with hover preview ----
@@ -700,8 +665,7 @@
   }
   const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
   const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'],
-    // 🔨 not 🔒 — the bag already spends 🔒 on the Keep flag, a different axis.
-    ['krangled', '🔨', 'Krangled'], ['plain', '◦', 'Plain (not sacred/perfect/krangled)']];
+    ['krangled', '🔒', 'Krangled'], ['plain', '◦', 'Plain (not sacred/perfect/krangled)']];
   // One bucket per row, Krangled > Sacred > Perfect > plain — the same precedence
   // GROUPERS.rarity and numQual use, and the same one the game's own label uses
   // (Quality% < Perfect < Sacred). These were independent predicates, which is
@@ -717,19 +681,15 @@
     : md?.perfect || (it?.quality || '').includes('Perfect') ? 'perfect'
     : 'plain';
   const QUAL_RANK = { krangled: 103, sacred: 102, perfect: 101 };
-  // Krangled items are permanently locked: the site lists them (marked 🔒 in
-  // the option's own label) so you can see they're still there, but every
-  // craft against one fails. `keep` spares ids anyway — the row you're on.
-  const craftable = (o, keep) => !String(o.label ?? '').includes('🔒') || !!keep?.has(o.id);
 
   // Sort/filter state. `pipState` drives BOTH item pickers from the card beside
   // the craft form; `bagPipState` drives the bag grid from its own card. Same
   // renderer, different state + sort list, so the two stay consistent.
   // pipTargets holds each live picker's re-render fn.
   const newPipState = () => ({ sort: '', dir: 1, slots: new Set(), quals: new Set(), q: '' }); // sort '' = grouped order; empty sets = all
-  const pipState = { ...newPipState(), locked: false }; // locked: show Krangled rows too (craft card only)
+  const pipState = newPipState();
   let pipTargets = [];
-  const pipActive = (st) => st.sort || st.slots.size || st.quals.size || st.q || st.locked;
+  const pipActive = (st) => st.sort || st.slots.size || st.quals.size || st.q;
   // el: container, st: state object, sorts: [key,label][], onChange: re-render.
   function renderPips(el, st, sorts, onChange) {
     if (!el) return;
@@ -749,30 +709,23 @@
         [-1, st.sort === 'name' ? 'Z → A' : 'Low → High']]
         .map(([d, lbl]) => pip(st.dir === d, `data-dir="${d}"`, lbl)).join('')) : '') +
       sec('Quality', QUALS.map(([k, em, t]) => pip(st.quals.has(k), `data-qual="${k}"`, em, t, true)).join('')) +
-      sec('Slot', SLOTS.map(s => pip(st.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join('')) +
-      // Craft card only — the bag grid shows Krangled items either way, so its
-      // state object carries no `locked` key and gets no pip.
-      ('locked' in st ? sec('Locked', pip(st.locked, 'data-locked="1"', '🔒',
-        st.locked ? 'Hide Krangled items again' : 'Show Krangled items too — every craft against one fails', true)) : '');
+      sec('Slot', SLOTS.map(s => pip(st.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join(''));
     // Re-rendering the card would blow away the field the user is typing in, so
     // the search box updates state and refreshes only the list.
     const q = el.querySelector('.pip-q');
     q.oninput = () => { st.q = q.value; onChange(); };
     q.onkeydown = (e) => { if (e.key === 'Escape' && st.q) { st.q = q.value = ''; onChange(); } };
     el.onclick = (e) => {
-      if (e.target.closest('[data-clear]')) { st.sort = ''; st.dir = 1; st.slots.clear(); st.quals.clear(); st.q = '';
-        if ('locked' in st) st.locked = false; } // assigning it would grow the key — and a pip — on the bag card
+      if (e.target.closest('[data-clear]')) { st.sort = ''; st.dir = 1; st.slots.clear(); st.quals.clear(); st.q = ''; }
       else {
         const sb = e.target.closest('[data-sort]'), fb = e.target.closest('[data-slot]'),
-              qb = e.target.closest('[data-qual]'), db = e.target.closest('[data-dir]'),
-              lb = e.target.closest('[data-locked]');
+              qb = e.target.closest('[data-qual]'), db = e.target.closest('[data-dir]');
         // Re-clicking the active sort clears it (back to the site's grouped
         // order); direction is set explicitly by the Order pips.
         if (sb) { const k = sb.dataset.sort; if (st.sort === k) st.sort = ''; else st.sort = k; }
         else if (db) st.dir = +db.dataset.dir;
         else if (fb) { const s = fb.dataset.slot; st.slots.has(s) ? st.slots.delete(s) : st.slots.add(s); }
         else if (qb) { const q2 = qb.dataset.qual; st.quals.has(q2) ? st.quals.delete(q2) : st.quals.add(q2); }
-        else if (lb) st.locked = !st.locked;
         else return;
       }
       renderPips(el, st, sorts, onChange); onChange();
@@ -796,16 +749,10 @@
       // The label already carries name/slot/tier/mod-count/quality, so matching
       // it covers every field on screen without resolving the item.
       const q = pipState.q.trim().toLowerCase();
-      const keepRow = sel.value ? new Set([sel.value]) : null; // whatever is picked survives every filter below
       const rows = [...sel.options].filter(o => {
         if (!o.value) return true;                              // keep "None" always
         if (ex && o.value === ex) return false;
         if (q && !o.textContent.toLowerCase().includes(q)) return false;
-        // Locked rows are out by default. The row currently selected stays
-        // regardless (a just-Krangled item is usually exactly that one), and
-        // asking for the Krangled quality pip implies you want to see them.
-        if (!pipState.locked && !pipState.quals.has('krangled')
-            && !craftable(m[o.value] || { label: o.textContent }, keepRow)) return false;
         if (pipState.slots.size && !pipState.slots.has(optSlot(m[o.value], o.textContent))) return false;
         // One bucket per row; selecting several pips shows the union.
         if (pipState.quals.size && !pipState.quals.has(qualOf(null, m[o.value]))) return false;
@@ -867,13 +814,8 @@
   // already survives reloads and restarts via localStorage, so this does too.
   let recombResult = null; // set after a recombine — {a, b, id} of the fresh result item
   function renderPick() {
-    // Reloading the page while a choice is pending leaves the pickers empty —
-    // the site renders no crafting card at all. The stored pick still names the
-    // item the outcomes apply to, and a bag item resolves by id alone.
-    const empty = !$('itemA')?.options.length;
-    const pick = (sel, k) => (sel && sel.value) || (empty ? localStorage.getItem(k) : '');
-    const aVal = pick($('itemA'), 'craftItemA');
-    const items = [aVal, pick($('itemB'), 'craftItemB')].map(itemForOption).filter(Boolean);
+    const aVal = $('itemA') && $('itemA').value;
+    const items = [aVal, $('itemB') && $('itemB').value].map(itemForOption).filter(Boolean);
     // Only while the recombine result is still the selected Item A: name its
     // sources and flag the crit-granted modifier ("how it was affected").
     let note = '';
@@ -1015,7 +957,7 @@
   // for the selected item (base + 3*tier; veil extras; reforge 30*tier; polish
   // by quality). Token-based buttons (Regal/Krangle) keep the server label.
   let lastCraft = { options: [], actions: [] };
-  let lastDD = null, lastDustN = 0, lastSandN = 0, lastDDN = 0; // Divine Dust recipe + numeric balances for its ×N redraw
+  let lastDD = null, lastDustN = 0, lastSandN = 0; // Divine Dust recipe + numeric balances for its ×N redraw
   let pendChoices = null; // pending-card choices, indexed by data-veilpick
   const batchTimes = () => +([...document.querySelectorAll('.batchx')].find(b => b.checked)?.value || 1);
   // Divine Dust's per-craft cost is fixed, so scaling by the selected ×N is
@@ -1028,66 +970,28 @@
     span.textContent = `✨ Craft Divine Dust (${d.toLocaleString()}d + ${s.toLocaleString()}s → ${o}):`;
     const btn = $('ddCraft'); if (btn) btn.disabled = !(lastDustN >= d && lastSandN >= s);
   }
-  // What the pickers currently say, as the cost math needs it.
-  function craftCtx() {
+  function updateCosts() {
     const byId = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
     const A = byId[$('itemA')?.value], B = byId[$('itemB')?.value];
-    return { A, B, tierA: A?.tier || 0, qualA: A?.quality || 0, perfA: !!A?.perfect,
-      pool: (A?.affixes || 0) + (B?.affixes || 0), veiled: !!$('veil')?.checked };
-  }
-  // One action's price for that state — the same numbers the button labels
-  // print, shaped like the balances so spend() can subtract it directly.
-  // Empty for the token buttons (Regal/Krangle), which cost no currency.
-  function craftCost(a, c) {
-    if (a.polish) return { sand: c.perfA ? 12 : Math.ceil(c.qualA / 10) };
-    if (a.reforge) return { dust: 30 * c.tierA };
-    if (a.divineDustApply) return { dd: 2 * c.tierA };
-    if (a.base == null) return {};
-    let dust = a.recombine ? a.base : a.base + 3 * c.tierA;
-    if (c.veiled && a.veilExtra != null) dust += a.veilExtra + (a.recombine ? 500 * c.pool : 0);
-    return { dust };
-  }
-  // A craft's RESULT is the server's dice and can't be predicted, but its
-  // PRICE is known the moment you click. Spending it here moves the chips and
-  // every affordability check now instead of a round trip later, so chained
-  // crafts don't run on numbers that are one craft stale. The read that
-  // follows overwrites all of it, including when the site rejects the craft.
-  // Balances the site abbreviates ("1.2K") come back exact here — a cosmetic
-  // difference that lasts until that read lands.
-  function spend({ dust = 0, sand = 0, dd = 0 }) {
-    if (!dust && !sand && !dd) return;
-    lastDustN = Math.max(0, lastDustN - dust);
-    lastSandN = Math.max(0, lastSandN - sand);
-    lastDDN = Math.max(0, lastDDN - dd);
-    // The buttons carry the player's balance in their own data — the source
-    // updateCosts checks affordability against, so it has to move too.
-    for (const a of lastCraft.actions || []) {
-      if (a.dust != null) a.dust = Math.max(0, a.dust - dust);
-      if (a.sand != null) a.sand = Math.max(0, a.sand - sand);
-      if (a.divineDust != null) a.divineDust = Math.max(0, a.divineDust - dd);
-    }
-    const set = (id, n) => { const el = $(id); if (el) el.textContent = n.toLocaleString('en-US'); };
-    set('curDust', lastDustN); set('curSand', lastSandN); if (dd) set('curDD', lastDDN);
-    updateCosts(); updateDD();
-  }
-  function updateCosts() {
-    const ctx = craftCtx(), A = ctx.A;
+    const tierA = A?.tier || 0, qualA = A?.quality || 0, perfA = !!A?.perfect;
+    const pool = (A?.affixes || 0) + (B?.affixes || 0);
+    const veiled = $('veil')?.checked;
     // ×N label suffix only — per-cast cost rises as quality/tier climb mid-batch,
     // so a multiplied total would be a lie; affordability stays per-cast.
     const xN = batchTimes() > 1 ? ` ×${batchTimes()}` : '';
     for (const a of lastCraft.actions || []) {
       const btn = document.querySelector(`[data-craft="${a.action}"]`);
       if (!btn) continue;
-      const price = craftCost(a, ctx);
-      if (a.polish) { const c = price.sand; btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c || A?.polishRoom === 0; continue; }
-      if (a.reforge) { const c = price.dust; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
+      if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c || A?.polishRoom === 0; continue; }
+      if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
       // 2 ✨ per tier, never batched (the ×N above is the recipe's own thing).
       // Already-Sacred items reroll the affix instead of gaining one.
-      if (a.divineDustApply) { const c = price.dd;
+      if (a.divineDustApply) { const c = 2 * tierA;
         btn.textContent = `${A?.sacred ? 'Reroll Sacred Affix' : 'Apply Divine Dust'} (${c} ✨)`;
         btn.disabled = (a.divineDust ?? 0) < c; continue; }
       if (a.base == null) { btn.textContent = a.label; btn.disabled = false; continue; } // Regal/Krangle: token label
-      const cost = price.dust;
+      let cost = a.recombine ? a.base : a.base + 3 * tierA;
+      if (veiled && a.veilExtra != null) { cost += a.veilExtra; if (a.recombine) cost += 500 * pool; }
       btn.textContent = `${a.dataLabel} (${cost > 0 ? cost + 'd' : 'Free'})`;
       btn.disabled = false;
     }
@@ -1097,11 +1001,8 @@
   // Refresh now, then once more after the server settles the action.
   // Single coalesced reload shortly after an action (covers post-redirect lag);
   // rapid actions collapse into one, and out-of-order renders can't happen.
-  let refreshT = null, freshInv = null; // freshInv: craftAct's settled read, consumed by the next loadNow
-  // 500ms buys the game time to settle a state we'd otherwise re-scrape; with
-  // freshInv there is nothing to fetch and nothing to wait for, so it renders
-  // on the next tick — still a timeout, so a burst of clicks coalesces.
-  const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, freshInv ? 0 : 500); };
+  let refreshT = null;
+  const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, 500); };
 
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
   let lastBag = [], lastEquipped = [], lastCap = null, meName = '';
@@ -1327,9 +1228,6 @@
           !confirm('Reroll this item’s sacred affix? The current one is lost.')) return;
       if ((aDef?.confirm || action === 'scour' || action === 'krangle') &&
           !confirm(`${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
-      // Batches are exempt: per-cast cost climbs mid-batch, so ×N of the first
-      // cast's price is a guess, and a batch that runs out of sand stops early.
-      if (times === 1 && aDef) spend(craftCost(aDef, craftCtx()));
       if (action === 'recombine') {
         const aName = itemForOption($('itemA').value)?.name, bName = itemForOption($('itemB').value)?.name;
         const opts = { recombine: true };
