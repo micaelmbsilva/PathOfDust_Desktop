@@ -65,10 +65,11 @@ console.log('craft picker tests passed');
 // --- craftable: the site lists Krangled items marked 🔒, but no craft works on one ---
 const craftable = new Function(`${line('const craftable =')}
 return craftable;`)();
-assert.equal(craftable({ label: 'Blade (T1, 1 mod Sacred) 🔒' }), false, 'a locked item is not offered');
+assert.equal(craftable({ id: 'i1', label: 'Blade (T1, 1 mod Sacred) 🔒' }, new Set()), false,
+  'a locked item is not offered');
+assert.equal(craftable({ id: 'i1', label: 'Blade (T1, 1 mod Sacred) 🔒' }, new Set(['i1'])), true,
+  'the item you just Krangled stays while it is the one picked — name it, or disenchant it');
 assert.equal(craftable({ label: 'Blade (T1, 1 mod Sacred) ✦' }), true, '✦ is unique, a different marker — still craftable');
 assert.equal(craftable({ label: 'Blade (T1, 1 mod Q40%)' }), true, 'an unmarked item is craftable');
-assert.equal(craftable({ id: 'i1', label: 'Blade (T1, 1 mod Q40%)' }, new Set(['i1'])), false,
-  "a Keep'd bag item is not offered either — the site marks those nowhere in the picker");
-assert.equal(craftable({ id: 'i2', label: 'Blade (T1, 1 mod Q40%)' }, new Set(['i1'])), true,
-  'another item is unaffected by that Keep');
+assert.equal(craftable({ id: 'i1', label: 'Blade (T1, 1 mod Q40%)' }), true,
+  "Keep only guards disenchant — a Keep'd item still crafts, so it stays in the picker");

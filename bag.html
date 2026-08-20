@@ -158,7 +158,7 @@
 </head>
 <body>
   <div id="hdr">
-    <h1>🎒 Bag &amp; Crafting <button class="chip" id="reloadBtn" style="cursor:pointer" onclick="load()" title="Refresh">🔄</button></h1>
+    <h1>🎒 Bag &amp; Crafting <button class="chip" id="reloadBtn" style="cursor:pointer" onclick="load(true)" title="Refresh">🔄</button></h1>
     <div class="bar" id="cur"></div>
   </div>
   <div id="err"></div>
@@ -363,10 +363,12 @@
     if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
     if (before) {
       let parts = [];
-      for (let i = 0; i < 5; i++) { // read-after-write lag — ~3.0s before calling it rejected
+      for (let i = 0; i < 6; i++) { // read-after-write lag — ~3.1s before calling it rejected
         // Front-loaded backoff: the typical craft settles in one short beat, so
-        // don't make every action wait a flat 800ms to find that out.
-        if (i) await new Promise(z => setTimeout(z, 200 * 2 ** (i - 1))); // 200,400,800,1600
+        // don't make every action wait a flat 800ms to find that out. The first
+        // retry is the one a real user feels — it's the common lagging case —
+        // so it's short, at the price of one extra scrape when it misses.
+        if (i) await new Promise(z => setTimeout(z, 100 * 2 ** (i - 1))); // 100,200,400,800,1600
         // Retries re-read the SAME state waiting out the game's read-after-write
         // lag, so they must skip the bridge's TTL cache or they'd just re-read
         // their own cached body and every action would report "no change".
@@ -374,9 +376,12 @@
         let after; try { after = await fetch('/api/inventory' + (i ? '?fresh=1' : ''), { cache: 'no-store' }).then(x => x.json()); } catch { continue; }
         // A veiled/token craft doesn't change the inventory — it parks a pending
         // 3-outcome choice. Don't sit in the retry loop: render it right away.
-        if (after.veil && !before.veil) { toast('🔮 Veiled — pick your outcome below'); load(); return r; }
+        if (after.veil && !before.veil) { toast('🔮 Veiled — pick your outcome below'); freshInv = after; load(); return r; }
         parts = craftSummary(before, after, opts);
-        if (parts.length) { lastInv = after; break; } // chain back-to-back crafts without waiting for refresh()
+        // This read IS /api/inventory's body and it's the one that proved the
+        // craft landed, so the reload below renders it instead of scraping the
+        // game page a second time for the same state.
+        if (parts.length) { lastInv = after; freshInv = after; break; } // chain back-to-back crafts without waiting for refresh()
       }
       // Empty diff is NOT success: the site 303s on business failures too (e.g.
       // not enough dust), so nothing changing usually means it was rejected.
@@ -396,22 +401,26 @@
   // partway through, so an interleaved pair leaves picker closures bound to
   // detached DOM. Same busy/again shape as index.html's pollBag.
   let loadBusy = false, loadAgain = false;
-  async function load() {
+  async function load(force) {
     if (loadBusy) { loadAgain = true; return; }
     loadBusy = true;
     const rb = $('reloadBtn'); if (rb) { rb.disabled = true; rb.textContent = '⏳'; }
-    try { await loadNow(); }
+    try { await loadNow(force); }
     finally {
       loadBusy = false;
       const b = $('reloadBtn'); if (b) { b.disabled = false; b.textContent = '🔄'; }
       if (loadAgain) { loadAgain = false; load(); }
     }
   }
-  async function loadNow() {
+  async function loadNow(force) {
     $('err').textContent = '';
     let inv, meData;
+    // craftAct already read the settled inventory to build its toast, so use
+    // that instead of scraping the same state again. Refresh always re-reads.
+    const pre = force ? null : freshInv;
+    freshInv = null;
     try { [inv, meData] = await Promise.all([
-      fetch('/api/inventory').then(r => r.json()),
+      pre || fetch('/api/inventory').then(r => r.json()),
       fetch('/api/me').then(r => r.json()).catch(() => ({})),
     ]); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
@@ -517,14 +526,20 @@
     // so you can see they're still there, but every craft against one fails.
     // Drop them from both pickers; a dead id in the restore candidates below
     // already falls through, and itemForOption only resolves ids that survive.
-    // Keep (🔒) is a bag-only flag and the site still offers those items to
-    // every craft, marker-free — which is how a Keep'd piece gets Scoured by a
-    // misclick. Out of the pickers too, resolved by id (equipped gear carries
-    // no item_id, and has no Keep toggle either).
-    const craftable = (o, keep) => !o.label.includes('🔒') && !keep?.has(o.id);
-    const keepIds = new Set(inv.bag.filter(i => i.protected).map(i => i.id));
-    inv.craft.options = inv.craft.options.filter(o => craftable(o, keepIds));
+    // ...except whatever is picked right now: Krangle is usually the last step
+    // of a chain, so the item you just locked is still the one on screen — the
+    // name-it prompt is about it, and the pick card's Disenchant is a normal
+    // next move. Dropping it emptied the card the moment the craft landed.
+    // Keep (🔒) is a bag-only flag, and per Item::disenchant_protected it
+    // guards disenchant ONLY — crafting a Keep'd item is normal, and those are
+    // exactly the items that get polished over and over. Hiding them dropped
+    // the item mid-craft out of its own picker, so they stay, marked instead.
     const siteSel = (inv.craft.options.find(o => o.selected) || {}).id;
+    const picked = new Set([$('itemA')?.value, $('itemB')?.value,
+      localStorage.getItem('craftItemA'), localStorage.getItem('craftItemB'), siteSel].filter(Boolean));
+    const craftable = (o, keep) => !o.label.includes('🔒') || !!keep?.has(o.id);
+    const keepIds = new Set(inv.bag.filter(i => i.protected).map(i => i.id));
+    inv.craft.options = inv.craft.options.filter(o => craftable(o, picked));
     // Candidates in preference order — read now, before the form below
     // replaces the selects.
     const prevA = [$('itemA')?.value, localStorage.getItem('craftItemA'), siteSel];
@@ -536,8 +551,9 @@
         if (o.group !== group) { if (group !== null) out += '</optgroup>'; group = o.group; if (group) out += `<optgroup label="${esc(group)}">`; }
         // The "Equipped" optgroup is the only equipped signal, and it's gone
         // in the sorted (flat) list and on the closed picker button. Fold it
-        // into the option text so it survives both.
-        out += `<option value="${o.id}">${esc(o.label)}${o.group === 'Equipped' ? ' — equipped' : ''}</option>`;
+        // into the option text so it survives both — same for Keep, which the
+        // site's own option markup doesn't mention at all.
+        out += `<option value="${o.id}">${esc(o.label)}${keepIds.has(o.id) ? ' 🔒' : ''}${o.group === 'Equipped' ? ' — equipped' : ''}</option>`;
       }
       return out + (group ? '</optgroup>' : '');
     };
@@ -1014,8 +1030,11 @@
   // Refresh now, then once more after the server settles the action.
   // Single coalesced reload shortly after an action (covers post-redirect lag);
   // rapid actions collapse into one, and out-of-order renders can't happen.
-  let refreshT = null;
-  const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, 500); };
+  let refreshT = null, freshInv = null; // freshInv: craftAct's settled read, consumed by the next loadNow
+  // 500ms buys the game time to settle a state we'd otherwise re-scrape; with
+  // freshInv there is nothing to fetch and nothing to wait for, so it renders
+  // on the next tick — still a timeout, so a burst of clicks coalesces.
+  const refresh = () => { clearTimeout(refreshT); refreshT = setTimeout(load, freshInv ? 0 : 500); };
 
   // Bag rendering with sort/group (applied to the cached bag; no refetch).
   let lastBag = [], lastEquipped = [], lastCap = null, meName = '';

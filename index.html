@@ -2038,7 +2038,11 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const dur = (ms) => { const h = ms / 3600e3; return h < 1 ? `${Math.max(1, Math.round(ms / 60e3))}m` : `${h.toFixed(1)}h`; };
   function diagLines() {
     const w = wsStats, ms = Math.max(1, Date.now() - w.since), hrs = ms / 3600e3;
-    const site = lastNet ? Object.entries(lastNet.paths || {}).sort((a, b) => b[1].size - a[1].size) : null;
+    // Action POSTs carry no response body (redirect:'manual'), so they'd sort
+    // last by size forever and fall off the end — they get their own line.
+    const all = lastNet ? Object.entries(lastNet.paths || {}) : null;
+    const site = all ? all.filter(([k]) => !k.startsWith('POST ')).sort((a, b) => b[1].size - a[1].size) : null;
+    const acts = all ? all.filter(([k]) => k.startsWith('POST ')) : [];
     const siteTotal = site ? site.reduce((n, [, v]) => n + v.size, 0) : 0;
     const out = [
       ['Measured Over', dur(ms)],
@@ -2054,7 +2058,15 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     ];
     if (site) {
       out.push(['Site Fetches', `${MB(siteTotal)} since bridge start`]);
-      for (const [p, v] of site.slice(0, 6)) out.push([`  ↳ ${p}`, `${MB(v.size)} · ${v.n}`]);
+      // Average round trip per path — the number that says how much of a craft's
+      // wait is the game answering, which nothing on this side can shorten.
+      for (const [p, v] of site.slice(0, 6)) out.push([`  ↳ ${p}`,
+        `${MB(v.size)} · ${v.n}${v.ms ? ` · ${Math.round(v.ms / v.n)}ms avg` : ''}`]);
+    }
+    if (acts.length) {
+      const n = acts.reduce((t, [, v]) => t + v.n, 0), tms = acts.reduce((t, [, v]) => t + v.ms, 0);
+      // A craft waits on this POST and then on the /inventory read above it.
+      out.push(['Site Actions', `${n} sent · ${Math.round(tms / n)}ms avg`]);
     }
     return out;
   }

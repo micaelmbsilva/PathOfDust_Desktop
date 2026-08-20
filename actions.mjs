@@ -14,7 +14,14 @@ const ORIGIN = 'https://adventure.lokati.net';
 // the page connects to it directly and never comes through here.
 // Sizes are String.length (UTF-16 code units), not bytes: near-exact for this
 // mostly-ASCII HTML, slightly under for non-ASCII display names.
+// `ms` is wall time from request to body-in-hand, summed — divided by `n` it's
+// the round trip a craft actually waits on, which is otherwise unknowable from
+// this side (a craft costs one POST plus one /inventory read, both counted).
 export const netStats = { since: Date.now(), paths: {} };
+const timed = (key, ms, size = 0) => {
+  const st = (netStats.paths[key] ||= { n: 0, size: 0, ms: 0 });
+  st.n++; st.size += size; st.ms += ms;
+};
 // Collapse per-player pages into one bucket so a roster browse doesn't produce
 // a hundred single-hit rows. Exported for the smoke-test.
 export const netKey = (path) => ('/' + String(path || '/').replace(/^\//, ''))
@@ -34,6 +41,7 @@ function cookieHeader() {
 // POST form-encoded fields to an endpoint. Returns {status, location, ok}.
 // redirect:'manual' so a 303 (the normal success path) isn't auto-followed.
 export async function post(endpoint, fields = {}) {
+  const t0 = Date.now();
   const res = await fetch(`${ORIGIN}/${endpoint.replace(/^\//, '')}`, {
     method: 'POST',
     headers: {
@@ -43,6 +51,8 @@ export async function post(endpoint, fields = {}) {
     body: new URLSearchParams(fields).toString(),
     redirect: 'manual',
   });
+  // No body to size — redirect:'manual' means the 303 is the whole response.
+  timed('POST ' + netKey(endpoint), Date.now() - t0);
   const location = res.headers.get('location');
   const n = redirectNote(location);
   return { status: res.status, location, ok: res.status < 400 && !n?.reason, ...(n || {}) };
@@ -83,13 +93,13 @@ export const firstBody = (text) => {
 // 5xx (incl. Cloudflare's 52x error pages when the game is down) throws so the
 // scrape routes 500 and the UI shows its downtime state instead of parsing junk.
 export async function getAuthed(path = '/') {
+  const t0 = Date.now();
   const res = await fetch(`${ORIGIN}/${path.replace(/^\//, '')}`, {
     headers: { 'Cookie': cookieHeader() },
   });
   if (res.status >= 500) throw new Error(`site down: ${res.status}`);
   const text = await res.text();
-  const st = (netStats.paths[netKey(path)] ||= { n: 0, size: 0 });
-  st.n++; st.size += text.length;
+  timed(netKey(path), Date.now() - t0, text.length);
   // Expired adv_session: the site 302s to its login page, which fetch follows —
   // so an "OK" response can actually be the logged-out page. Without this every
   // scrape silently parses as an empty inventory/character. res.redirected
