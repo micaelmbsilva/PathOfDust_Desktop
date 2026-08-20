@@ -2,44 +2,10 @@
 // math it mirrors (PathofDust source cites in game-model.json).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseMod, parseItem, sumBuckets, classScore, bestLoadout, rollTargets, trimOrder, emptyBuckets,
-  treeLayer, bestTree, pointsForLevel, searchBuild, nodeScored, MODELED_SPECIAL_KEYS, statPriority,
-  nodeMagnitude } from './advisor-core.mjs';
+import { classScore, emptyBuckets, treeLayer, bestTree, pointsForLevel, searchBuild,
+  nodeScored, MODELED_SPECIAL_KEYS, nodeMagnitude } from './advisor-core.mjs';
 
 const model = JSON.parse(readFileSync(new URL('./game-model.json', import.meta.url)));
-
-// parseMod: label precedence + flat/% max hp split
-assert.deepEqual(parseMod('+18% crit chance', model), { bucket: 'critChance', value: 0.18, perTier: 0.01 });
-assert.equal(parseMod('+40% crit dmg dealt', model).bucket, 'critMult'); // not swallowed by "dmg dealt"
-assert.equal(parseMod('+90% dmg dealt', model).bucket, 'inc');
-assert.equal(parseMod('+12% max hp', model).bucket, 'incLife');
-assert.equal(parseMod('+25 max hp', model).bucket, 'flatLife');
-assert.equal(parseMod('+25 max hp', model).value, 25);
-assert.equal(parseMod('+1.13% cold damage (evasion debuff chance)', model).bucket, 'elemCold');
-assert.equal(parseMod('mystery garbage', model), null);
-
-// parseItem: sacred implicit counted, unique implicit skipped, krangled → best 4
-const item = {
-  slot: 'Weapon', tier: 't100', primary: '+120 power', krangled: true,
-  mods: [
-    { t: '+200% evasion' }, { t: '+10% block chance' }, { t: '+300% dmg dealt' },
-    { t: '+100% crit chance' }, { t: '+2% intervene' }, { t: '+500% crit dmg dealt' },
-  ],
-  implicits: [{ t: 'Sacred: +224% splash' }, { t: 'Celestial Conversion: 10% extra hit' }],
-};
-const p = parseItem(item, model);
-// tier-equivalents: evasion 125, block 5, inc 100, critChance 100, intervene 2, critMult 100 → drop block+intervene
-assert.equal(p.block, 0);
-assert.equal(p.intervene, 0);
-assert.equal(p.evasion, 2.0);
-assert.equal(p.splash, 2.24); // sacred kept, outside the 4 cap
-assert.equal(p.weaponPower, 120);
-const noCelestial = parseItem({ slot: 'Helm', tier: 't10', mods: [], implicits: [{ t: 'Celestial Conversion: x' }] }, model);
-assert.deepEqual(noCelestial.splash, 0);
-// live scrape prefixes the implicit with a "✦ " glyph — must still count
-const glyph = parseItem({ slot: 'Helm', tier: 'Tier 99', mods: [], implicits: [{ t: '✦ Sacred: +307.39% lightning damage (dmg taken debuff chance)' }] }, model);
-assert.ok(Math.abs(glyph.elemLightning - 3.0739) < 1e-9);
-assert.equal(glyph.tier, 99);
 
 // classScore: overflow — raw 0.90 DR at cap 0.75 → eff 0.75, spill 0.15 into inc
 const g1 = { ...emptyBuckets(), dr: 0.90 };
@@ -76,57 +42,11 @@ assert.equal(s1.detail.eff.dr, 0.75);
   assert.ok(withDivine.interval <= s.interval); // divine stacks only speed it up
 }
 
-// trimOrder: budget 6 out of a 23-point order → prefix summing to 6
-const order = [{ n: 'A', r: 3 }, { n: 'B', r: 4 }, { n: 'C', r: 3 }];
-assert.deepEqual(trimOrder(order, 6), [{ n: 'A', r: 3 }, { n: 'B', r: 3 }]);
-
 // Monk ≥ same gear with no archetype advantage (archetype bonus is pure upside)
 {
   const g = { ...emptyBuckets(), evasion: 0.5 };
   assert.ok(classScore('Monk', g, 20, model).score >= classScore('Slayer', g, 20, model).score * 0.5);
 }
-
-// bestLoadout: strictly better bag item swapped in; unique bag item never used
-{
-  const equipped = [{ slot: 'Weapon', tier: 't10', primary: '+10 power', mods: [{ t: '+30% dmg dealt' }] }];
-  const bag = [
-    { slot: 'Weapon', tier: 't100', primary: '+100 power', mods: [{ t: '+300% dmg dealt' }] },
-    { slot: 'Helm', tier: 't50', unique: true, mods: [{ t: '+999% dmg dealt' }] },
-  ];
-  const r = bestLoadout(equipped, bag, 'Berserker', 30, model);
-  assert.equal(r.swaps.length, 1);
-  assert.equal(r.swaps[0].slot, 'weapon');
-  assert.ok(!r.items.some(i => i.unique));
-}
-
-// rollTargets: 4 picks per slot, sacred present, and every slot may now be
-// planned with an elemental (affix.rs 2026-08-20 widen — eligible_slots: None).
-{
-  const r = rollTargets('Berserker', 50, 100, model, null, null);
-  for (const slot of ['body', 'gloves', 'boots']) {
-    assert.equal(r.plan[slot].length, 4);
-  }
-  assert.equal(r.plan.weapon.length, 4);
-  // affix.rs is eligible_slots: None for every affix as of 2026-08-20, so no
-  // model entry may carry a `slots` restriction. (The key stays supported —
-  // a future affix can restrict itself again — it just isn't used today.)
-  assert.ok(model.affixes.every(a => !a.slots), 'no affix is slot-restricted any more');
-  assert.ok(r.sacred && r.sacred.avg > 0);
-  // empirical override: perTier 0.03 vs empirical 0.06 (>20% off) → avg uses 0.06
-  const r2 = rollTargets('Berserker', 50, 100, model, null, { 'dmg dealt': 0.06 });
-  const inc2 = [].concat(...Object.values(r2.plan)).find(pk => pk.match === 'dmg dealt');
-  if (inc2) assert.ok(Math.abs(inc2.avg - 6) < 1e-9);
-}
-
-// rollTargets: per-slot tier map — each slot's avg values use its own tier
-{
-  const r = rollTargets('Berserker', 50, { weapon: 100, helm: 50, body: 80, gloves: 80, boots: 80 }, model, null, null);
-  const w = r.plan.weapon.find(pk => pk.match === 'dmg dealt');
-  const h = r.plan.helm.find(pk => pk.match === 'dmg dealt');
-  if (w && h) assert.ok(Math.abs(w.avg / h.avg - 2) < 1e-9, `weapon ${w.avg} vs helm ${h.avg}`);
-  assert.ok(r.sacred.avg > 0);
-}
-
 
 // ---- passive tree layer (passive-tree.json, generated from passive_tree.rs) --
 const tree = JSON.parse(readFileSync(new URL('./passive-tree.json', import.meta.url)));
@@ -247,19 +167,6 @@ assert.equal(pointsForLevel(119), 30);
   assert.ok(spike && nodeScored(spike) === false, 'spikebarrier reflect must read as unscored');
   assert.ok(secondSkin && nodeScored(secondSkin) === true, 'secondskin is a modeled special');
   assert.ok(MODELED_SPECIAL_KEYS.has('grimresolve'));
-}
-
-// statPriority: ranked desc, weight normalized to 1.0, elementals on every slot
-{
-  const g = { ...emptyBuckets(), weaponPower: 1500, attackSpeed: 0.4 };
-  const sp = statPriority('Ranger', 119, 119, model, g, { nodes: tree.classes.Ranger, alloc: {} });
-  assert.ok(sp.global.length > 0);
-  assert.ok(sp.global.every((e, i) => i === 0 || sp.global[i - 1].gain >= e.gain), 'global not sorted desc');
-  assert.ok(Math.abs(sp.global[0].weight - 1) < 1e-9, 'top weight must be 1.0');
-  assert.ok(sp.bySlot.weapon.some((e) => e.match === 'lightning damage'), 'weapon can roll elementals');
-  // 2026-08-20 widen: the 5 elementals are eligible on every slot now.
-  assert.ok(sp.bySlot.boots.some((e) => e.match === 'lightning damage'), 'boots can roll elementals');
-  assert.equal(sp.bySlot.boots.length, sp.bySlot.weapon.length, 'every slot has the same affix pool');
 }
 
 // Elementalist golems (combat.rs spawn_golem/thunder_golem_redirect): Thunder

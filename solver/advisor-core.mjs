@@ -8,18 +8,20 @@
 // and the bespoke Special nodes that the character sheet's own combat_*
 // getters read by key. Special nodes that only exist inside simulate_battle
 // (procs, stacking buffs, shields, reflects, party broadcasts) are out of
-// scope for a closed-form score — see UNMODELED_NOTE.
+// scope for a closed-form score — see the note below.
 
 const BUCKETS = ['dr', 'block', 'evasion', 'intervene', 'inc', 'critChance', 'critMult',
   'splash', 'linger', 'leech', 'incLife', 'flatLife',
   'elemCold', 'elemFire', 'elemLightning', 'elemDivine', 'elemChaos'];
 const ELEMS = ['elemCold', 'elemFire', 'elemLightning', 'elemDivine', 'elemChaos'];
 
-export const UNMODELED_NOTE = 'Per-fight mechanics (Frenzy/Twin Strikes multi-strike, shields, '
-  + 'reflects, stacking speed/damage buffs, marks and curses, Retaliation counters, Bloodpact, '
-  + 'FlickerStrike) are real in combat but not in this closed-form score — treat them as upside. '
-  + 'Real bosses also deal unmitigable boss_pierce_pct damage (bypasses evasion/block/DR, ramps with '
-  + 'stage) not in eHP here — so eHP is optimistic against high-stage bosses.';
+// Not in this score, and worth remembering when reading its output: per-fight
+// mechanics (Frenzy/Twin Strikes multi-strike, shields, reflects, stacking
+// speed/damage buffs, marks and curses, Retaliation counters, Bloodpact,
+// FlickerStrike) are real in combat but score 0 here — treat them as upside.
+// Real bosses also deal unmitigable boss_pierce_pct damage (bypasses
+// evasion/block/DR, ramps with stage) that eHP ignores, so eHP is optimistic
+// against high-stage bosses.
 
 // Rust PassiveStat → the bucket name used here.
 const TREE_STAT = {
@@ -57,71 +59,6 @@ export function emptyBuckets() {
   const b = { attackSpeed: 0, weaponPower: 0, bodyPower: 0, helmPower: 0, helmCooldownMs: 0, unparsed: 0 };
   for (const k of BUCKETS) b[k] = 0;
   return b;
-}
-
-// "+18% crit chance" → { bucket, value } (fraction for %, raw for flat). Null if unknown.
-export function parseMod(text, model) {
-  const t = String(text || '').toLowerCase().replace(/^sacred:\s*/, '');
-  const m = t.match(/([\d.]+)\s*(%?)/);
-  if (!m) return null;
-  const value = parseFloat(m[1]);
-  // Longest-match-wins ordering is baked into model.affixes (crit dmg dealt
-  // before dmg dealt, etc.) — first hit is the right one.
-  for (const a of model.affixes) {
-    if (!t.includes(a.match)) continue;
-    if (a.flatBucket && !m[2]) return { bucket: a.flatBucket, value, perTier: a.flatPerTier };
-    return { bucket: a.bucket, value: m[2] ? value / 100 : value, perTier: a.perTier };
-  }
-  return null;
-}
-
-// One item → buckets. Enforces the ruleset: krangled items keep only their
-// best 4 crafted mods (by tier-equivalents); non-Sacred implicits (uniques)
-// are skipped entirely.
-export function parseItem(item, model) {
-  const out = emptyBuckets();
-  if (!item) return out;
-  const slot = String(item.slot || '').toLowerCase();
-  out.tier = +String(item.tier || '').replace(/\D/g, '') || 0;
-  let mods = (Array.isArray(item.mods) ? item.mods : [])
-    .map(m => parseMod(m && m.t, model)).filter(Boolean);
-  if (item.krangled && mods.length > model.rules.modCap) {
-    mods = mods.sort((a, z) => (z.value / z.perTier) - (a.value / a.perTier))
-      .slice(0, model.rules.modCap);
-  }
-  for (const i of (Array.isArray(item.implicits) ? item.implicits : [])) {
-    // The scraped line carries a "✦ " glyph prefix — match anywhere, not ^.
-    if (!/sacred:/i.test(String(i && i.t || ''))) { continue; }
-    const p = parseMod(i.t, model);
-    if (p) mods.push(p);
-  }
-  for (const p of mods) out[p.bucket] += p.value;
-  out.unparsed = (Array.isArray(item.mods) ? item.mods : []).filter(m => m && m.t && !parseMod(m.t, model)).length;
-  const primary = String(item.primary || '');
-  const pv = parseFloat((primary.match(/([\d.]+)/) || [])[1] || 0);
-  if (/glove/.test(slot)) out.attackSpeed = /%/.test(primary) ? pv / 100 : pv;
-  else if (/weapon/.test(slot)) out.weaponPower = pv;
-  else if (/body/.test(slot)) out.bodyPower = pv;
-  else if (/helm/.test(slot)) {
-    // Helm power is dps-per-stack, gained every cooldown_ms (character.rs
-    // helm_skill) — the cooldown curve is tier-driven, so derive it here.
-    out.helmPower = pv;
-    const c = model.rules.cooldownCurves.helm;
-    out.helmCooldownMs = Math.max(c.floorMs, c.baseMs - out.tier * c.perTierMs);
-  }
-  return out;
-}
-
-export function sumBuckets(items) {
-  const total = emptyBuckets();
-  for (const it of items) {
-    for (const k of Object.keys(total)) {
-      // Cooldown is a rate, not a quantity — the last helm seen wins.
-      if (k === 'helmCooldownMs') total[k] = it[k] || total[k];
-      else total[k] += it[k] || 0;
-    }
-  }
-  return total;
 }
 
 function archBonus(cls, level, model) {
@@ -422,12 +359,13 @@ function prereqs(byKey, alloc, key, want) {
 // rather than single ranks — a Specialization's 4th point grows nothing on
 // its own, so a rank-at-a-time greedy could never reach any Modifier.
 //
-// `spendAll` (advisor respec plans): once no positive-gain bundle remains, keep
-// allocating the max-gain affordable bundle anyway — preferring harmless nodes
-// (gain 0, incl. inert Skill/root nodes) over strictly harmful ones — until the
-// whole point budget is spent or the tree is full. The theoretical optimizers
-// (searchBuild) leaves it false: it wants the best build, not
-// a fully-drained tree.
+// `spendAll`: once no positive-gain bundle remains, keep allocating the max-gain
+// affordable bundle anyway — preferring harmless nodes (gain 0, incl. inert
+// Skill/root nodes) over strictly harmful ones — until the whole point budget is
+// spent or the tree is full. That is what a respec plan wants: a player who has
+// the points will spend them. searchBuild leaves it false, because it wants the
+// best build rather than a fully-drained tree. Nothing in the app passes true
+// today — only the suite covers it — so it is an option, not live behaviour.
 export function bestTree(cls, nodes, g, level, model, points, objective = (s) => s.score, spendAll = false) {
   const byKey = new Map((nodes || []).map(n => [n.key, n]));
   const alloc = {};
@@ -460,123 +398,6 @@ export function bestTree(cls, nodes, g, level, model, points, objective = (s) =>
     left -= chosen.cost;
   }
   return { alloc, spent: points - left, value: base };
-}
-
-// Greedy bag-swap: for each bag item, take it over the equipped piece in its
-// slot when the class score improves. Returns chosen items + swap advice.
-export function bestLoadout(equipped, bag, cls, level, model, tree) {
-  const chosen = new Map(); // slot → {item, parsed}
-  for (const it of equipped || []) {
-    const slot = String(it.slot || '').toLowerCase();
-    chosen.set(slot, { item: it, parsed: parseItem(it, model) });
-  }
-  const swaps = [];
-  const score = () => classScore(cls, sumBuckets([...chosen.values()].map(c => c.parsed)), level, model, tree).score;
-  let cur = score();
-  for (const it of bag || []) {
-    if (it && it.unique) continue; // excluded ruleset
-    const slot = String(it.slot || '').toLowerCase();
-    if (!slot) continue;
-    const prev = chosen.get(slot);
-    chosen.set(slot, { item: it, parsed: parseItem(it, model) });
-    const s = score();
-    if (s > cur) { cur = s; swaps.push({ slot, use: it, over: prev && prev.item }); }
-    else if (prev) chosen.set(slot, prev);
-    else chosen.delete(slot);
-  }
-  return { items: [...chosen.values()].map(c => c.item), buckets: sumBuckets([...chosen.values()].map(c => c.parsed)), swaps, score: cur };
-}
-
-// Derived craft plan: per slot, the 4 crafted mods (+1 sacred wish across the
-// set) with the biggest marginal class-score gain of one average roll. `tier`
-// is a number, or a {slot: tier} map so each slot plans at the tier of the
-// base item actually being crafted on (mods roll at ITEM tier). `empirical`
-// overrides a model perTier when the two disagree by >20% — the hook for a
-// live balance-toml override, when a caller has measured rates to pass in.
-export function rollTargets(cls, level, tier, model, baseBuckets, empirical, tree, objective = (s) => s.score) {
-  const tierOf = (s) => (tier && typeof tier === 'object') ? (+tier[s] || 1) : (+tier || 1);
-  const perTier = (a) => {
-    const emp = empirical && empirical[a.match];
-    return (emp && Math.abs(emp - a.perTier) / a.perTier > 0.2) ? emp : a.perTier;
-  };
-  const g = { ...emptyBuckets(), ...(baseBuckets || {}) };
-  const slots = ['weapon', 'helm', 'body', 'gloves', 'boots'];
-  const plan = Object.fromEntries(slots.map(s => [s, []]));
-  const gain = (a, t, mult) => { // % variant targeted when crafting (flat max hp shares its label)
-    const before = objective(classScore(cls, g, level, model, tree));
-    const v = perTier(a) * t * (mult || 1);
-    g[a.bucket] += v;
-    const after = objective(classScore(cls, g, level, model, tree));
-    g[a.bucket] -= v;
-    return after - before;
-  };
-  for (const slot of slots) {
-    const t = tierOf(slot);
-    for (let pick = 0; pick < model.rules.modCap; pick++) {
-      const eligible = model.affixes.filter(a =>
-        (!a.slots || a.slots.includes(slot)) && !plan[slot].some(p => p.match === a.match));
-      let best = null, bestGain = -1;
-      for (const a of eligible) {
-        const d = gain(a, t);
-        if (d > bestGain) { bestGain = d; best = a; }
-      }
-      if (!best) break;
-      plan[slot].push({ match: best.match, avg: perTier(best) * t });
-      g[best.bucket] += perTier(best) * t;
-    }
-  }
-  // One sacred wish: any affix, any slot, 1.38× an average max roll, dup
-  // allowed — valued at the best tier among the slots.
-  const maxT = Math.max(...slots.map(tierOf));
-  let sacred = null, sacredGain = -1;
-  for (const a of model.affixes) {
-    const d = gain(a, maxT, model.rules.sacredMult);
-    if (d > sacredGain) { sacredGain = d; sacred = { match: a.match, avg: perTier(a) * maxT * model.rules.sacredMult }; }
-  }
-  return { plan, sacred };
-}
-
-// Stat priority: rank every craftable affix by the marginal class-score gain of
-// ONE average roll on top of the current build, so when a veil can't land the
-// exact mod you know what to chase instead. `global` values each affix at its
-// best eligible slot; `bySlot` values it per slot (no affix is slot-restricted
-// today — the 5 elementals were, until the 2026-08-20 widen — but the model
-// keeps `slots` so a future one can be). Mirrors rollTargets' gain(). `tier` is a number
-// or a {slot:tier} map. Each list is sorted desc with weight = gain/topGain
-// (1.0 = strongest); `capped` flags an affix whose marginal gain has gone
-// near-zero (a defense already past its cap, only paying through overflow).
-export function statPriority(cls, level, tier, model, baseBuckets, tree, objective = (s) => s.score) {
-  const tierOf = (s) => (tier && typeof tier === 'object') ? (+tier[s] || 1) : (+tier || 1);
-  const g = { ...emptyBuckets(), ...(baseBuckets || {}) };
-  const slots = ['weapon', 'helm', 'body', 'gloves', 'boots'];
-  const base = objective(classScore(cls, g, level, model, tree));
-  const gainOf = (a, t) => {
-    const v = a.perTier * t;
-    g[a.bucket] += v;
-    const after = objective(classScore(cls, g, level, model, tree));
-    g[a.bucket] -= v;
-    return after - base;
-  };
-  const withWeights = (list) => {
-    list.sort((x, z) => z.gain - x.gain);
-    const top = Math.max(1e-12, list[0] ? list[0].gain : 0);
-    for (const e of list) { e.weight = Math.max(0, e.gain) / top; e.capped = e.gain <= top * 0.01; }
-    return list;
-  };
-  const bySlot = {};
-  for (const slot of slots) {
-    const t = tierOf(slot);
-    bySlot[slot] = withWeights(model.affixes
-      .filter(a => !a.slots || a.slots.includes(slot))
-      .map(a => ({ match: a.match, gain: gainOf(a, t), slots: a.slots || null })));
-  }
-  // Global: each affix at whichever eligible slot scores it highest.
-  const best = new Map();
-  for (const slot of slots) for (const e of bySlot[slot]) {
-    const cur = best.get(e.match);
-    if (!cur || e.gain > cur.gain) best.set(e.match, { match: e.match, gain: e.gain, slots: e.slots });
-  }
-  return { global: withWeights([...best.values()]), bySlot };
 }
 
 // Best reachable build for one class under the modeled ruleset (5 Perfect
@@ -677,17 +498,4 @@ export function searchBuild(cls, nodes, level, tier, model, opts = {}) {
     if (settled) break;
   }
   return { cls, alloc, gear, score: classScore(cls, gear.g, level, model, { nodes, alloc }), dropped: gear.dropped };
-}
-
-// Passive order trimmed to the level's point budget (1 + floor(level/4)).
-export function trimOrder(order, points) {
-  const out = [];
-  let left = points;
-  for (const o of order || []) {
-    if (left <= 0) break;
-    const r = Math.min(+o.r || 0, left);
-    if (r > 0) out.push({ n: o.n, r });
-    left -= r;
-  }
-  return out;
 }
