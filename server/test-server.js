@@ -1,7 +1,7 @@
-// Smallest checks that fail if the scrapers stop understanding the game's markup,
-// or if posted findings stop being validated. Run: node test-server.js
+// Smallest checks that fail if the scrapers stop understanding the game's markup.
+// Run: node test-server.js
 const assert = require('assert');
-const { parsePatchNotes, badFindings, parseWiki } = require('./index.js');
+const { parsePatchNotes, parseWiki } = require('./index.js');
 
 const PATCH_HTML = `
 <div class="card"><h1>Patch Notes</h1></div>
@@ -56,26 +56,4 @@ assert.deepStrictEqual(bulwark.specializations[1].modifiers.map((m) => m.name), 
 assert.ok(bulwark.specializations[0].modifiers[0].text.includes('additional second'), 'tooltip carries the effect text');
 assert.strictEqual(parseWiki('<div>not the wiki</div>').Warrior, undefined, 'unknown markup parses to nothing');
 
-// --- posted findings are shape-checked before they can reach the watchlist ---
-const ok = { summary: 's', interactions: [{ title: 'T', text: 'X', impact: 'high', classes: ['Monk'], rolls: ['Block'] }] };
-assert.strictEqual(badFindings(ok), null, 'a well-formed body passes');
-assert.strictEqual(badFindings({ interactions: [{ title: 'T', text: 'X' }] }), null, 'optional fields stay optional');
-assert.ok(badFindings(null), 'null body rejected');
-assert.ok(badFindings([]), 'array body rejected');
-assert.ok(badFindings({ interactions: [] }), 'empty interactions rejected — it would blank the watchlist');
-assert.ok(badFindings({ interactions: [{ text: 'X' }] }), 'missing title rejected');
-assert.ok(badFindings({ interactions: [{ title: 'T' }] }), 'missing text rejected');
-assert.ok(badFindings({ interactions: [{ title: 'T', text: 'X', impact: 'huge' }] }), 'unknown impact rejected');
-assert.ok(badFindings({ interactions: [{ title: 'T', text: 'X', classes: 'Monk' }] }), 'classes must be an array');
-assert.ok(badFindings({ ...ok, patterns: 'nope' }), 'patterns must be an array');
-assert.ok(badFindings({ interactions: [{ title: ' '.repeat(300), text: 'X' }] }), 'whitespace title rejected, not stored blank');
-assert.ok(badFindings({ interactions: [{ title: 'T', text: 'X', classes: ['Monk', ' '] }] }), 'blank class entry rejected');
-assert.ok(badFindings({ interactions: [{ title: 'T', text: 'X', rolls: [42] }] }), 'non-string roll rejected');
-// Oversized lists are refused, not truncated — a silent trim would delete coverage.
-const many = (n) => Array.from({ length: n }, (_, k) => ({ title: 'T' + k, text: 'X' }));
-assert.strictEqual(badFindings({ interactions: many(200) }), null, '200 interactions is the limit, not over it');
-assert.ok(badFindings({ interactions: many(201) }), '201 interactions rejected');
-assert.ok(badFindings({ ...ok, patterns: many(101) }), '101 patterns rejected');
-assert.ok(badFindings({ interactions: [{ title: 'T', text: 'X', classes: Array(21).fill('Monk') }] }), '21 classes rejected');
-
-console.log('parsers + wiki + findings validation OK');
+console.log('parsers + wiki OK');

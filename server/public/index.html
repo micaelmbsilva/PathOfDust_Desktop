@@ -1,4 +1,4 @@
-<!-- Path of Dust — public ladder & builds. Single file, no build step, no deps.
+<!-- Path of Dust — public ladder & class trees. Single file, no build step, no deps.
      Served by server/index.js (express.static). Data: /api/ladder, /api/build/:name.
      Everything rendered here is player-supplied → DOM APIs only, no innerHTML. -->
 <!doctype html>
@@ -73,7 +73,7 @@
   .passives li { padding: 2px 0; }
   .passives .rank { color: var(--muted); }
 
-  /* Builds, OP watchlist, tree browser */
+  /* Tree browser */
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { display: inline-block; font-size: 12px; color: var(--ink-2); background: rgba(255,255,255,0.04);
           border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
@@ -212,10 +212,10 @@ function el(tag, attrs, ...kids) {
     n.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
   return n;
 }
-// Keyed pages are tabs of the admin panel, so the nav belongs to view() itself —
-// a page that re-renders in place (the advisor's role chips) would otherwise
-// drop it. adminNav is defined further down; view only calls it at render time.
-const KEYED_ROUTE = /^#\/(admin|feedback|watchlist|intel|advisor\/)/;
+// The keyed page's nav belongs to view() itself — a page that re-renders in place
+// would otherwise drop it. adminNav is defined further down; view only calls it
+// at render time.
+const KEYED_ROUTE = /^#\/feedback/;
 const view = (...kids) => {
   app.replaceChildren(el('div', null, kids));
   if (KEYED_ROUTE.test(location.hash)) app.prepend(adminNav());
@@ -241,12 +241,11 @@ function barChart(rows, color) { // rows: [{label: string|Node, count, num?}]
 }
 const classLink = (a) => el('a', { href: '#/class/' + encodeURIComponent(str(a)) }, str(a));
 
-// Static curated data (builds.json = suggestions + OP watchlist, passives.json = full trees)
+// Static curated data (passives.json = the full class trees, wiki-scraped)
 let STATIC;
 function staticData() {
   const j = (u) => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null);
-  return STATIC || (STATIC = Promise.all([j('builds.json'), j('passives.json')])
-    .then(([builds, passives]) => ({ builds, passives })));
+  return STATIC || (STATIC = j('passives.json').then((passives) => ({ passives })));
 }
 
 // Role-aware "power" score: LVL alone doesn't explain who's on top.
@@ -404,7 +403,6 @@ function agoText(iso) {
   return `${d.toLocaleString()} (${rel})`;
 }
 // Just the relative half — what a stat tile has room for.
-const agoShort = (iso) => agoText(iso).replace(/^.*\((.*)\)$/, '$1');
 const plural = (n, one, suffix) => `${n} ${one}${n === 1 ? '' : (suffix || 's')}`;
 
 // Watermark footer on every page: deploy rev, app interface rev, and data freshness.
@@ -441,7 +439,7 @@ function rareBoard(players, passives) {
 }
 
 async function ladder() {
-  const [r, { builds, passives }] = await Promise.all([fetch('api/ladder'), staticData()]);
+  const [r, { passives }] = await Promise.all([fetch('api/ladder'), staticData()]);
   if (!r.ok) throw new Error('ladder ' + r.status);
   const { players, byClass, levels, total } = await r.json();
   view(
@@ -462,65 +460,18 @@ async function ladder() {
     null); // watermark footer is global, see renderFoot()
 }
 
-// Hidden routes are keyed: append ?key=<SITE_KEY> once (e.g. #/watchlist?key=…),
-// it's remembered locally and stripped from the URL. Server enforces it for the
-// watchlist data; the advisor shares the same gate.
-// Two keys: the site key opens the operator pages, the owner key opens the
-// investigation on top of that (?owner=… once, same capture as ?key=…).
+// The operator page is keyed: append ?key=<SITE_KEY> once (e.g. #/feedback?key=…),
+// it's remembered locally and stripped from the URL. The server enforces it too.
 const siteKey = () => localStorage.getItem('pod.key') || '';
-const ownerKey = () => localStorage.getItem('pod.owner') || '';
-// The owner key rides in a header, not the query string — it is the privileged
-// one, and query strings end up in proxy and access logs.
-const ownerFetch = (path, opts) => fetch(path, { ...opts, headers: { 'x-pod-owner': ownerKey() } });
 const keyDenied = () => view(el('p', { class: 'status' }, 'This page needs a key — open it once with ?key=… appended (owner pages: ?owner=…).'));
-const ownerDenied = () => view(el('p', { class: 'status' }, 'Owner-only. Open once with ?owner=… appended.'));
 
-// The keyed pages are one admin panel: route() prepends this bar to each of
-// them, so they read as tabs rather than as unrelated hidden URLs.
-const ADMIN_TABS = [['#/admin', 'Overview'], ['#/feedback', 'Feedback'],
-  ['#/watchlist', 'Watchlist', true], ['#/intel', 'Investigation', true]];
+// #/feedback is the only keyed page; route() prepends this bar to it so it has
+// a way back to the ladder.
 const adminNav = () => el('div', { class: 'chips adminnav' },
-  ADMIN_TABS.filter(([, , owner]) => !owner || ownerKey()).map(([href, label]) => el('a',
-    { class: 'chip' + (location.hash === href ? ' on' : ''), href }, label)),
   el('a', { class: 'chip', href: '#/' }, '← Ladder'));
 
-// Hidden route: #/watchlist — the OP interactions list, no nav links to it.
-// Owner-only (x-pod-owner header, like #/intel). Filterable by type and class.
-async function watchlist() {
-  const r = await ownerFetch('api/watchlist');
-  if (r.status === 403) return keyDenied();
-  if (!r.ok) throw new Error('watchlist ' + r.status);
-  const { interactions } = await r.json();
-  const items = arr(interactions);
-  const types = [...new Set(items.map(i => str(i.type)).filter(Boolean))];
-  const classes = [...new Set(items.flatMap(i => arr(i.classes).map(str)))].sort();
-  let typeF = null, clsF = null;
-  const wrap = el('div', null);
-  function render() {
-    const shown = items.filter(i => (!typeF || str(i.type) === typeF) && (!clsF || arr(i.classes).map(str).includes(clsF)));
-    const chip = (label, on, fn) => { const e = el('span', { class: 'chip' + (on ? ' on' : '') }, label); e.onclick = fn; return e; };
-    wrap.replaceChildren(
-      el('div', { class: 'chips', style: 'margin:0 0 8px' }, [
-        chip('All types', !typeF, () => { typeF = null; render(); }),
-        ...types.map(t => chip(t, typeF === t, () => { typeF = typeF === t ? null : t; render(); }))]),
-      el('div', { class: 'chips', style: 'margin:0 0 14px' }, [
-        chip('All classes', !clsF, () => { clsF = null; render(); }),
-        ...classes.map(c => chip(c, clsF === c, () => { clsF = clsF === c ? null : c; render(); }))]),
-      shown.length
-        ? el('div', { class: 'stack' }, shown.map(i => el('div', { class: 'card' },
-            el('div', { class: 'bname' }, str(i.title)),
-            el('div', { class: 'chips', style: 'margin:6px 0 0' },
-              i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
-              arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c)))),
-            el('p', null, str(i.text)))))
-        : el('p', { class: 'status' }, 'Nothing matches this filter.'));
-  }
-  render();
-  view(el('h1', null, 'OP interactions watchlist'), wrap); // back link lives in the admin nav
-}
-
 // Hidden route: #/feedback — operator inbox for in-app feedback plus recent app
-// errors. Same key gate as the watchlist; no nav links to it.
+// errors. No nav links to it.
 async function feedbackData(since) {
   const r = await fetch('api/feedback?key=' + encodeURIComponent(siteKey())
     + (since == null ? '' : '&since=' + since));
@@ -570,162 +521,6 @@ async function checkFeedback() {
   } catch {}
 }
 
-// Hidden route: #/intel — the investigation console. Rescrapes every public
-// source on demand and shows the newest findings; the analysis itself runs in
-// Claude Code (the pod-investigate skill reads api/dossier and posts back to
-// api/findings), so nothing here spends API credit. Keyed, no nav links to it.
-async function intelData() {
-  if (!ownerKey()) return null;
-  const r = await ownerFetch('api/intel');
-  if (r.status === 403) return null;
-  if (!r.ok) throw new Error('intel ' + r.status);
-  return r.json();
-}
-
-async function intel() {
-  const d = await intelData();
-  if (!d) return ownerDenied();
-  const wrap = el('div', null);
-  const paint = (data) => {
-    const latest = data.latest;
-    const btn = el('button', data.scraping ? { disabled: 'disabled' } : null,
-      data.scraping ? 'Pulling…' : 'Pull fresh game data');
-    btn.onclick = async () => {
-      btn.disabled = true;
-      await ownerFetch('api/rescrape', { method: 'POST' });
-      poll();
-    };
-    // Wrapped in one element: replaceChildren stringifies arrays and nulls,
-    // el() flattens them.
-    wrap.replaceChildren(el('div', null, [
-      el('div', { class: 'card' },
-        el('div', { class: 'lvrow' }, btn,
-          el('span', { class: 'sub', style: 'margin:0' },
-            data.scraping ? 'walking the roster, wiki and patch notes — a couple of minutes'
-              : data.lastScrape ? `game data last pulled ${agoText(data.lastScrape)}`
-              : 'no scrape has completed yet')),
-        // Each scrape logs and swallows its own failure, so name what is missing
-        // rather than letting an analysis run against a half-empty dossier.
-        (data.sources && (!data.sources.wikiLoaded || !data.sources.patchNoteDates))
-          ? el('p', { style: 'margin:12px 0 0' }, '⚠ ' + [
-              !data.sources.wikiLoaded && 'the wiki has not loaded',
-              !data.sources.patchNoteDates && 'no patch notes have loaded',
-            ].filter(Boolean).join(' and ') + ' — the dossier is incomplete until a pull succeeds.') : null,
-        el('p', { class: 'sub', style: 'margin:12px 0 0' },
-          'Then run /pod-investigate in Claude Code: it reads the compiled dossier, hunts broken and OP interactions, and posts the findings back here — they become the watchlist and steer the advisor.'),
-        latest ? el('p', { style: 'margin:12px 0 0' }, str(latest.summary)) : null,
-        latest ? el('p', { class: 'sub', style: 'margin:8px 0 0' },
-          `last investigation ${agoText(latest.ts)} · ${str(latest.model)}`)
-          : el('p', { class: 'sub', style: 'margin:8px 0 0' }, 'No investigation yet — the watchlist is still the hand-curated file.')),
-      latest && arr(latest.interactions).length ? [
-        el('h2', null, `Interactions (${arr(latest.interactions).length})`),
-        el('div', { class: 'stack' }, arr(latest.interactions).map(i => el('div', { class: 'card' },
-          el('div', { class: 'bname' }, str(i.title)),
-          el('div', { class: 'chips', style: 'margin:6px 0 0' },
-            el('span', { class: 'chip' + (str(i.impact) === 'high' ? ' on' : '') }, str(i.impact)),
-            i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
-            arr(i.classes).map(c => el('a', { class: 'chip', href: '#/class/' + encodeURIComponent(str(c)) }, str(c))),
-            arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
-          el('p', null, str(i.text)),
-          str(i.evidence) ? el('p', { class: 'sub', style: 'margin:8px 0 0' }, 'evidence: ' + str(i.evidence)) : null))),
-      ] : null,
-      latest && arr(latest.patterns).length ? [
-        el('h2', null, 'Patterns'),
-        el('div', { class: 'stack' }, arr(latest.patterns).map(p => el('div', { class: 'card' },
-          el('div', { class: 'bname' }, str(p.title)),
-          el('p', null, str(p.text)),
-          str(p.evidence) ? el('p', { class: 'sub', style: 'margin:8px 0 0' }, 'evidence: ' + str(p.evidence)) : null))),
-      ] : null,
-      arr(data.patchNotes).length ? [
-        el('h2', null, 'Patch notes'),
-        el('div', { class: 'stack' }, arr(data.patchNotes).slice(0, 8).map(dt => el('div', { class: 'card' },
-          el('div', { class: 'bname' }, str(dt.date)),
-          arr(dt.entries).map(e => el('p', null, el('b', null, str(e.title)), ' — ', str(e.text)))))),
-      ] : null,
-    ]));
-  };
-  // Poll only while a scrape is in flight, and only while this page is open.
-  async function poll() {
-    if (location.hash !== '#/intel') return;
-    try {
-      const data = await intelData();
-      if (!data) return;
-      paint(data);
-      if (data.scraping) setTimeout(poll, 10000);
-    } catch {}
-  }
-  paint(d);
-  if (d.scraping) setTimeout(poll, 10000);
-  view(el('h1', null, 'Investigation'), wrap);
-}
-
-// Hidden route: #/admin — the panel's front page. Every number here is a link
-// to the tab that acts on it; nothing is edited from this view.
-async function admin() {
-  const key = encodeURIComponent(siteKey());
-  const seen = +localStorage.getItem('pod.fbseen') || 0;
-  const owner = ownerKey();
-  const [allR, unreadR, intelR, watchR] = await Promise.all([
-    fetch('api/feedback?key=' + key + '&since=0'),
-    fetch('api/feedback?key=' + key + '&since=' + seen),
-    // Investigation and watchlist are owner-only: without that key the panel
-    // simply doesn't mention them, rather than showing "unavailable" tiles.
-    owner ? ownerFetch('api/intel') : Promise.resolve({ ok: false, status: 403 }),
-    owner ? ownerFetch('api/watchlist') : Promise.resolve({ ok: false, status: 403 })]);
-  if (allR.status === 403) return keyDenied();
-  // null means the endpoint failed — say so rather than showing a confident zero.
-  const body = async (r) => r.ok ? r.json().catch(() => null) : null;
-  const [all, unreadJ, intel, watch] = await Promise.all([allR, unreadR, intelR, watchR].map(body));
-  const total = all && +all.unread || (all ? 0 : null);
-  const unread = unreadJ && +unreadJ.unread || (unreadJ ? 0 : null);
-  const items = watch ? arr(watch.interactions) : null;
-  const latest = intel && intel.latest;
-  const byImpact = ['high', 'medium', 'low']
-    .map(k => [k, arr(items).filter(i => str(i.impact) === k).length]).filter(([, n]) => n);
-
-  // Jump straight to a player's advisor page — the one keyed view that needs an
-  // argument, so it can't be a plain tab.
-  const who = el('input', { type: 'text', placeholder: 'player name', class: 'wide' });
-  const go = el('button', null, 'Open advisor');
-  const open = () => { if (who.value.trim()) location.hash = '#/advisor/' + encodeURIComponent(who.value.trim()); };
-  go.onclick = open;
-  who.onkeydown = (e) => { if (e.key === 'Enter') open(); };
-
-  const tile = (href, label, big, sub) => el('a', { class: 'card tile', href },
-    el('div', { class: 'sub', style: 'margin:0' }, label),
-    el('div', { class: 'big' }, big),
-    el('div', { class: 'sub', style: 'margin:6px 0 0' }, sub));
-
-  view(
-    el('h1', null, 'Admin'),
-    el('p', { class: 'sub' }, 'Admin tools in one place — watchlist, advisor and investigation need the owner key (?owner=…).'),
-    el('div', { class: 'grid2' },
-      tile('#/feedback', 'Feedback',
-        total == null ? '—' : unread ? `${unread} new` : String(total),
-        total == null ? 'unavailable' : unread ? `${total} total` : total ? 'all read' : 'nothing yet'),
-      !owner ? null : tile('#/watchlist', 'Watchlist', items ? String(items.length) : '—',
-        !items ? 'unavailable'
-          : byImpact.length ? byImpact.map(([k, n]) => `${n} ${k}`).join(' · ') : 'hand-curated file'),
-      !owner ? null : tile('#/intel', 'Investigation', latest ? agoShort(latest.ts) : '—',
-        !intel ? 'unavailable'
-          : latest ? `${plural(arr(latest.interactions).length, 'interaction')} · ${plural(arr(latest.patterns).length, 'pattern')}`
-          : 'no investigation run yet'),
-      !owner ? null : tile('#/intel', 'Game data',
-        !intel ? '—' : intel.scraping ? 'pulling…' : intel.lastScrape ? agoShort(intel.lastScrape) : '—',
-        !intel ? 'unavailable'
-          : !intel.sources ? 'source status unknown'
-          : (!intel.sources.wikiLoaded || !intel.sources.patchNoteDates) ? '⚠ wiki or patch notes missing'
-          : `wiki loaded · ${plural(intel.sources.patchNoteDates, 'patch-note date')}`)),
-    !owner ? null : [el('h2', null, 'Advisor'),
-      el('div', { class: 'card' },
-        el('div', { class: 'lvrow' }, who, go),
-        el('p', { class: 'sub', style: 'margin:0' },
-          'Scores every class against that player\'s actual gear, including the watchlist findings that name it.'))],
-    owner && latest && str(latest.summary) ? [el('h2', null, 'Latest investigation'),
-      el('div', { class: 'card' }, el('p', { style: 'margin:0' }, str(latest.summary)),
-        el('p', { class: 'sub', style: 'margin:8px 0 0' }, `${agoText(latest.ts)} · ${str(latest.model)}`))] : null);
-}
-
 function itemCard(it) {
   const tier = str(it.tier).replace(/^Tier\s*/i, ''); // ping/scrape send "Tier 58"
   return el('div', { class: 'card item' },
@@ -767,466 +562,7 @@ async function build(name) {
           el('span', { class: 'rank' }, ` — T${str(n.tier)} · rank ${str(n.rank)}`))))] : null);
 }
 
-// Passive points by level (fitted empirically: lv67=17, lv84/85=22, lv91=23).
-const PTS = (lv) => 1 + Math.floor(Math.max(1, +lv || 1) / 4);
-
-function buildCards(archetype, builds) {
-  const b = builds && builds.classes && builds.classes[archetype];
-  if (!b || !arr(b.builds).length) return null;
-  const input = el('input', { type: 'number', min: 1, max: 120, value: localStorage.getItem('pod.lv') || 85 });
-  const holder = el('div', { class: 'stack' });
-  function render() {
-    const pts = PTS(input.value);
-    localStorage.setItem('pod.lv', input.value);
-    holder.replaceChildren(...arr(b.builds).map(x => {
-      let used = 0;
-      const steps = arr(x.order).map(st => {
-        const from = used; used += (+st.r || 0);
-        const state = used <= pts ? 'done' : from < pts ? 'part' : 'todo';
-        return el('li', { class: 'step ' + state },
-          el('b', null, str(st.n)), ` ${state === 'done' ? st.r : state === 'part' ? pts - from : 0}/${str(st.r)}`,
-          state !== 'done' ? el('span', { class: 'lvat' }, ` — full at Lv ${(used - 1) * 4}`) : null);
-      });
-      return el('div', { class: 'card' },
-        el('div', { class: 'bname' }, str(x.name)),
-        el('div', { class: 'btag' }, str(x.tagline)),
-        el('p', null, str(x.why)),
-        el('p', { class: 'sub', style: 'margin:12px 0 0' }, `Tree order — ${pts} points at Lv ${str(input.value)}:`),
-        el('ol', { class: 'steps' }, steps),
-        el('p', { class: 'sub', style: 'margin:12px 0 0' }, 'Roll priority on gear (in order):'),
-        el('ol', { class: 'rolls' }, arr(x.rolls).map(r => el('li', null,
-          el('b', null, str(r.s)), r.top ? el('span', { class: 'badge top' }, 'biggest impact') : null,
-          el('div', { class: 'why' }, str(r.why))))));
-    }));
-  }
-  input.oninput = render;
-  render();
-  return [el('h2', null, 'Suggested builds'),
-    el('div', { class: 'lvrow' }, 'Your level:', input, el('span', { class: 'sub', style: 'margin:0' }, '(1 point per 4 levels, +1)')),
-    holder];
-}
-
-// Hidden route: #/advisor/<player> — scores each class's roll priorities against
-// the player's actual gear mods and recommends what to play. No nav links to it.
-const ROLL_KW = { 'Block': ['block'], 'Evasion': ['evasion'], 'Attack Speed': ['attack speed'],
-  'Crit Chance': ['crit chance'], 'Increased Crit Dmg Dealt': ['crit dmg'], 'Increased Dmg Dealt': ['dmg dealt'],
-  'Max HP': ['max hp'], 'Splash': ['splash'], 'Intervene': ['intervene'],
-  'Lingering Effect': ['lingering'], 'Leech': ['leech'], 'Reduced Dmg Taken': ['dmg taken reduction', 'reduced dmg'],
-  // The Healing Power affix was retired on 2026-08-15 (reworked into Lingering
-  // Effect) — heal power now comes from the Divine Damage self-buff loop.
-  'Divine Damage': ['divine damage'], 'Cold Damage': ['cold damage'], 'Fire Damage': ['fire damage'],
-  'Lightning Damage': ['lightning damage'], 'Chaos Damage': ['chaos damage'] };
-const rankNum = (r) => +(String(r == null ? '' : r).match(/^\d+/) || [0])[0];
-const OP_W = { high: 3, medium: 1.5, low: 0.5 }; // watchlist impact → advisor score weight
-
-async function advisor(name) {
-  // Owner-only (x-pod-owner header, like #/intel) — the advisor reads the
-  // watchlist and bag data, both privileged.
-  const watchR = await ownerFetch('api/watchlist');
-  if (watchR.status === 403) return keyDenied();
-  // Investigation findings steer the pick: an OP interaction this player's gear
-  // already supports counts for more than one they would have to build toward.
-  const watch = watchR.ok ? arr((await watchR.json()).interactions) : [];
-  const [r, { builds, passives }, ratesR, gearR, core, model, ptree] = await Promise.all([
-    fetch('api/build/' + encodeURIComponent(name)), staticData(), ownerFetch('api/affix-rates'),
-    ownerFetch('api/advisor-gear/' + encodeURIComponent(name)),
-    import('./advisor-core.mjs'), fetch('game-model.json').then(q => q.json()),
-    // Machine-readable tree magnitudes, generated from src/passive_tree.rs —
-    // the prose in passives.json can't be scored against.
-    fetch('passive-tree.json').then(q => q.json()).catch(() => null)]);
-  if (!r.ok || !builds) { view(el('p', { class: 'status' }, 'Player not found. ', el('a', { href: '#/' }, 'Ladder'))); return; }
-  const b = await r.json();
-  const bag = gearR.ok ? arr((await gearR.json()).bag) : [];
-  const rates = ratesR.ok ? arr((await ratesR.json()).rates) : [];
-  const rateOf = (kws) => { // exact affix name first, substring fallback
-    for (const kw of kws) { const x = rates.find(q => str(q.affix) === kw); if (x) return +x.per_tier; }
-    for (const kw of kws) { const x = rates.find(q => str(q.affix).includes(kw)); if (x) return +x.per_tier; }
-    return 0;
-  };
-  // Worn mods weigh 1.0; bag mods 0.5 — owned potential, but not equipped.
-  const worn = arr(b.equipped).flatMap(it => arr(it.mods).map(m => str(m && m.t).toLowerCase()))
-    .concat(arr(b.equipped).flatMap(it => arr(it.implicits).map(i => str(i && i.t).toLowerCase())).filter(Boolean));
-  const entries = worn.map(t => ({ t, w: 1 }))
-    .concat(bag.flatMap(it => arr(it.mods).map(m => ({ t: str(m && m.t).toLowerCase(), w: 0.5 }))));
-  const hit = (t, kws) => kws.some(kw => t.includes(kw)) && !(kws[0] === 'dmg dealt' && t.includes('crit dmg'));
-  // A match's weight = its rolled value in "t100 average mod" units (a t100 avg
-  // roll ≈ 1.0) × the worn/bag factor. Affixes with no rate data fall back to 0.5.
-  // Capped stats (roll.sat, in %) stop scoring past saturation — the tree's
-  // overflow channels are full there and extra copies barely pay.
-  const matchWeight = (kws, sat) => { const rate = rateOf(kws);
-    const es = entries.filter(e => hit(e.t, kws));
-    const raw = es.reduce((s, e) => s + e.w * num(e.t.match(/[\d.]+/)?.[0]), 0);
-    const v = sat ? Math.min(raw, sat) : raw;
-    if (rate) return v / (rate * 100);
-    // no rate data: 0.5 per match, scaled down past saturation
-    return es.reduce((s, e) => s + e.w * 0.5, 0) * (raw > v ? v / raw : 1); };
-
-  const lvl = num(b.level) || 1;
-  // Empirical per-tier map for the model (covers a live balance-toml override);
-  // "max hp" is skipped — the rates table mixes its flat and % variants.
-  // api/affix-rates reports per_tier in PERCENT-per-tier (value/tier off a
-  // "+295%" mod = ~2.32), but the model and parseMod work in FRACTION-per-tier
-  // (elem 0.0225, dr 0.02) — same /100 parseMod applies to a rolled value. Every
-  // affix here is a % variant (max hp, the only flat one, is skipped above), so
-  // divide by 100 or rollTargets picks the ~100x-inflated value for every mod.
-  const empirical = {};
-  for (const a of model.affixes) {
-    if (a.match === 'max hp') continue;
-    const q = rates.find(x => str(x.affix).includes(a.match));
-    if (q) empirical[a.match] = +q.per_tier / 100;
-  }
-  // Craftable candidates per slot: every UNKRANGLED, non-unique item the
-  // player owns for that slot (equipped or bag) — a krangled item is locked
-  // out of every craft action, so plans must land on something craftable.
-  // The best one is chosen per class inside render() (a lower-tier base with
-  // the right Sacred line can beat a higher-tier one).
-  const tnum = (it) => +str(it && it.tier).replace(/\D/g, '') || 0;
-  const SLOT_KEYS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
-  const slotOf = (it) => SLOT_KEYS.find(k => str(it && it.slot).toLowerCase().includes(k));
-  const sacredLineOf = (it) => str((arr(it && it.implicits).find(i => /sacred:/i.test(str(i && i.t))) || {}).t).replace(/^[^A-Za-z]+/, '');
-  const candsBySlot = {};
-  for (const it of arr(b.equipped).concat(bag)) {
-    const k = slotOf(it);
-    if (!k || it.krangled || it.unique) continue;
-    (candsBySlot[k] = candsBySlot[k] || []).push(it);
-  }
-
-  let role = null; // null = auto; 'dps' | 'tank' | 'healer'
-  let pinned = null; // a class name forces the whole plan onto it, not the top pick
-  let sortKey = 'score', sortDir = -1; // all-classes table sort (persists across render)
-  function render() {
-    // Source-grounded scoring: evaluate each class's closed-form power
-    // (game-model.json cites the PathofDust formulas) over the best loadout
-    // pickable from this player's equipped+bag gear at their actual level,
-    // under the 4-mods+Sacred / no-uniques ruleset. Normalized best=100;
-    // the watchlist bonus (max +3 per high-impact interaction) breaks ties
-    // toward classes with a known-strong line this gear already supports.
-    const ranked = Object.entries(builds.classes)
-      .filter(([cls]) => !role || rolesOf(cls, passives).includes(role))
-      .map(([cls, cb]) => {
-        const build = arr(cb.builds)[0];
-        // Score each class at the tree it would actually be played with, not
-        // at zero investment — the tree is a full multiplicative layer on
-        // every stat, so a treeless comparison ranks classes wrong.
-        const nodes = ptree && ptree.classes && ptree.classes[cls];
-        const loadout = core.bestLoadout(arr(b.equipped), bag, cls, lvl, model, nodes && { nodes, alloc: {} });
-        const tr = nodes
-          ? { nodes, alloc: core.bestTree(cls, nodes, loadout.buckets, lvl, model, core.pointsForLevel(lvl)).alloc }
-          : null;
-        const cs = core.classScore(cls, loadout.buckets, lvl, model, tr);
-        const ops = watch.filter(i => arr(i.classes).map(str).includes(cls));
-        let bonus = 0;
-        ops.forEach(i => {
-          const w = arr(i.rolls).reduce((s, r) => s + matchWeight(ROLL_KW[r] || [str(r).toLowerCase()], 0), 0);
-          bonus += (OP_W[str(i.impact)] || 0.5) * (arr(i.rolls).length ? Math.min(1, w) : 0.25);
-        });
-        return { cls, build, raw: cs.score, cs, loadout, bonus, ops, tree: tr };
-      }).filter(x => x.build);
-    const maxRaw = Math.max(1, ...ranked.map(x => x.raw));
-    ranked.forEach(x => { x.score = Math.round((100 * x.raw / maxRaw + x.bonus) * 10) / 10; });
-    ranked.sort((a, z) => z.score - a.score);
-    // Pinning forces the plan onto a chosen class even if it isn't the top
-    // pick — "what would Kibukah do to play Paladin". Every downstream section
-    // (passives, craft plan, worklist) reads `best`, so this is all it takes.
-    const best = (pinned && ranked.find(x => x.cls === pinned)) || ranked[0];
-
-    // Passive respec plan, cut to the point budget. The target is the tree
-    // the score itself was computed at (solved node-by-node against this
-    // player's real gear), falling back to builds.json's curated order when
-    // passive-tree.json isn't available.
-    const budget = core.pointsForLevel(lvl);
-    // Ranking uses the positive-gain tree (the class's real ceiling), but the
-    // player has to spend EVERY point — so re-solve just the chosen class's tree
-    // with spendAll, filling leftover points onto harmless nodes once the
-    // closed-form gain flattens (caps hit, heal power saturated). Only for
-    // `best`; the other classes keep their ceiling tree for the ranking.
-    if (best && best.tree) best.tree = { nodes: best.tree.nodes,
-      alloc: core.bestTree(best.cls, best.tree.nodes, best.loadout.buckets, lvl, model, budget, undefined, true).alloc };
-    const alloc = new Map(arr(b.passives && b.passives.nodes).filter(n => rankNum(n.rank) > 0)
-      .map(n => [str(n.name), rankNum(n.rank)]));
-    const nodeName = (cls, key) => {
-      const n = ptree && ptree.classes && arr(ptree.classes[cls]).find(x => x.key === key);
-      return n ? n.name : key;
-    };
-    // Order the allocation the way a player must BUY it: a Skill before its
-    // Specialization, a Spec (to 4) before its Modifier. bestTree emits nodes in
-    // greedy-rate order, so sort by prereq depth (parent-chain length) — parents
-    // land strictly before their children. Stable sort keeps the greedy priority
-    // among same-depth siblings.
-    const byKey = new Map(arr(ptree && ptree.classes && ptree.classes[best && best.cls]).map(n => [n.key, n]));
-    const prereqDepth = (k) => { let d = 0, n = byKey.get(k); while (n && n.parent) { d++; n = byKey.get(n.parent); } return d; };
-    const target = new Map(best && best.tree
-      ? Object.entries(best.tree.alloc).sort((a, z) => prereqDepth(a[0]) - prereqDepth(z[0])).map(([k, r]) => [nodeName(best.cls, k), r])
-      : core.trimOrder(arr(best && best.build.order), budget).map(o => [str(o.n), +o.r]));
-    const toGet = [...target].filter(([n, tr]) => (alloc.get(n) || 0) < tr).map(([n, tr]) => `${n} ${alloc.get(n) || 0}→${tr}`);
-    const toDrop = [...alloc].filter(([n]) => !target.has(n)).map(([n, tr]) => `${n} ${tr}`);
-
-    // Derived craft plan: per slot, the 4 crafted mods (+ one Sacred wish)
-    // with the biggest marginal score gain at this player's best gear tier.
-    // Per-slot plan tier: the tier of the item the crafting would actually
-    // happen ON — the worn item if craftable, else the best unkrangled base
-    // owned for that slot (mods roll at ITEM tier, so a global average lies).
-    // "Best" base = highest class score when swapped into the loadout, which
-    // prices in its Sacred line and existing mods, not just its tier.
-    const wornBySlot = {};
-    for (const it of arr(best ? best.loadout.items : [])) { const k = slotOf(it); if (k) wornBySlot[k] = it; }
-    const chooseBase = (k) => {
-      const cands = candsBySlot[k] || [];
-      let pick = null, ps = -1;
-      const others = arr(best ? best.loadout.items : []).filter(it => slotOf(it) !== k);
-      for (const c of cands) {
-        const s = core.classScore(best.cls, core.sumBuckets(others.concat([c]).map(i => core.parseItem(i, model))), lvl, model, best.tree).score;
-        if (s > ps) { ps = s; pick = c; }
-      }
-      return pick;
-    };
-    const craftBaseMemo = {};
-    const craftBase = (k) => {
-      if (k in craftBaseMemo) return craftBaseMemo[k];
-      const worn = wornBySlot[k];
-      let out = null;
-      if (worn && !worn.krangled) out = { it: worn, worn: true };
-      else { const base = best ? chooseBase(k) : null; if (base) out = { it: base, worn: false }; }
-      return (craftBaseMemo[k] = out);
-    };
-    const planTiers = Object.fromEntries(SLOT_KEYS.map(k => {
-      const cb = craftBase(k);
-      return [k, cb ? tnum(cb.it) : (wornBySlot[k] ? tnum(wornBySlot[k]) : 1)];
-    }));
-    const targets = best ? core.rollTargets(best.cls, lvl, planTiers, model, best.loadout.buckets, empirical, best.tree) : null;
-    const fmtAvg = (p) => `+${fmt(p.avg * 100)}%`; // plan targets the % variants only
-
-    // Per-item crafting advice against the derived plan. Krangled items are
-    // LOCKED out of every craft action (CraftError::ItemLocked) — never
-    // suggest crafting on one; point at the craftable base instead.
-    const craftRows = arr(best ? best.loadout.items : []).map(it => {
-      const slot = slotOf(it) || str(it.slot).toLowerCase();
-      const tier = tnum(it);
-      const plan = targets && targets.plan[slot] ? targets.plan[slot] : [];
-      const junk = arr(it.mods).filter(m => m && m.t && !plan.some(p => str(m.t).toLowerCase().includes(p.match))).map(m => str(m.t));
-      const cb = craftBase(slot);
-      const base = cb && !cb.worn ? cb.it : null;
-      const baseSacred = base ? sacredLineOf(base) : '';
-      const tips = it.krangled ? [
-        `krangled (locked — no crafting possible)${base
-          ? `: build the plan on ${str(base.name)} (t${tnum(base)} bag ${slot}${baseSacred ? ' · ' + baseSacred : ''}${arr(base.mods).length ? ' · has ' + arr(base.mods).map(m => str(m.t)).join(', ') : ' · no mods yet'}), swap in once it beats this one`
-          : ': keep wearing it and craft the plan onto the next fresh drop for this slot'}`,
-      ] : [
-        junk.length && `swap off-build mods (${junk.join(', ')}): veiled Chancing rerolls every mod type with a pick per slot, or Annulment (veiled = choose which leaves) then re-Exalt`,
-        arr(it.mods).length < 4 && `fill to 4 mods (${arr(it.mods).length} now): Transmute→Augment→Regal→Exalt, veiled (+500 dust) to pick from 3 rolls`,
-        `Reforge to climb tiers (t${tier} now; +1/use above t100, 30×tier dust)`,
-        !/perfect|sacred/i.test(str(it.quality)) && 'Polish (sand) — raises rolls toward max and quality to Perfect',
-        !it.sacred && !/sacred/i.test(str(it.quality)) && 'upgrade to a Sacred base at stage 300+',
-      ].filter(Boolean);
-      return tips.length ? el('li', null, el('b', null, str(it.slot) || 'item'), ` (${str(it.name)}): ${tips.join(' · ')}`) : null;
-    }).filter(Boolean);
-
-    const roleChip = (rv, label) => {
-      const e = el('span', { class: 'chip' + (role === rv ? ' on' : '') }, label);
-      e.onclick = () => { role = rv; pinned = null; render(); };
-      return e;
-    };
-    const resetChip = () => { const e = el('span', { class: 'chip' }, '↺ best'); e.onclick = () => { pinned = null; render(); }; return e; };
-    // Every class scored for this gear, sortable by any column, filtered by the
-    // Role chips above. Click a row to pin its full plan below. Values are the
-    // closed-form score already computed for each class in `ranked`.
-    const RANK_COLS = [
-      { k: 'cls', label: 'Class', get: x => x.cls, cell: x => (x.cls === best.cls ? '▶ ' : '') + x.cls },
-      { k: 'role', label: 'Role', get: x => rolesOf(x.cls, passives)[0] || 'melee', cell: x => rolesOf(x.cls, passives).join('/') || 'melee' },
-      { k: 'score', label: 'Score', right: true, get: x => x.raw, cell: x => str(x.score) },
-      { k: 'dps', label: 'DPS', right: true, get: x => x.cs.dps, cell: x => fmt(x.cs.dps) },
-      { k: 'ehp', label: 'eHP', right: true, get: x => x.cs.ehp, cell: x => fmt(x.cs.ehp) },
-      { k: 'hps', label: 'HPS', right: true, get: x => x.cs.hps, cell: x => fmt(x.cs.hps) },
-    ];
-    const rankTable = () => {
-      const col = RANK_COLS.find(c => c.k === sortKey) || RANK_COLS[2];
-      const sorted = [...ranked].sort((a, z) => { const av = col.get(a), zv = col.get(z); return (av > zv ? 1 : av < zv ? -1 : 0) * sortDir; });
-      const th = (c) => { const e = el('th', { class: (c.right ? 'r ' : '') + 'sortable' }, c.label, sortKey === c.k ? (sortDir < 0 ? ' ▾' : ' ▴') : '');
-        e.onclick = () => { sortDir = sortKey === c.k ? -sortDir : -1; sortKey = c.k; render(); }; return e; };
-      return el('table', null,
-        el('thead', null, el('tr', null, RANK_COLS.map(th))),
-        el('tbody', null, sorted.map(x => {
-          const tr = el('tr', x.cls === best.cls ? { style: 'background:rgba(160,140,255,0.12)' } : null,
-            RANK_COLS.map(c => el('td', c.right ? { class: 'r' } : null, c.cell(x))));
-          tr.style.cursor = 'pointer'; tr.onclick = () => { pinned = x.cls; render(); };
-          return tr;
-        })));
-    };
-    // Tree data + stat priority for the reworked sections.
-    const treeNodes = best && ptree && ptree.classes && arr(ptree.classes[best.cls]);
-    const currentByKey = new Map(arr(treeNodes).map(n => [n.key, alloc.get(n.name) || 0]));
-    const prio = best ? core.statPriority(best.cls, lvl, planTiers, model, best.loadout.buckets, best.tree) : null;
-    const heroStats = best ? [['DPS', fmt(best.cs.dps)], ['eHP', fmt(best.cs.ehp)]]
-      .concat(best.cs.hps > 0 ? [['HPS', fmt(best.cs.hps)]] : [])
-      .concat([['Cadence', fmt(best.cs.interval) + 'ms'], ['Score', str(best.score)]]) : [];
-    const sec = (title, ...kids) => el('div', { class: 'adv-sec' }, el('h2', null, title), ...kids);
-    const prioRow = (e) => el('div', { class: 'prio-row' + (e.capped ? ' capped' : '') },
-      el('div', { class: 'nm' }, e.match, e.slots ? el('span', { class: 'lock' }, e.slots.join('/') + ' only') : null),
-      el('div', { class: 'prio-track' }, el('div', { class: 'prio-fill', style: `width:${(e.weight * 100).toFixed(0)}%` })),
-      el('div', { class: 'wt' }, (e.weight * 100).toFixed(0) + '%'));
-    const legendDot = (style, label) => el('span', null, el('i', { style }), label);
-
-    view(
-      el('h1', null, 'Advisor'),
-      el('p', { class: 'sub' }, `${str(b.name)} · ${str(b.archetype)} Lv ${str(b.level)}`),
-      el('div', { class: 'chips', style: 'margin:8px 0 20px' },
-        'Role: ', roleChip(null, 'Auto'), roleChip('dps', '🗡️ DPS'), roleChip('tank', '🛡️ Tank'), roleChip('healer', '🩹 Healer')),
-      !best ? el('p', { class: 'status' }, 'No builds for this role.') : [
-        // ---- Recommendation hero ------------------------------------------
-        el('div', { class: 'adv-hero' },
-          el('div', { class: 'htitle' }, `${pinned ? 'Switch to' : 'Play'} ${best.cls} — ${str(best.build.name)}`),
-          el('p', { class: 'hwhy' }, str(best.build.why)),
-          arr(best.loadout.swaps).length ? el('p', { class: 'sub', style: 'margin:12px 0 0' },
-            'Equip from bag: ' + arr(best.loadout.swaps).map(s => `${str(s.use.name)} (${str(s.use.tier)}) over ${s.over ? str(s.over.name) : 'empty ' + s.slot}`).join(' · ')) : null,
-          el('div', { class: 'stiles' }, heroStats.map(([k, v]) =>
-            el('div', { class: 'stile' }, el('div', { class: 'k' }, k), el('div', { class: 'v' }, v)))),
-          best.loadout.buckets.unparsed ? el('p', { class: 'sub', style: 'margin:12px 0 0' }, `${best.loadout.buckets.unparsed} unrecognized mod(s) ignored`) : null,
-          el('p', { style: 'margin:12px 0 0' }, el('a', { href: '#/class/' + encodeURIComponent(best.cls) }, `Full ${best.cls} reference →`))),
-        // ---- Known-strong interactions ------------------------------------
-        arr(best.ops).length ? sec('Known-strong interactions',
-          el('div', { class: 'stack' }, arr(best.ops).map(i => el('div', { class: 'card' },
-            el('div', { class: 'bname' }, str(i.title)),
-            el('div', { class: 'chips', style: 'margin:6px 0 0' },
-              el('span', { class: 'chip' + (str(i.impact) === 'high' ? ' on' : '') }, str(i.impact) + ' impact'),
-              i.type ? el('span', { class: 'chip' }, str(i.type)) : null,
-              arr(i.rolls).map(r => el('span', { class: 'chip' }, str(r)))),
-            el('p', null, str(i.text)))))) : null,
-        // ---- Class comparison ---------------------------------------------
-        ranked.length > 1 ? sec('Class comparison',
-          el('p', { class: 'sub', style: 'margin:-4px 0 12px' }, pinned
-            ? [`Pinned ${best.cls} — click any row to switch, or `, resetChip()]
-            : 'Click a row to plan for that class; click a header to sort.'),
-          rankTable()) : null,
-        // ---- Passive tree (game-style, recommended fill) ------------------
-        treeNodes.length ? sec('Passive tree — recommended allocation',
-          el('div', { class: 'tlegend' },
-            legendDot('background:#ff3b4e', 'point'),
-            legendDot('background:#ffd76b', '4th point (specializes)'),
-            legendDot('border:1.5px solid #4caf7d;background:transparent', 'add vs your tree'),
-            legendDot('border:1.5px dashed #d9534f;background:transparent', 'respec out'),
-            el('span', null, 'dimmed = in-fight effect, not scored')),
-          treeGraph(best.cls, treeNodes, best.tree.alloc, currentByKey, core),
-          el('p', { class: 'sub', style: 'margin:10px 0 0' }, toGet.length || toDrop.length
-            ? `${toGet.length} node change(s) to allocate, ${toDrop.length} to respec out.`
-            : 'Your tree already matches this build.')) : null,
-        // ---- Gear & crafting ----------------------------------------------
-        sec('Gear & crafting',
-          el('p', { class: 'sub', style: 'margin:-4px 0 12px' }, `Per slot: the 4 crafted mods with the biggest marginal gain for ${best.cls} at your level, valued at the tier of the item you'd actually craft on. One Sacred wish across the set (any slot, may duplicate a mod). Veiled crafts (+500 dust) roll 3 candidates and let you pick.`),
-          el('table', null,
-            el('thead', null, el('tr', null, el('th', null, 'Slot'), el('th', null, 'Craft on'), el('th', null, 'Craft these 4'), el('th', null, 'Sacred wish'))),
-            el('tbody', null, Object.entries(targets.plan).map(([slot, picks]) => {
-              const cb = craftBase(slot);
-              const it = cb && cb.it;
-              const sac = it ? sacredLineOf(it) : '';
-              const have = new Set(arr(it && it.mods).map(m => (core.parseMod(str(m && m.t), model) || {}).bucket).filter(Boolean));
-              const bucketOf = (p) => (core.parseMod('+1% ' + p.match, model) || {}).bucket;
-              const mark = (p) => `${p.match} ${fmtAvg(p)}${have.has(bucketOf(p)) ? ' ✓have' : ''}`;
-              // Don't tell someone to reroll a base that already carries a Sacred
-              // implicit AND a full set of crafted mods — a Sacred is a stage-300+
-              // upgrade you can't easily replace. Only flag the mods it's missing.
-              const crafted = it && sac && arr(it.mods).length >= model.rules.modCap;
-              const missing = picks.filter(p => !have.has(bucketOf(p)));
-              const craftCell = !crafted ? picks.map(mark).join(' · ')
-                : missing.length ? [el('span', { class: 'sub' }, 'already crafted — reroll only for: '), missing.map(mark).join(' · ')]
-                : el('span', { class: 'sub' }, 'already covers this plan — keep it');
-              return el('tr', null,
-                el('td', null, slot),
-                el('td', null, !it ? 'next drop'
-                  : `${cb.worn ? 'worn' : 'bag'} t${tnum(it)}${cb.worn ? '' : ' ' + str(it.name)}${!cb.worn && arr(it.mods).length ? ' · has ' + arr(it.mods).map(m => str(m.t)).join(', ') : ''}`),
-                el('td', null, craftCell),
-                el('td', null, sac ? `locked in: ${sac}` : targets.sacred ? `wish: ${targets.sacred.match} ${fmtAvg(targets.sacred)}` : '—'));
-            }))),
-          craftRows.length ? [el('p', { class: 'sub', style: 'margin:16px 0 6px' }, 'Crafting worklist'),
-            el('ul', { class: 'rolls' }, craftRows)] : null),
-        // ---- Stat priority (global + per-slot) ----------------------------
-        prio ? sec('Stat priority',
-          el('p', { class: 'sub', style: 'margin:-4px 0 12px' }, "When a veil can't land the exact mod, chase these in order — ranked by score gained per average roll on top of this build. Dimmed = capped / barely pays."),
-          el('div', { class: 'prio' }, prio.global.filter(e => e.weight > 0.01).slice(0, 12).map(prioRow)),
-          el('div', { class: 'prio-slots' }, ['weapon', 'helm', 'body', 'gloves', 'boots'].map(slot =>
-            el('div', { class: 'card' }, el('h3', null, slot),
-              prio.bySlot[slot].filter(e => e.weight > 0.02).slice(0, 6).map(e =>
-                el('div', { class: 'srow' }, el('span', null, e.match), el('span', { class: 'sw' }, (e.weight * 100).toFixed(0) + '%'))))))) : null,
-      ]);
-  }
-  render();
-}
-
-// Deterministic game-style tree from passive-tree.json (no scraped coords, so it
-// works for every class incl. Elementalist). Lays out root → skills → specs →
-// mods (each spec spans its mods, each skill its specs), fills each node's dots to
-// the RECOMMENDED rank (red; a spec's 4th point gold, like the game), and borders
-// each node by the respec vs the player's current ranks (green = add, dashed red
-// = drop). Unscored specials (reflects/procs) are dimmed + tagged. Read-only.
-function treeGraph(cls, nodes, alloc, currentByKey, core) {
-  const kids = (k) => arr(nodes).filter(n => n.parent === k);
-  const skills = arr(nodes).filter(n => !n.parent);
-  // 27 mod-columns wide for a full class — keep nodes compact so the whole tree
-  // is a couple of screens of horizontal scroll, not ten (the game is wide too).
-  const COL = 92, NODEW = 80;
-  const rowY = { root: 44, skill: 150, spec: 292, mod: 438 };
-  const pos = {};
-  let col = 0;
-  for (const sk of skills) {
-    const specs = kids(sk.key), scols = [];
-    for (const sp of specs) {
-      const mods = kids(sp.key);
-      if (!mods.length) { pos[sp.key] = { col: col++, y: rowY.spec }; }
-      else {
-        const start = col;
-        for (const md of mods) pos[md.key] = { col: col++, y: rowY.mod };
-        pos[sp.key] = { col: (start + col - 1) / 2, y: rowY.spec };
-      }
-      scols.push(pos[sp.key].col);
-    }
-    pos[sk.key] = { col: specs.length ? (Math.min(...scols) + Math.max(...scols)) / 2 : col++, y: rowY.skill };
-  }
-  const cols = Object.values(pos).map(p => p.col);
-  const rootCol = cols.length ? (Math.min(...cols) + Math.max(...cols)) / 2 : 0;
-  const X = (c) => c * COL + COL / 2;
-  const stageW = Math.max(COL, col * COL), stageH = rowY.mod + 70;
-  const rank = (k) => alloc[k] || 0;
-
-  const stage = el('div', { class: 'gstage', style: `width:${stageW}px;height:${stageH}px` });
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('width', stageW); svg.setAttribute('height', stageH);
-  const line = (x1, y1, x2, y2, on) => { const l = document.createElementNS(svgNS, 'line');
-    l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2);
-    l.setAttribute('stroke', on ? 'rgba(255,59,78,0.45)' : 'rgba(160,140,255,0.22)');
-    l.setAttribute('stroke-width', on ? 2.5 : 1.5); svg.appendChild(l); };
-  for (const sk of skills) line(X(rootCol), rowY.root, X(pos[sk.key].col), rowY.skill, rank(sk.key));
-  for (const n of nodes) for (const c of kids(n.key)) if (pos[n.key] && pos[c.key])
-    line(X(pos[n.key].col), pos[n.key].y, X(pos[c.key].col), pos[c.key].y, rank(n.key) && rank(c.key));
-  stage.appendChild(svg);
-
-  stage.appendChild(el('div', { class: 'gnode kind-root', style: `left:${X(rootCol)}px;top:${rowY.root}px;width:150px` },
-    el('div', { class: 'gkind' }, 'Class passive'), el('div', { class: 'gname' }, str(cls).toUpperCase())));
-  for (const n of nodes) {
-    const p = pos[n.key]; if (!p) continue;
-    const r = rank(n.key), cur = currentByKey.get(n.key) || 0, isSpec = n.tier === 'spec';
-    const dots = [];
-    for (let i = 0; i < (n.max || 0); i++)
-      dots.push(el('span', { class: 'gdot' + (i < r ? (isSpec && i === 3 ? ' gold' : ' on') : '') }));
-    const unscored = !core.nodeScored(n);
-    const state = r > cur ? ' get' : r < cur ? ' drop' : '';
-    stage.appendChild(el('div', {
-      class: `gnode kind-${n.tier}${r ? ' pick' : ''}${isSpec && r >= 4 ? ' gold' : ''}${state}${unscored ? ' unscored' : ''}`,
-      style: `left:${X(p.col)}px;top:${p.y}px;width:${NODEW}px`,
-      title: `${str(n.name)} — ${str(n.description)}${unscored ? '  ·  in-fight effect, not scored by the advisor' : ''}`,
-    },
-      el('div', { class: 'gname' }, str(n.name)),
-      dots.length ? el('div', { class: 'gdots' }, dots) : null,
-      unscored ? el('div', { class: 'gtag' }, 'not scored') : null));
-  }
-  return el('div', { class: 'gwrap' }, stage);
-}
-
-// Game-replica canvas: absolute node cards + connector lines at the game's own
-// coordinates (scraped layout), rank dots filled to the suggested build's ranks
-// (4th spec point gold, like the game).
-function gameTree(layout, builds, archetype) {
-  const cb = builds && builds.classes && builds.classes[archetype];
-  const picks = new Map(arr(cb && cb.builds[0] && cb.builds[0].order).map(o => [str(o.n), +o.r]));
+function gameTree(layout, archetype) {
   const stage = el('div', { class: 'gstage', style: `width:${+layout.w || 1180}px;height:${+layout.h || 463}px` });
   const svgNS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(svgNS, 'svg');
@@ -1240,14 +576,11 @@ function gameTree(layout, builds, archetype) {
   }
   stage.appendChild(svg);
   for (const n of arr(layout.nodes)) {
-    const take = picks.get(str(n.name)) || 0;
     const dead = !!n.dead;
-    const gold = n.kind === 'spec' && take >= 4;
     const dots = [];
-    for (let i = 0; i < (+n.max || 0); i++)
-      dots.push(el('span', { class: 'gdot' + (i < take ? (n.kind === 'spec' && i === 3 ? ' gold' : ' on') : '') }));
+    for (let i = 0; i < (+n.max || 0); i++) dots.push(el('span', { class: 'gdot' }));
     stage.appendChild(el('div', {
-      class: `gnode kind-${str(n.kind)}${take ? ' pick' : ''}${gold ? ' gold' : ''}${dead ? ' dead' : ''}`,
+      class: `gnode kind-${str(n.kind)}${dead ? ' dead' : ''}`,
       style: `left:${+n.x || 0}px;top:${+n.y || 0}px;width:${+n.w || 140}px`,
       title: str(n.desc),
     },
@@ -1258,43 +591,36 @@ function gameTree(layout, builds, archetype) {
   return el('div', { class: 'gwrap' }, stage);
 }
 
-function treeSection(archetype, passives, builds, layout) {
+function treeSection(archetype, passives, layout) {
   if (layout && arr(layout.nodes).length) {
     // The scraped page only shows modifiers its owner has revealed (spec 4/4) —
     // list the rest from the wiki below the canvas rather than faking positions.
     const have = new Set(arr(layout.nodes).map(n => str(n.name)));
     const t = passives && passives[archetype];
-    const cb = builds && builds.classes && builds.classes[archetype];
-    const picks = new Map(arr(cb && cb.builds[0] && cb.builds[0].order).map(o => [str(o.n), +o.r]));
     const hidden = [];
     for (const s of arr(t && t.skills)) for (const sp of arr(s.specializations)) {
       const miss = arr(sp.modifiers).filter(m => !have.has(str(m.name)));
       if (miss.length) hidden.push(el('div', null, el('b', null, str(sp.name)), ': ',
         el('span', { class: 'chips', style: 'display:inline-flex' }, miss.map(m =>
-          el('span', { class: 'chip' + (picks.has(str(m.name)) ? ' on' : ''), title: str(m.text) },
-            str(m.name), ' ', str(m.max), picks.has(str(m.name)) ? ' · take ' + picks.get(str(m.name)) : '')))));
+          el('span', { class: 'chip', title: str(m.text) }, str(m.name), ' ', str(m.max))))));
     }
     return [el('h2', null, 'Passive tree'),
-      el('p', { class: 'sub' }, 'The game\'s own tree layout — filled dots are the suggested build (gold = the specializing 4th point), dashed nodes are inactive. Hover a node for its effect.'),
-      gameTree(layout, builds, archetype),
+      el('p', { class: 'sub' }, 'The game\'s own tree layout — dashed nodes are inactive. Hover a node for its effect.'),
+      gameTree(layout, archetype),
       hidden.length ? [el('p', { class: 'sub', style: 'margin-top:12px' },
-        'Modifiers absent from this saved layout (from the wiki — hover for effects, highlighted = in the suggested build):'),
+        'Modifiers absent from this saved layout (from the wiki — hover for effects):'),
         el('div', { class: 'stack', style: 'gap:4px' }, hidden)] : null];
   }
   const t = passives && passives[archetype];
   if (!t) return null;
-  // Highlight the suggested build's allocations on the tree itself.
-  const cb = builds && builds.classes && builds.classes[archetype];
-  const picks = new Map(arr(cb && cb.builds[0] && cb.builds[0].order).map(o => [str(o.n), +o.r]));
   const node = (n, cls) => {
     const dead = /\(inactive\)\s*$/.test(str(n.text));
-    const pick = picks.get(str(n.name));
-    return el('div', { class: `tnode ${cls}${pick ? ' pick' : ''}${dead ? ' dead' : ''}`, title: str(n.text) },
+    return el('div', { class: `tnode ${cls}${dead ? ' dead' : ''}`, title: str(n.text) },
       el('b', null, str(n.name)), el('span', { class: 'max' }, str(n.max)),
-      pick ? el('span', { class: 'take' }, `take ${pick}`) : null, dead ? el('span', { class: 'max' }, 'inactive') : null);
+      dead ? el('span', { class: 'max' }, 'inactive') : null);
   };
   return [el('h2', null, 'Full passive tree'),
-    el('p', { class: 'sub' }, str(t.root) + ' — highlighted nodes are the suggested build; hover any node for its effect.'),
+    el('p', { class: 'sub' }, str(t.root) + ' — hover any node for its effect.'),
     el('div', { class: 'stack' }, arr(t.skills).map(s => el('div', { class: 'card tskill' },
       node(s, 'skill'),
       el('div', { class: 'tspecs' }, arr(s.specializations).map(sp => el('div', { class: 'tcol' },
@@ -1303,11 +629,11 @@ function treeSection(archetype, passives, builds, layout) {
 }
 
 async function classView(archetype) {
-  const [r, { builds, passives }, layoutR] = await Promise.all([
+  const [r, { passives }, layoutR] = await Promise.all([
     fetch('api/class/' + encodeURIComponent(archetype)), staticData(),
     fetch('api/tree/' + encodeURIComponent(archetype))]);
   const layout = layoutR.ok ? await layoutR.json() : null;
-  const known = (passives && passives[archetype]) || (builds && builds.classes && builds.classes[archetype]);
+  const known = passives && passives[archetype];
   if (r.status === 404 && !known) { view(el('p', { class: 'status' }, 'Unknown class. ', el('a', { href: '#/' }, 'Back to ladder'))); return; }
   if (!r.ok && r.status !== 404) throw new Error('class ' + r.status);
   const c = r.ok ? await r.json() : null;
@@ -1319,8 +645,7 @@ async function classView(archetype) {
     el('p', { class: 'sub' }, c
       ? `${role ? str(role) + ' · ' : ''}${c.players} tracked player${c.players === 1 ? '' : 's'}${c.total ? ` · ${Math.round(100 * c.players / c.total)}% of the ${c.total} on the ladder` : ''} · avg Lv ${str(c.avg_level)} · best Lv ${str(c.max_level)}`
       : `${role ? str(role) + ' · ' : ''}no tracked players yet`),
-    buildCards(archetype, builds),
-    treeSection(archetype, passives, builds, layout),
+    treeSection(archetype, passives, layout),
     c && arr(c.passives).length ? [el('h2', null, 'Popular passives'),
       el('div', { class: 'card' }, barChart(arr(c.passives).map(p => ({
         label: str(p.name) + (p.tier != null ? ` (T${str(p.tier)})` : ''),
@@ -1334,85 +659,8 @@ async function classView(archetype) {
     null); // item names are flavor text — no per-slot section
 }
 
-// Public route: #/explorer — class-FIRST build search. Pick a class + level +
-// tier + objective + required/banned affixes; searchBuild returns the best
-// reachable build under the modeled ruleset. Pure model+tree math, no player
-// data, so no owner gate. Same engine tools/best-builds.mjs runs in batch.
-async function explorer() {
-  const [core, model, ptree] = await Promise.all([
-    import('./advisor-core.mjs'),
-    fetch('game-model.json').then(r => r.json()),
-    fetch('passive-tree.json').then(r => r.ok ? r.json() : null).catch(() => null),
-  ]);
-  if (!ptree || !ptree.classes) { view(el('h1', null, 'Build explorer'), el('p', { class: 'status' }, 'Passive tree data unavailable.')); return; }
-  const classes = Object.keys(model.archetypes).filter(c => arr(ptree.classes[c]).length);
-  const OBJ = { overall: s => s.score, damage: s => s.dps, tank: s => s.ehp, healing: s => s.hps };
-  const affixes = model.affixes.map(a => a.match);
-  const nodeName = (cls, key) => (arr(ptree.classes[cls]).find(n => n.key === key) || {}).name || key;
-  const pct = x => (x * 100).toFixed(1) + '%';
-  const sci = x => Number(x).toExponential(2);
-
-  const st = { cls: classes[0], level: 119, tier: 119, obj: 'overall', require: new Set(), ban: new Set() };
-  const lvl = x => { const n = Math.floor(+x); return n >= 1 ? n : 1; }; // model wants integer ≥ 1
-
-  function render() {
-    const nodes = ptree.classes[st.cls];
-    const r = core.searchBuild(st.cls, nodes, lvl(st.level), lvl(st.tier), model,
-      { objective: OBJ[st.obj], require: [...st.require], ban: [...st.ban] });
-    const s = r.score, d = s.detail;
-
-    const sel = el('select');
-    classes.forEach(c => sel.append(el('option', { value: c }, c)));
-    sel.value = st.cls; sel.onchange = () => { st.cls = sel.value; render(); };
-    // onchange (fires on blur/Enter), not oninput: render() rebuilds the whole
-    // view, so a per-keystroke rebuild would steal focus mid-type and re-run the
-    // full gear+tree search on every digit.
-    const numIn = (val, set) => { const i = el('input', { type: 'number', min: '1', value: val, style: 'width:5em' }); i.onchange = () => { set(i.value); render(); }; return i; };
-    const objChip = (k) => { const e = el('span', { class: 'chip' + (st.obj === k ? ' on' : '') }, k); e.onclick = () => { st.obj = k; render(); }; return e; };
-    // One affix chip toggles its own set; requiring clears a ban and vice-versa
-    // (an affix can't be both forced in and forbidden).
-    const affChip = (a, set, other) => { const e = el('span', { class: 'chip' + (set.has(a) ? ' on' : '') }, a);
-      e.onclick = () => { if (set.has(a)) set.delete(a); else { set.add(a); other.delete(a); } render(); }; return e; };
-
-    const stat = (label, val) => el('div', null, el('span', { class: 'sub', style: 'display:block;font-size:11px' }, label), el('b', null, val));
-    const gearRows = ['weapon', 'helm', 'body', 'gloves', 'boots'].map(k =>
-      el('li', null, el('b', null, k), ': ', arr(r.gear.picks[k]).length ? r.gear.picks[k].join(', ') : el('span', { class: 'sub' }, '(base only)')));
-    const treeEntries = Object.entries(r.alloc).filter(([, v]) => v > 0)
-      .map(([k, v]) => `${nodeName(st.cls, k)} ${v}`);
-    const dropped = r.dropped || []; // required affixes that couldn't be placed (slot cap / elemental contention)
-
-    view(
-      el('h1', null, 'Build explorer'),
-      el('p', { class: 'sub' }, 'Best reachable build for a chosen class under the modeled ruleset (5 Perfect items · 4 crafted mods + 1 Sacred · no uniques/krangle). Pure formula math — treat per-fight mechanics as upside.'),
-      el('div', { class: 'chips', style: 'align-items:center;gap:10px;margin:0 0 12px' },
-        el('span', null, 'Class '), sel,
-        el('span', null, ' Level '), numIn(st.level, v => st.level = v),
-        el('span', null, ' Tier '), numIn(st.tier, v => st.tier = v)),
-      el('div', { class: 'chips', style: 'margin:0 0 10px' }, el('span', { class: 'sub' }, 'Objective:'), Object.keys(OBJ).map(objChip)),
-      el('div', { class: 'chips', style: 'margin:0 0 6px' }, el('span', { class: 'sub' }, 'Require:'), affixes.map(a => affChip(a, st.require, st.ban))),
-      el('div', { class: 'chips', style: 'margin:0 0 12px' }, el('span', { class: 'sub' }, 'Ban:'), affixes.map(a => affChip(a, st.ban, st.require))),
-      dropped.length ? el('p', { class: 'status' }, `Couldn't fit ${dropped.length} required affix${dropped.length > 1 ? 'es' : ''}: ${dropped.join(', ')}. Ban fewer, or free up weapon/helm for elemental affixes.`) : null,
-      el('div', { class: 'card' },
-        el('h2', { style: 'margin-top:0' }, `${st.cls} · best ${st.obj}`),
-        el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:12px' },
-          stat('DPS', sci(s.dps)), stat('HPS', sci(s.hps)), stat('eHP', sci(s.ehp)), stat('HP', sci(s.hp)),
-          stat('Inc dmg', pct(d.inc)), stat('Crit ch', s.detail.cc.toFixed(1)), stat('Crit mult', s.detail.cm.toFixed(1)),
-          stat('DR/Blk/Eva', `${pct(d.eff.dr)} / ${pct(d.eff.block)} / ${pct(d.eff.evasion)}`),
-          stat('Heal', pct(s.healPower)), stat('Interval', `${s.interval.toFixed(0)}ms`))),
-      el('div', { class: 'grid2' },
-        el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, 'Gear'),
-          el('ul', null, gearRows),
-          el('p', null, el('b', null, 'Sacred: '), r.gear.sacred || '—')),
-        el('div', { class: 'card' }, el('h2', { style: 'margin-top:0' }, `Passives (${treeEntries.length} nodes)`),
-          treeEntries.length ? el('ul', null, treeEntries.map(t => el('li', null, t))) : el('p', { class: 'sub' }, 'No nodes allocated.'))),
-      el('p', { class: 'sub', style: 'margin-top:14px' }, core.UNMODELED_NOTE),
-      el('p', null, el('a', { href: '#/' }, '← Ladder')));
-  }
-  render();
-}
-
 async function route() {
-  // Capture ?key=… / ?owner=… from the hash once, remember them, strip from the URL.
+  // Capture ?key=… from the hash once, remember it, strip it from the URL.
   // Parsed by hand rather than with URLSearchParams: that applies form-encoding
   // rules and would turn a '+' inside a key into a space.
   const km = location.hash.match(/^(.*?)\?(.+)$/);
@@ -1421,12 +669,10 @@ async function route() {
       const m = km[2].match(new RegExp('(?:^|&)' + n + '=([^&]*)'));
       return m ? decodeURIComponent(m[1]) : '';
     };
-    const key = param('key'), owner = param('owner');
-    if (key) localStorage.setItem('pod.key', key);
-    if (owner) localStorage.setItem('pod.owner', owner);
-    if (key || owner) { location.replace(location.pathname + km[1]); return; }
+    const key = param('key');
+    if (key) { localStorage.setItem('pod.key', key); location.replace(location.pathname + km[1]); return; }
   }
-  const solo = { '#/admin': admin, '#/watchlist': watchlist, '#/feedback': feedbackView, '#/intel': intel, '#/explorer': explorer }[location.hash];
+  const solo = { '#/feedback': feedbackView }[location.hash];
   if (solo) {
     // view() adds the nav; a thrown page never called it, so add it here too.
     try { await solo(); } catch (e) {
@@ -1435,8 +681,8 @@ async function route() {
     }
     window.scrollTo(0, 0); renderFoot(); checkFeedback(); return;
   }
-  const m = location.hash.match(/^#\/(build|class|advisor)\/(.+)$/);
-  try { m ? await ({ build, class: classView, advisor })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
+  const m = location.hash.match(/^#\/(build|class)\/(.+)$/);
+  try { m ? await ({ build, class: classView })[m[1]](decodeURIComponent(m[2])) : await ladder(); }
   catch (e) { app.replaceChildren(el('p', { class: 'status' }, 'Failed to load — try again shortly.')); }
   window.scrollTo(0, 0);
   renderFoot();

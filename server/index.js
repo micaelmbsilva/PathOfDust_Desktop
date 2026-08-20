@@ -8,10 +8,8 @@ const { Pool } = require('pg');
 
 const app = express();
 // Pings, logs and feedback are small and arrive unauthenticated — keep their
-// parse budget tight. Only the keyed findings route needs room for a full list.
-const smallJson = express.json({ limit: '256kb' });
-const bigJson = express.json({ limit: '1mb' });
-app.use((req, res, next) => (req.path === '/api/findings' ? bigJson : smallJson)(req, res, next));
+// parse budget tight.
+app.use(express.json({ limit: '256kb' }));
 app.use((req, res, next) => { // open receiver — the app posts from anywhere
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Headers', 'Content-Type, x-pod-owner');
@@ -64,6 +62,14 @@ async function init() {
     treeLayouts[r.archetype] = r.data;
   console.log('DB ready');
 }
+
+const arr = (x) => Array.isArray(x) ? x : [];
+
+// The operator key. Fails closed — an unset variable denies everyone. It travels
+// in a header, never the query string: query strings land in proxy and access
+// logs, and this is the privileged key. (The site key's ?key= is grandfathered;
+// its pages are the shareable ones.)
+const ownerOk = (req) => !!process.env.OWNER_KEY && req.get('x-pod-owner') === process.env.OWNER_KEY;
 
 // async route wrapper — never hang; DB errors → 503 instead of a dead request
 const h = (fn) => (req, res) => fn(req, res).catch((e) => { console.error(e.message); if (!res.headersSent) res.sendStatus(503); });
@@ -279,21 +285,8 @@ app.get('/api/build/:name', h(async (req, res) => {
   res.json(rows[0]);
 }));
 
-// Private watchlist (OP interactions) — owner-only, fail closed (moved off the
-// shared SITE_KEY: findings steer the advisor and are the owner's edge). The
-// data lives outside public/ so the static server never exposes it.
-// The newest investigation (if any) supersedes the hand-curated file: the model
-// is given the current list and returns the full updated one, so there is always
-// exactly one source of truth.
-app.get('/api/watchlist', h(async (req, res) => {
-  if (!ownerOk(req)) return res.sendStatus(403);
-  const found = await latestInvestigation();
-  if (found && arr(found.data.interactions).length) return res.json({ interactions: found.data.interactions });
-  res.sendFile(require('path').join(__dirname, 'watchlist.json'));
-}));
-
-// Private inbox: user feedback + recent app errors, newest first. Same SITE_KEY
-// gate as the watchlist — these carry install ids and contact handles.
+// Private inbox: user feedback + recent app errors, newest first. Owner-only —
+// these carry install ids and contact handles.
 app.get('/api/feedback', h(async (req, res) => {
   if (!process.env.SITE_KEY || req.query.key !== process.env.SITE_KEY) return res.sendStatus(403);
   if (!pool) return res.sendStatus(503);
@@ -311,184 +304,6 @@ app.get('/api/feedback', h(async (req, res) => {
   res.json({ feedback: feedback.rows, errors: errors.rows });
 }));
 
-// ---- Investigation ----------------------------------------------------------
-// Everything the game exposes (roster, wiki, patch notes) plus the observed-play
-// aggregates, packed into one dossier for an operator-run analysis of broken/OP
-// interactions and patterns. The findings post back here, replace the watchlist,
-// and feed the advisor's scoring. The analysis itself happens in Claude Code
-// (see .claude/skills/pod-investigate) — this server never calls an LLM.
-
-const arr = (x) => Array.isArray(x) ? x : [];
-
-// Kept small on purpose: derived aggregates plus a handful of full builds, not
-// the whole DB. Everything here is already public on the site.
-async function buildDossier() {
-  const one = async (q, p) => (await pool.query(q, p)).rows;
-  const [classes, passives, mods, rates, top] = await Promise.all([
-    one(`SELECT archetype, count(*)::int AS players, round(avg(level)) AS avg_level, max(level) AS max_level
-         ${PUB} GROUP BY archetype ORDER BY 2 DESC`),
-    // jsonb_typeof guards: one row storing a non-array here would otherwise error
-    // out the whole query. Row caps keep the prompt (and its cost) bounded.
-    one(`SELECT archetype, left(n->>'name', 120) AS node, count(*)::int AS players,
-                round(avg((substring(n->>'rank' from '^\\d+'))::int), 1) AS avg_rank
-         FROM installs, jsonb_array_elements(data->'passives'->'nodes') n
-         WHERE name IS NOT NULL AND data ? 'equipped'
-           AND jsonb_typeof(data->'passives'->'nodes') = 'array' AND n->>'rank' ~ '^[1-9]'
-         GROUP BY 1, 2 ORDER BY 1, 3 DESC LIMIT 600`),
-    one(`SELECT archetype, left(trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')), 120) AS mod,
-                count(DISTINCT id)::int AS players
-         FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m
-         WHERE name IS NOT NULL AND jsonb_typeof(data->'equipped') = 'array'
-           AND jsonb_typeof(it->'mods') = 'array' AND m->>'t' IS NOT NULL
-         GROUP BY 1, 2 HAVING count(DISTINCT id) > 1 ORDER BY 1, 3 DESC LIMIT 600`),
-    one(`SELECT left(trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')), 120) AS affix,
-                round(avg((substring(m->>'t' from '([0-9]+\\.?[0-9]*)'))::numeric
-                          / NULLIF((substring(it->>'tier' from '\\d+'))::int, 0)), 4) AS per_tier,
-                count(*)::int AS samples
-         FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m
-         WHERE jsonb_typeof(data->'equipped') = 'array' AND jsonb_typeof(it->'mods') = 'array'
-           AND m->>'t' ~ '[0-9]' AND it->>'tier' ~ '\\d'
-         GROUP BY 1 HAVING count(*) >= 3 ORDER BY 3 DESC LIMIT 300`),
-    // Full loadouts for the highest-level players — the sharp end of the meta,
-    // where a broken interaction shows up first.
-    one(`SELECT name, archetype, level, data->'stats' AS stats, data->'equipped' AS equipped,
-                data->'passives' AS passives ${PUB} ORDER BY level DESC NULLS LAST LIMIT 10`),
-  ]);
-  const current = await latestInvestigation();
-  const dossier = {
-    generated: new Date().toISOString(),
-    // The individual scrapes log and swallow their own failures, so say plainly
-    // what actually landed — a null wiki or an empty patch list means analysing
-    // against a partial picture, and mid-scrape means the roster is in flux.
-    sources: { rosterLastScrape: lastScrapeAt, wikiLoaded: !!wikiTrees,
-      patchNoteDates: arr(patchNotes).length, scrapeInProgress: scraping },
-    wiki: wikiTrees,                              // class trees: skills, specs, modifiers
-    patchNotes: arr(patchNotes).slice(0, 12),     // most recent dates — older ones are settled history
-    observed: { classes, passives, mods, affixRates: rates, topBuilds: top },
-    currentWatchlist: current ? current.data.interactions
-      : JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'watchlist.json'), 'utf8')).interactions,
-  };
-  // Sanity ceiling — a healthy dossier is a few hundred KB. Hitting this means
-  // something upstream has grown unbounded, not that the analysis needs more.
-  const body = JSON.stringify(dossier);
-  if (body.length > 2e6) throw new Error(`dossier too large (${body.length} bytes) — refusing to send`);
-  return { dossier, body };
-}
-
-async function initInvestigations() {
-  await pool.query(`CREATE TABLE IF NOT EXISTS investigations (
-    id SERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(), model TEXT, data JSONB, usage JSONB)`);
-}
-async function latestInvestigation() {
-  if (!pool) return null;
-  try {
-    const { rows } = await pool.query(`SELECT id, ts, model, data, usage FROM investigations ORDER BY id DESC LIMIT 1`);
-    return rows[0] || null;
-  } catch { return null; } // table may not exist yet on a cold DB
-}
-
-// The investigation is owner-only, behind its own key: SITE_KEY opens the
-// operator pages that can be shared (watchlist, advisor, feedback inbox), while
-// OWNER_KEY opens this. Fails closed — an unset variable denies everyone.
-// The key travels in a header, never the query string: query strings land in
-// proxy and access logs, and this one is the privileged key. (The site key's
-// ?key= is grandfathered; its pages are the shareable ones.)
-const ownerOk = (req) => !!process.env.OWNER_KEY && req.get('x-pod-owner') === process.env.OWNER_KEY;
-
-// The dossier goes out, findings come back. Nothing here calls an LLM — the
-// analysis runs in whatever Claude the operator already pays for (see the
-// pod-investigate skill), which keeps this server free of API keys and spend.
-app.get('/api/dossier', h(async (req, res) => {
-  if (!ownerOk(req)) return res.sendStatus(403);
-  if (!pool) return res.sendStatus(503);
-  const { body } = await buildDossier();
-  res.set('Cache-Control', 'no-store').type('application/json').send(body);
-}));
-
-// Kick a fresh pull of every source and return immediately — the roster walk
-// takes a couple of minutes, far longer than a request should hold open.
-let scraping = false;
-app.post('/api/rescrape', (req, res) => {
-  if (!ownerOk(req)) return res.sendStatus(403);
-  if (scraping) return res.status(409).json({ scraping, lastScrape: lastScrapeAt });
-  scraping = true;
-  Promise.all([scrapeRoster(), scrapeWiki(), scrapePatchNotes()])
-    .catch((e) => console.error('rescrape:', e.message))
-    .finally(() => { scraping = false; });
-  res.status(202).json({ scraping: true });
-});
-
-// Findings arrive as JSON from the analysis. Shape-checked rather than trusted:
-// the advisor and the watchlist page render whatever lands here.
-const IMPACTS = ['high', 'medium', 'low'];
-const LIMITS = { interactions: 200, patterns: 100, list: 20 };
-// Trim first, then judge: a title of 200 spaces would otherwise pass the check
-// and be stored as a blank heading.
-const clip = (v, n) => typeof v === 'string' ? v.trim().slice(0, n).trim() : '';
-const strList = (v, n) => arr(v).map((x) => clip(x, n)).filter(Boolean);
-
-function badFindings(d) {
-  if (!d || typeof d !== 'object' || Array.isArray(d)) return 'body must be a JSON object';
-  if (!Array.isArray(d.interactions) || !d.interactions.length) return 'interactions must be a non-empty array';
-  if (d.patterns !== undefined && !Array.isArray(d.patterns)) return 'patterns must be an array';
-  // Refuse oversized lists rather than truncating them — silently dropping the
-  // tail of a full replacement list would delete watchlist coverage.
-  for (const [k, max] of [['interactions', LIMITS.interactions], ['patterns', LIMITS.patterns]]) {
-    if (arr(d[k]).length > max) return `${k}: ${d[k].length} is over the ${max} limit — split the post`;
-  }
-  for (const i of d.interactions) {
-    if (!i || typeof i !== 'object') return 'each interaction must be an object';
-    if (!clip(i.title, 200)) return 'each interaction needs a non-empty title';
-    if (!clip(i.text, 4000)) return `interaction "${clip(i.title, 60)}" needs non-empty text`;
-    if (i.impact !== undefined && !IMPACTS.includes(i.impact)) return `interaction "${clip(i.title, 60)}": impact must be ${IMPACTS.join('/')}`;
-    for (const k of ['classes', 'rolls']) {
-      if (i[k] === undefined) continue;
-      if (!Array.isArray(i[k])) return `interaction "${clip(i.title, 60)}": ${k} must be an array`;
-      if (i[k].length > LIMITS.list) return `interaction "${clip(i.title, 60)}": at most ${LIMITS.list} ${k}`;
-      // The advisor matches classes by exact string — a blank or non-string entry
-      // is a finding that will never match anything.
-      if (i[k].some((x) => !clip(x, 64))) return `interaction "${clip(i.title, 60)}": ${k} entries must be non-empty strings`;
-    }
-  }
-  return null;
-}
-
-app.post('/api/findings', h(async (req, res) => {
-  if (!ownerOk(req)) return res.sendStatus(403);
-  if (!pool) return res.sendStatus(503);
-  const bad = badFindings(req.body);
-  if (bad) return res.status(400).json({ error: bad });
-  // Stored normalised so the pages never have to defend against odd shapes.
-  const data = {
-    summary: clip(req.body.summary, 4000),
-    interactions: req.body.interactions.map((i) => ({
-      title: clip(i.title, 200), type: clip(i.type, 40), impact: IMPACTS.includes(i.impact) ? i.impact : 'medium',
-      classes: strList(i.classes, 64), rolls: strList(i.rolls, 64),
-      text: clip(i.text, 4000), evidence: clip(i.evidence, 2000),
-    })),
-    patterns: arr(req.body.patterns).map((p) => ({
-      title: clip(p && p.title, 200), text: clip(p && p.text, 4000), evidence: clip(p && p.evidence, 2000),
-    })).filter((p) => p.title && p.text),
-  };
-  const { rows } = await pool.query(
-    `INSERT INTO investigations (model, data, usage) VALUES ($1,$2,$3) RETURNING id, ts`,
-    [clip(req.body.model, 64) || 'claude-code', JSON.stringify(data), JSON.stringify(req.body.usage || {})]);
-  res.json({ ok: true, id: rows[0].id, ts: rows[0].ts,
-    interactions: data.interactions.length, patterns: data.patterns.length });
-}));
-
-// What the #/intel page reads: newest findings, patch notes, scrape freshness.
-app.get('/api/intel', h(async (req, res) => {
-  if (!ownerOk(req)) return res.sendStatus(403);
-  const found = await latestInvestigation();
-  res.set('Cache-Control', 'no-store');
-  res.json({
-    scraping, lastScrape: lastScrapeAt, patchNotes,
-    sources: { wikiLoaded: !!wikiTrees, patchNoteDates: arr(patchNotes).length },
-    latest: found && { ts: found.ts, model: found.model, ...found.data },
-  });
-}));
-
 // Freshness watermark for the site footer: deploy identity + when data last moved.
 const STARTED = new Date().toISOString();
 let lastScrapeAt = null;
@@ -500,37 +315,6 @@ app.get('/api/meta', h(async (_req, res) => {
     rev: (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || 'dev', appRev,
     deployed: STARTED, lastScrape: lastScrapeAt, dbLatest,
   });
-}));
-
-// Advisor-only gear view: includes the bag (privacy-excluded from the public
-// build endpoint), so recommendations can weigh owned-but-unworn items.
-// Owner-only, same gate as the watchlist the advisor is built on.
-app.get('/api/advisor-gear/:name', h(async (req, res) => {
-  if (!ownerOk(req)) return res.sendStatus(403);
-  if (!pool) return res.sendStatus(503);
-  const { rows } = await pool.query(
-    `SELECT data->'equipped' AS equipped, data->'bag' AS bag FROM installs
-     WHERE name = $1 ORDER BY last_seen DESC LIMIT 1`, [String(req.params.name).slice(0, 128)]);
-  if (!rows.length) return res.sendStatus(404);
-  res.json(rows[0]);
-}));
-
-// Empirical affix rates for the advisor's craft plan: average mod value per
-// item tier, per affix type, across all scraped gear. Same owner gate as the
-// watchlist.
-app.get('/api/affix-rates', h(async (req, res) => {
-  if (!ownerOk(req)) return res.sendStatus(403);
-  if (!pool) return res.sendStatus(503);
-  const { rows } = await pool.query(`
-    SELECT trim(regexp_replace(m->>'t', '[-+0-9.,%]+', ' ', 'g')) AS affix,
-           round(avg((substring(m->>'t' from '([0-9]+\\.?[0-9]*)'))::numeric
-                     / NULLIF((substring(it->>'tier' from '\\d+'))::int, 0)), 4) AS per_tier,
-           count(*)::int AS samples
-    FROM installs, jsonb_array_elements(data->'equipped') it, jsonb_array_elements(it->'mods') m
-    WHERE data ? 'equipped' AND m->>'t' ~ '[0-9]' AND it->>'tier' ~ '\\d'
-    GROUP BY 1 HAVING count(*) >= 3 ORDER BY 3 DESC`);
-  res.set('Cache-Control', 'public, max-age=300');
-  res.json({ rates: rows });
 }));
 
 // Freshly scraped class trees win over the static public/passives.json snapshot
@@ -806,8 +590,8 @@ async function scrapeWiki() {
 
 // ---- Patch notes -------------------------------------------------------------
 // The game's /patch-notes page is public (no cookie needed) and is the only record
-// of what the developer changed — the investigation leans on it to date findings
-// and retire ones a patch has fixed. Markup: h2 = date, h3 = entry, li = bullets.
+// of what the developer changed, served on to anyone who wants to date a change.
+// Markup: h2 = date, h3 = entry, li = bullets.
 let patchNotes = null;
 function parsePatchNotes(t) {
   const out = [];
@@ -841,7 +625,7 @@ app.get('/api/patch-notes', (_req, res) => {
 
 // Required as a module (test-server.js) — export the pure bits, start nothing.
 if (require.main !== module) {
-  module.exports = { parsePatchNotes, parseCharacter, parsePassives, parseWiki, badFindings };
+  module.exports = { parsePatchNotes, parseCharacter, parsePassives, parseWiki };
   return;
 }
 

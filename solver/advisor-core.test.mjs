@@ -1,12 +1,12 @@
 // node advisor-core.test.mjs — asserts the scoring core against the game
-// math it mirrors (PathofDust source cites in server/public/game-model.json).
+// math it mirrors (PathofDust source cites in game-model.json).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseMod, parseItem, sumBuckets, classScore, bestLoadout, rollTargets, trimOrder, emptyBuckets,
   treeLayer, bestTree, pointsForLevel, searchBuild, nodeScored, MODELED_SPECIAL_KEYS, statPriority,
-  nodeMagnitude } from './server/public/advisor-core.mjs';
+  nodeMagnitude } from './advisor-core.mjs';
 
-const model = JSON.parse(readFileSync(new URL('./server/public/game-model.json', import.meta.url)));
+const model = JSON.parse(readFileSync(new URL('./game-model.json', import.meta.url)));
 
 // parseMod: label precedence + flat/% max hp split
 assert.deepEqual(parseMod('+18% crit chance', model), { bucket: 'critChance', value: 0.18, perTier: 0.01 });
@@ -129,7 +129,7 @@ assert.deepEqual(trimOrder(order, 6), [{ n: 'A', r: 3 }, { n: 'B', r: 3 }]);
 
 
 // ---- passive tree layer (passive-tree.json, generated from passive_tree.rs) --
-const tree = JSON.parse(readFileSync(new URL('./server/public/passive-tree.json', import.meta.url)));
+const tree = JSON.parse(readFileSync(new URL('./passive-tree.json', import.meta.url)));
 const warrior = tree.classes.Warrior;
 
 assert.equal(pointsForLevel(0), 1);
@@ -222,7 +222,7 @@ assert.equal(pointsForLevel(119), 30);
 }
 
 // searchBuild: require forces an affix in, ban keeps it out, a clean run drops
-// nothing. (The whole gear+tree search tools/best-builds.mjs and #/explorer run.)
+// nothing. (The whole gear+tree search the build dossier runs.)
 {
   const nodes = tree.classes.Warrior;
   const base = searchBuild('Warrior', nodes, 119, 119, model);

@@ -426,7 +426,7 @@ function prereqs(byKey, alloc, key, want) {
 // allocating the max-gain affordable bundle anyway — preferring harmless nodes
 // (gain 0, incl. inert Skill/root nodes) over strictly harmful ones — until the
 // whole point budget is spent or the tree is full. The theoretical optimizers
-// (best-builds.mjs / searchBuild) leave it false: they want the best build, not
+// (searchBuild) leaves it false: it wants the best build, not
 // a fully-drained tree.
 export function bestTree(cls, nodes, g, level, model, points, objective = (s) => s.score, spendAll = false) {
   const byKey = new Map((nodes || []).map(n => [n.key, n]));
@@ -491,8 +491,8 @@ export function bestLoadout(equipped, bag, cls, level, model, tree) {
 // set) with the biggest marginal class-score gain of one average roll. `tier`
 // is a number, or a {slot: tier} map so each slot plans at the tier of the
 // base item actually being crafted on (mods roll at ITEM tier). `empirical`
-// (from api/affix-rates) overrides a model perTier when they disagree by
-// >20% — covers a live balance-toml override.
+// overrides a model perTier when the two disagree by >20% — the hook for a
+// live balance-toml override, when a caller has measured rates to pass in.
 export function rollTargets(cls, level, tier, model, baseBuckets, empirical, tree, objective = (s) => s.score) {
   const tierOf = (s) => (tier && typeof tier === 'object') ? (+tier[s] || 1) : (+tier || 1);
   const perTier = (a) => {
@@ -582,8 +582,7 @@ export function statPriority(cls, level, tier, model, baseBuckets, tree, objecti
 // Best reachable build for one class under the modeled ruleset (5 Perfect
 // items, 4 crafted mods each + 1 Sacred, no uniques/krangle), jointly
 // optimizing gear affixes and the passive tree for `objective`. Pure — the
-// same math the site scores players with. Mirrors tools/best-builds.mjs, which
-// now calls this. Constraints (opts):
+// engine behind the build dossier's solved boards. Constraints (opts):
 //   require: [affix.match | affix.label ...] forced into gear, one copy each
 //   ban:     [affix.match ...] never rolled (gear or Sacred)
 //   objective: score selector, default s => s.score

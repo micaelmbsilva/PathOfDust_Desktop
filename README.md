@@ -84,3 +84,58 @@ The app **updates itself** — no reinstall, ever.
 - Windows 10/11 (64-bit)
 - A Twitch account with a Path of Dust character
 - *(optional)* Chrome with the 7TV extension, for custom chat emotes
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/micaelmbsilva/PathOfDust_Desktop
+cd PathOfDust_Desktop
+npm install
+git config core.hooksPath .githooks   # one-time, per clone — see "Interface revision" below
+npm start                             # launches the Electron shell
+npm test                              # solver, scrape, codec, party-HP and craft-picker suites
+```
+
+First `npm start` opens the Twitch login, exactly as the installed app does. Everything after that
+runs against your own character.
+
+### How it fits together
+
+| piece | what it is |
+|---|---|
+| `main.cjs` | the Electron shell — windows, auto-update, and the launch-time interface pull |
+| `server.mjs` | a local HTTP bridge on `127.0.0.1`. Serves every page below and does all the talking to `adventure.lokati.net` with your session cookie |
+| `index.html`, `bag.html`, `passives.html`, `character.html`, `fights.html`, `builds.html` | the pages themselves — plain HTML with inline `<script>`, no build step, no framework |
+| `actions.mjs` | the write side: every form-POST the app can make |
+| `solver/` | the build model — `advisor-core.mjs` (pure scoring/search functions), `game-model.json` (constants derived from the game's Rust source) and `passive-tree.json` (the node index). Used by the build dossier and covered by `solver/advisor-core.test.mjs` |
+| `tools/passive-tree-export.mjs` | regenerates `solver/passive-tree.json` from the game source |
+| `extension/` | the optional Chrome extension |
+| `wiki/` | the wiki scraper and its snapshot |
+| `server/` | **a separate deployment**, not part of the app — the public ladder site and telemetry backend (Express + Postgres, deployed to Railway). It has its own `package.json`; run `npm install && node test-server.js` inside `server/` to work on it |
+
+`README-actions.md` documents the site's own endpoints and the session-cookie auth the bridge
+drives. Read it before touching `actions.mjs` or the scrapers in `server.mjs`.
+
+The **Build Dossier** (`builds.html`) is owner-gated to the streamer's login in `server.mjs`; it
+returns 403 for everyone else. That is deliberate, not a bug you are hitting.
+
+### Interface revision — read this before your first commit
+
+The app hot-updates its web/bridge files from this repo at launch. `version.json` lists which files
+that covers and carries an integer `version` that running clients compare against their own. **Change
+a listed file without advancing that integer and your change reaches nobody.**
+
+```bash
+npm run bump   # parses version.json and increments — never edit it with sed
+```
+
+The `pre-commit` hook enforces this and fails rather than bumping for you. Full rules, including the
+three separate version numbers and how a release is cut, are in [CLAUDE.md](CLAUDE.md).
+
+### Conventions
+
+- No build step and no runtime dependencies in the app — Node built-ins and the browser only.
+- Pages are single files: styles in `<style>`, logic in `<script>`. Match the surrounding code.
+- Stage explicit paths when committing (`git add <file>`), never `git add -A`.

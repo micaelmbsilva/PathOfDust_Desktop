@@ -97,7 +97,8 @@ which is where the ×50 batch cap comes from). Never edit it.
 ## Tests
 
 ```bash
-npm test        # advisor-core.test.mjs + scrape.test.mjs + codec.test.mjs
+npm test        # solver, scrape, codec, party HP and craft-picker suites
+node server/test-server.js   # the ladder site's own scrapers (needs `npm i` in server/)
 ```
 
 Both run in CI's `verify` job before anything publishes.

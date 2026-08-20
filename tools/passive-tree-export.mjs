@@ -5,7 +5,7 @@
 // touches passives.json, which stays the wiki-scraped prose browser.
 //
 // Run: node tools/passive-tree-export.mjs [path/to/PathofDust]
-//   -> writes server/public/passive-tree.json
+//   -> writes solver/passive-tree.json
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
@@ -181,5 +181,5 @@ const json = {
   tunedSource: WIKI,
   classes: out,
 };
-writeFileSync(join(here, '..', 'server', 'public', 'passive-tree.json'), JSON.stringify(json, null, 1) + '\n');
+writeFileSync(join(here, '..', 'solver', 'passive-tree.json'), JSON.stringify(json, null, 1) + '\n');
 console.log(`passive-tree.json: ${Object.keys(out).length} classes, ${total} nodes, ${real} with a real effect, ${tunedCount} live-tuned`);

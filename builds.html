@@ -271,20 +271,18 @@
       <a href="#obs-damage">Observed · damage</a>
       <a href="#obs-tank">Observed · tank</a>
       <a href="#obs-healing">Observed · healing</a>
-      <a href="#damage">Solver · damage</a>
-      <a href="#tank">Solver · tank</a>
-      <a href="#healing">Solver · healing</a>
     </nav>
   </aside>
 
   <div class="content">
     <header class="hero">
-      <p class="eyebrow">Owner dossier · solver output</p>
+      <p class="eyebrow">Owner dossier</p>
       <h1 id="heroTitle">Ladder builds</h1>
-      <p>Two boards. <strong>Observed</strong> ranks real players on what they actually did in the
-        last fights the game still remembers — their live tree is fetched on demand. <strong>Solver</strong>
-        is the theoretical ceiling from the same advisor math the site scores players with, gear and
-        tree optimized together per objective. Either can be written into one of your Memory slots.</p>
+      <p><strong>Observed</strong> ranks real players on what they actually did in the last fights
+        the game still remembers — their live tree is fetched on demand. Under each board the
+        <strong>solver</strong> answers the same role from scratch at the current ladder level, gear
+        and tree optimized together, so you can read the two side by side. Either can be written
+        into one of your Memory slots.</p>
     </header>
 
     <aside class="runtime">
@@ -295,7 +293,6 @@
     </aside>
 
     <div id="observed"></div>
-    <div id="sections"></div>
 
     <footer class="method">
       <p class="utility-label">Calculation boundary</p>
@@ -319,14 +316,6 @@
   const cap = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
   const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
 
-  // Only the three roles asked for. `overall` stays in the JSON for the tool's
-  // own report — this page is the per-role board.
-  const ROLES = [
-    { key: 'damage', title: 'Damage', metric: 'dps', label: 'Hypothetical DPS', unit: '/ sec' },
-    { key: 'tank', title: 'Tank', metric: 'ehp', label: 'Effective HP', unit: 'EHP' },
-    { key: 'healing', title: 'Healing', metric: 'hps', label: 'Hypothetical healing', unit: '/ sec' },
-  ];
-
   // Observed board: same three roles, measured off /api/fights instead of solved.
   // Tank is "damage soaked per second" — the only durability signal a fight log
   // carries. It rewards a tank that actually held aggro, so deaths ride along
@@ -340,17 +329,15 @@
   // Two is still thin, but it's the floor at which a name means anything.
   const MIN_FIGHTS = 2;
 
-  let data = null;       // tools/best-builds.json
   let live = null;       // { cls, level, options, memories } — null while the game is unreachable
   let observed = null;   // { damage: [...], tank: [...], healing: [...], fights, from, to }
   let target = null;     // { maxLevel, level } — ladder max − 5, the level builds should aim at
-  let core = null;       // advisor-core module + its data files, when this shell carries them
+  let core = null;       // advisor-core module + its data files — the solver, and the node index
   const suggested = {};  // role.key -> buildCard-shaped suggestion solved at target.level
   const trees = {};      // login -> { alloc, skipped, cls } once fetched
 
-  // The dossier's build level follows the ladder: max roster level − 5. The
-  // solver JSON was generated at data.level, which drifts as the ladder climbs;
-  // this is what "current" means today.
+  // The dossier's build level follows the ladder: max roster level − 5. Every
+  // solved board below is generated at this level on load, so it never drifts.
   async function loadTarget() {
     try {
       const r = await fetch('/api/roster').then(x => x.json());
@@ -359,15 +346,15 @@
     } catch {}
   }
 
-  // Client-side solver: the same advisor-core the site and tools/best-builds.mjs
-  // use. Absent on shells that predate these files shipping — analysis degrades
-  // to observation-only and says so.
+  // The solver, and the passive node index every board maps names through.
+  // Absent on shells that predate these files shipping, which is why the boot
+  // path checks it rather than letting each caller trip over a null.
   async function loadCore() {
     try {
       const [mod, model, tree] = await Promise.all([
-        import('/server/public/advisor-core.mjs'),
-        fetch('/server/public/game-model.json').then(r => r.json()),
-        fetch('/server/public/passive-tree.json').then(r => r.json()),
+        import('/solver/advisor-core.mjs'),
+        fetch('/solver/game-model.json').then(r => r.json()),
+        fetch('/solver/passive-tree.json').then(r => r.json()),
       ]);
       core = { ...mod, model, tree };
     } catch { core = null; }
@@ -479,7 +466,8 @@
   // does (tier order, parent before child) so no allocate call is refused.
   const TIERS = ['skill', 'spec', 'modifier'];
   function orderAlloc(cls, ranked) {
-    const idx = data.nodes[Object.keys(data.nodes).find(k => k.toLowerCase() === String(cls).toLowerCase())] || [];
+    const byCls = core.tree.classes;
+    const idx = byCls[Object.keys(byCls).find(k => k.toLowerCase() === String(cls).toLowerCase())] || [];
     const byName = new Map(idx.map(n => [n.name.toLowerCase(), n]));
     const rows = [], skipped = [];
     for (const r of ranked) {
@@ -625,7 +613,7 @@
     const consensus = [...counts].filter(([, c]) => c.n >= Math.min(2, same.length))
       .sort((a, z) => z[1].n - a[1].n || z[1].rank - a[1].rank);
 
-    const L = target ? target.level : data.level;
+    const L = target.level;
     let sug = null, sugNames = new Set();
     if (core && core.tree.classes[cls]) {
       // Yield once so the board paints before the solver blocks the thread.
@@ -708,81 +696,21 @@
     }
   }
 
-  function buildCard(role, b, rank) {
-    const metric = b[role.metric];
-    const passives = b.alloc.map(n => `<li><span>${esc(n.name)}</span><b>${n.rank}</b></li>`).join('');
-    const points = b.alloc.reduce((a, n) => a + n.rank, 0);
-    const gear = SLOTS.map(s => `<tr><th>${s}</th><td>${esc((b.gear[s] || []).join(' · '))}</td></tr>`).join('');
-    return `<article class="build" data-role="${role.key}" data-rank="${rank}">
-      <header class="build__head">
-        <div>
-          <p class="role-label">#${rank + 1} ${esc(role.title)}</p>
-          <h3>${esc(b.cls)}</h3>
-          <p class="build__subtitle">${esc(b.cls)} at level ${data.level}, tier ${data.tier} gear, ${points} passive points.</p>
-        </div>
-        <div class="headline-metric">
-          <span>${esc(role.label)}</span><strong>${fmt(metric)}</strong><small>${esc(role.unit)}</small>
-        </div>
-      </header>
-      <div class="build__grid">
-        <section class="block">
-          <h4>Passives <span>${points} / ${data.points}</span></h4>
-          <ul class="passives">${passives}</ul>
-        </section>
-        <section class="block">
-          <h4>Gear <span>4 mods each</span></h4>
-          <table class="gear"><tbody>${gear}</tbody></table>
-          <p class="build__subtitle">Sacred: ${esc(b.sacred || '—')}</p>
-        </section>
-        <section class="block">
-          <h4>Numbers</h4>
-          <ul class="stats">
-            <li><span>DPS</span><b>${fmt(b.dps)}</b></li>
-            <li><span>Healing / sec</span><b>${fmt(b.hps)}</b></li>
-            <li><span>Effective HP</span><b>${fmt(b.ehp)}</b></li>
-            <li><span>Max HP</span><b>${fmt(b.hp)}</b></li>
-            <li><span>Increased damage</span><b>${pct(b.inc)}</b></li>
-            <li><span>Crit chance / mult</span><b>${b.critChance.toFixed(1)} / ${b.critMult.toFixed(1)}</b></li>
-            <li><span>DR / block / evasion</span><b>${pct(b.eff.dr)} · ${pct(b.eff.block)} · ${pct(b.eff.evasion)}</b></li>
-            <li><span>Action interval</span><b>${b.intervalMs.toFixed(0)}ms</b></li>
-          </ul>
-        </section>
-      </div>
-      <div class="apply">
-        <span class="utility-label">Copy passives to</span>
-        <select class="slotSel" aria-label="Memory slot"></select>
-        <button class="btn-go" data-act="apply">Write build</button>
-        <span class="note"></span>
-      </div>
-    </article>`;
-  }
-
   function render() {
-    $('railLevel').textContent = data.level;
-    $('heroTitle').textContent = `Level-${data.level} ladder builds`;
-    // The solver JSON is a snapshot; the ladder keeps climbing. Say so when the
-    // ladder-derived target (max − 5) has moved past what the boards were solved at.
-    if (target && target.level !== data.level) {
-      $('heroTitle').insertAdjacentHTML('afterend',
-        `<p class="build__subtitle">Ladder max is Lv ${target.maxLevel} — target build level is ${target.level}, but the solver boards below were generated at ${data.level}. Suggested builds in the Observed sections already use ${target.level}; regenerate with <code>node tools/best-builds.mjs</code> to move the boards.</p>`);
-    }
-    // Every value here comes from the solver output (which derives them from the
-    // game model), so nothing drifts if the ruleset changes. `?? '—'` guards an
-    // older best-builds.json produced before `constraints` was emitted.
-    const c = data.constraints || {};
+    $('railLevel').textContent = 'Lv ' + target.level;
+    $('heroTitle').textContent = `Level-${target.level} ladder builds`;
+    // Every value here comes from the game model the solver itself reads, so
+    // the rail and the boards can never disagree about the ruleset.
+    const r = core.model.rules;
     $('railConstraints').innerHTML = [
-      ['Passives', `${data.points} points`], ['Gear tier', `t${data.tier}`],
-      ['Items', c.slots != null ? `${c.slots} slots` : '—'],
-      ['Modifiers', c.modCap != null ? `${c.modCap} + ${c.sacred} Sacred` : '—'],
+      ['Passives', `${core.pointsForLevel(target.level)} points`],
+      ['Gear tier', `t${target.level}`],
+      ['Items', `${Object.keys(r.slotBasePower).length} slots`],
+      ['Modifiers', `${r.modCap} + ${r.sacredExtra} Sacred`],
       ['Rare states', 'None'],
     ].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('');
-    if (c.intervalFloorMs != null) $('intervalFloor').textContent = `${c.intervalFloorMs}ms`;
-    $('ruleset').textContent = data.ruleset;
-    $('sections').innerHTML = ROLES.map(role => `
-      <section class="section section--${role.key}" id="${role.key}">
-        <h2>${esc(role.title)} — top 3 <small>by ${esc(role.metric)}</small></h2>
-        ${(data.results[role.key] || []).slice(0, 3).map((b, i) => buildCard(role, b, i)).join('')}
-      </section>`).join('');
+    $('intervalFloor').textContent = `${r.attackIntervalFloorMs}ms`;
+    $('ruleset').textContent = core.model.note;
     renderObserved();
     renderSlots();
     document.querySelectorAll('button[data-act="apply"]').forEach(btn => {
@@ -815,16 +743,12 @@
     });
   }
 
-  // Both boards end up as the same thing: a class plus an ordered list of
-  // {key, name, rank}. Solver builds ship theirs; observed ones are scraped.
+  // Both kinds of card end up as the same thing: a class plus an ordered list
+  // of {key, name, rank}. Solved builds ship theirs; observed ones are scraped.
   function buildOf(card) {
     if (card.dataset.src === 'sug') {
       const b = suggested[card.dataset.role];
       return b && { cls: b.cls, alloc: b.alloc, label: `${b.cls} ${card.dataset.role} L${b.level}` };
-    }
-    if (card.dataset.src !== 'obs') {
-      const b = data.results[card.dataset.role][+card.dataset.rank];
-      return { cls: b.cls, alloc: b.alloc, label: `${b.cls} ${card.dataset.role}` };
     }
     const t = trees[card.dataset.login];
     if (!t) return null;
@@ -866,8 +790,8 @@
       `• Allocates ${points} points across ${b.alloc.length} nodes and saves the tree.`,
       '• Your current build is replaced. Save it to another slot first if you want it back.',
     ];
-    const designLvl = +card.dataset.lvl || data.level;
-    if (card.dataset.src !== 'obs' && live.level && live.level < designLvl) warn.push(`• You are level ${live.level}; this build is designed for ${designLvl}. Nodes may not fit.`);
+    const designLvl = +card.dataset.lvl || 0;
+    if (designLvl && live.level && live.level < designLvl) warn.push(`• You are level ${live.level}; this build is designed for ${designLvl}. Nodes may not fit.`);
     if (card.dataset.src === 'obs' && trees[card.dataset.login] && trees[card.dataset.login].secondary) warn.push('• Only their PRIMARY tree is copied — their 2nd class tree is not.');
     if (live.secondarySpent) warn.push('• Points spent in your 2nd class tree are NOT refunded by a respec and still count against the budget.');
     if (!confirm(warn.join('\n'))) return;
@@ -903,9 +827,17 @@
 
   (async () => {
     document.title = `${window.GAME_NAME || 'Path of Dust'} — Owner Build Dossier`;
-    try { data = await fetch('/tools/best-builds.json').then(r => r.json()); }
-    catch { $('sections').innerHTML = '<p class="build__subtitle">No solver output — run <code>node tools/best-builds.mjs</code>.</p>'; return; }
     await Promise.all([loadLive(), loadObserved(), loadTarget(), loadCore()]);
+    // The node index lives in the solver bundle, and every board maps scraped
+    // node NAMES back to keys through it — without it even the observed boards
+    // can't produce a writable tree, so fail here rather than three cards deep.
+    if (!core) {
+      $('observed').innerHTML = '<p class="build__subtitle">This shell does not carry the solver files yet — update the app to use the dossier.</p>';
+      return;
+    }
+    // /api/roster was unreachable. Fall back to our own level so the boards are
+    // solved for someone rather than not at all.
+    if (!target) target = { maxLevel: 0, level: (live && live.level) || 1 };
     render();
     analyze(); // fire-and-forget: fetches top trees, then solves per role at the ladder level
   })();
