@@ -2467,10 +2467,22 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // The overlay socket has no per-viewer filtering: every client gets the whole
   // encounter — all units, the full event log — and we discard most of it after
   // the fact. Nobody has ever measured how much that is, so count it.
-  // Sizes are String.length (UTF-16 code units), close enough to bytes for this
-  // ASCII-ish JSON, and they measure PAYLOAD, not wire: JS can't see compressed
-  // frame sizes, so this is the upper bound compression would act on.
-  const WS0 = { since: Date.now(), msgs: 0, size: 0, fights: 0, events: 0, maxEvents: 0, maxSize: 0, byType: {} };
+  // TWO series, deliberately: `size` stays what it has always been — the length
+  // of the JSON we ended up parsing, in UTF-16 code units, close enough to bytes
+  // for this ASCII-ish payload — so the history already banked in localStorage
+  // stays one continuous series. `wire` is what actually crossed the socket,
+  // which is smaller once frames arrive compressed. size/wire is then the real
+  // compression ratio, readable on the client instead of inferred.
+  //
+  // A compressed frame is an ArrayBuffer, and an ArrayBuffer has no .length —
+  // reading one yields undefined, `size += undefined` is NaN, and NaN is
+  // sticky: every later frame keeps it NaN, and the throttled save writes it out
+  // as null, so the next launch silently restarts the count from zero. That
+  // would have hit precisely the clients who opted into compression, which is
+  // to say precisely the ones whose numbers we wanted. frameBytes reads the
+  // right property per frame type instead.
+  const frameBytes = (raw) => raw?.byteLength ?? raw?.size ?? (raw || '').length;
+  const WS0 = { since: Date.now(), msgs: 0, size: 0, wire: 0, bin: 0, binFail: 0, badFrames: 0, fights: 0, events: 0, maxEvents: 0, maxSize: 0, byType: {} };
   let wsStats = { ...WS0, byType: {} };
   try { const s = LS.get('netStats', null); if (s && s.since) wsStats = { ...WS0, ...s, byType: s.byType || {} }; } catch {}
   let netSaveAt = 0;
@@ -2478,20 +2490,35 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     if (Date.now() - netSaveAt < 30000) return;
     netSaveAt = Date.now(); LS.set('netStats', wsStats);
   };
-  function countWs(raw, d) {
+  // raw is always the inflated JSON text by the time it gets here; wire is the
+  // byte count of the frame it arrived in (equal to n for uncompressed frames).
+  function countWs(raw, d, wire) {
     const n = (raw || '').length;
-    wsStats.msgs++; wsStats.size += n;
+    const w = wire ?? n;
+    wsStats.msgs++; wsStats.size += n; wsStats.wire += w;
     const t = d && d.type ? d.type : 'unknown';
-    const b = (wsStats.byType[t] ||= { n: 0, size: 0 });
-    b.n++; b.size += n;
+    // byType entries banked before this revision have no wire field, so it is
+    // read defensively rather than assumed — the ||= only seeds brand-new ones.
+    const b = (wsStats.byType[t] ||= { n: 0, size: 0, wire: 0 });
+    b.n++; b.size += n; b.wire = (b.wire || 0) + w;
     if (wsStats.maxSize < n) wsStats.maxSize = n;
     if (t === 'encounter') {
       const ev = (d.events || []).length;
       wsStats.fights++; wsStats.events += ev;
       if (wsStats.maxEvents < ev) wsStats.maxEvents = ev;
-      console.info(`[pod] encounter: ${ev} events, ${(n / 1048576).toFixed(2)} MB payload, ${(d.units || []).length} units, stage ${d.stage}`);
+      const ratio = w < n ? `${(n / w).toFixed(1)}x compressed to ${(w / 1048576).toFixed(2)} MB, ` : '';
+      console.info(`[pod] encounter: ${ev} events, ${(n / 1048576).toFixed(2)} MB payload, ${ratio}${(d.units || []).length} units, stage ${d.stage}`);
     }
     saveNetStats();
+  }
+  // Loud on purpose. This path used to be an empty catch, so a server that
+  // began emitting something we cannot read was indistinguishable from a server
+  // with nothing to say — which is the exact failure this whole change exists
+  // to design away. Still non-fatal: one bad frame must not take down the feed.
+  function badFrame(err, text, wire) {
+    wsStats.badFrames = (wsStats.badFrames || 0) + 1;
+    saveNetStats();
+    console.warn(`[pod] unparseable ${wire}-byte frame (#${wsStats.badFrames}):`, String(err), String(text).slice(0, 160));
   }
 
   // Cross-window notifications (Fight History follows fight ends off this).
@@ -2535,19 +2562,61 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     if (e.data && e.data.source === 'pod-overlay' && e.data.type === 'ready') overlayHello();
   });
 
+  // Compressed transport, opt-in and self-disabling.
+  //
+  // ?wire=deflate asks the server for zlib-wrapped deflate (RFC 1950 — the
+  // format DecompressionStream calls 'deflate' and Rust's flate2 calls
+  // ZlibEncoder) in binary frames instead of JSON text. A server that has never
+  // heard of the parameter ignores it and keeps sending text, so this is safe
+  // to ship ahead of the server side; a server that honours it but hands us
+  // something we cannot inflate gets one chance, after which this session
+  // reconnects without the parameter and stays on plain JSON.
+  //
+  // DecompressionStream is the platform's own inflater — no build step, no
+  // dependency, which is the rule here. We never ask for a format we cannot
+  // undo, hence the capability check rather than a bare opt-in.
+  const CAN_INFLATE = typeof DecompressionStream === 'function';
+  let wsCompressed = CAN_INFLATE;
+  const inflate = (buf) =>
+    new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('deflate'))).text();
+
   function watchEvents() {
     let ws, t = null;
-    try { ws = new WebSocket('wss://adventure.lokati.net/ws'); } catch { return; }
+    try { ws = new WebSocket('wss://adventure.lokati.net/ws' + (wsCompressed ? '?wire=deflate' : '')); } catch { return; }
+    // Explicit: the default is 'blob', and a Blob would have to be read
+    // asynchronously before we could even measure it.
+    ws.binaryType = 'arraybuffer';
+    // One frame that will not inflate means the rest of this connection is
+    // unreadable too, so drop the opt-in and let onclose reconnect in plain
+    // JSON rather than going quietly deaf for the session.
+    const dropCompression = (err) => {
+      wsStats.binFail = (wsStats.binFail || 0) + 1;
+      saveNetStats();
+      console.warn('[pod] compressed frame did not inflate — reconnecting without ?wire=deflate', err);
+      wsCompressed = false;
+      try { ws.close(); } catch {}
+    };
+    // Inflation is async, so frames are chained instead of awaited where they
+    // arrive: two in flight would deliver in whatever order the decompressor
+    // happened to finish, and this stream's order is load-bearing — events
+    // sharing an atMs are ordered by arrival, never by their timestamp.
+    let chain = Promise.resolve();
+    const queue = (fn) => { chain = chain.then(fn).catch(() => {}); };
     ws.onopen = () => { wsOk = true; toOverlay({ source: 'pod-app', v: 1, type: 'link', up: true }); };
-    ws.onmessage = (e) => {
-      // Relayed before we parse anything: the overlay's copy of this frame must
-      // not depend on our own handling of it succeeding.
-      toOverlay({ source: 'pod-app', v: 1, type: 'ws', data: e.data });
+    const onFrame = (text, wire) => {
+      // Relayed before we parse anything, so the overlay's copy never depends
+      // on our own handling of the frame succeeding — and always as inflated
+      // text, whatever our wire format is, so it needs no inflater of its own.
+      toOverlay({ source: 'pod-app', v: 1, type: 'ws', data: text });
       // Battle end: an encounter we took part in just resolved — arm the dust
       // readout (checkBattleDust) for the refresh below.
-      try {
-        const d = JSON.parse(e.data);
-        try { countWs(e.data, d); } catch {} // instrumentation must never break the feed
+      // Parsing is split out of the handler's own catch so that a frame we
+      // cannot read is reported, while an error from handling a frame we could
+      // read stays as quiet as it has always been.
+      let d = null;
+      try { d = JSON.parse(text); } catch (err) { badFrame(err, text, wire); }
+      if (d) try {
+        try { countWs(text, d, wire); } catch {} // instrumentation must never break the feed
         if (d.type === 'state') {
           lastRoster = d;
           if (document.getElementById('partypanel').classList.contains('open')) renderParty();
@@ -2589,6 +2658,17 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         }
       } catch {}
       clearTimeout(t); t = setTimeout(() => { loadStats(); pollBag(); }, 700);
+    };
+    ws.onmessage = (e) => {
+      const raw = e.data;
+      const wire = frameBytes(raw);
+      if (typeof raw === 'string') { queue(() => onFrame(raw, wire)); return; }
+      wsStats.bin = (wsStats.bin || 0) + 1;
+      // Promise.resolve().then wraps inflate so that a SYNCHRONOUS throw — no
+      // DecompressionStream, a detached buffer — becomes a rejection that
+      // dropCompression sees, rather than one the chain's own catch swallows.
+      // Silently dropping frames is the failure this whole path exists to avoid.
+      queue(() => Promise.resolve().then(() => inflate(raw)).then((text) => onFrame(text, wire), dropCompression));
     };
     ws.onclose = () => { wsOk = false; toOverlay({ source: 'pod-app', v: 1, type: 'link', up: false }); setTimeout(watchEvents, 3000); };
     ws.onerror = () => ws.close();

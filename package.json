@@ -9,7 +9,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "test": "node solver/advisor-core.test.mjs && node scrape.test.mjs && node codec.test.mjs && node partyhp.test.mjs && node craftpick.test.mjs",
+    "test": "node solver/advisor-core.test.mjs && node scrape.test.mjs && node codec.test.mjs && node partyhp.test.mjs && node craftpick.test.mjs && node wire.test.mjs",
     "bump": "node .githooks/bump.mjs",
     "release": "electron-builder --win --publish always",
     "release:mac": "electron-builder --mac --publish always"
