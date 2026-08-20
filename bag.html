@@ -524,24 +524,14 @@
     // Your in-page choice wins over the stored one, and the site's own
     // preselection (whatever you crafted last) is the final fallback — that's
     // what the game does when it re-renders after a craft.
-    // Krangled items are permanently locked — the site lists them (marked 🔒)
-    // so you can see they're still there, but every craft against one fails.
-    // Drop them from both pickers; a dead id in the restore candidates below
-    // already falls through, and itemForOption only resolves ids that survive.
-    // ...except whatever is picked right now: Krangle is usually the last step
-    // of a chain, so the item you just locked is still the one on screen — the
-    // name-it prompt is about it, and the pick card's Disenchant is a normal
-    // next move. Dropping it emptied the card the moment the craft landed.
     // Keep (🔒) is a bag-only flag, and per Item::disenchant_protected it
     // guards disenchant ONLY — crafting a Keep'd item is normal, and those are
-    // exactly the items that get polished over and over. Hiding them dropped
-    // the item mid-craft out of its own picker, so they stay, marked instead.
+    // exactly the items that get polished over and over. So they stay in the
+    // pickers, marked. Krangled items are hidden, but by renderOpts (behind the
+    // 🔒 pip) rather than here: dropping them from the <select> itself meant a
+    // just-Krangled item couldn't be restored as the selection at all.
     const siteSel = (inv.craft.options.find(o => o.selected) || {}).id;
-    const picked = new Set([$('itemA')?.value, $('itemB')?.value,
-      localStorage.getItem('craftItemA'), localStorage.getItem('craftItemB'), siteSel].filter(Boolean));
-    const craftable = (o, keep) => !o.label.includes('🔒') || !!keep?.has(o.id);
     const keepIds = new Set(inv.bag.filter(i => i.protected).map(i => i.id));
-    inv.craft.options = inv.craft.options.filter(o => craftable(o, picked));
     // Candidates in preference order — read now, before the form below
     // replaces the selects.
     const prevA = [$('itemA')?.value, localStorage.getItem('craftItemA'), siteSel];
@@ -554,8 +544,11 @@
         // The "Equipped" optgroup is the only equipped signal, and it's gone
         // in the sorted (flat) list and on the closed picker button. Fold it
         // into the option text so it survives both — same for Keep, which the
-        // site's own option markup doesn't mention at all.
-        out += `<option value="${o.id}">${esc(o.label)}${keepIds.has(o.id) ? ' 🔒' : ''}${o.group === 'Equipped' ? ' — equipped' : ''}</option>`;
+        // site's own option markup doesn't mention at all. Words, not a 🔒:
+        // in an option label that emoji is the site's own Krangled marker, and
+        // craftable() reads it as exactly that.
+        const marks = [keepIds.has(o.id) && 'keep', o.group === 'Equipped' && 'equipped'].filter(Boolean);
+        out += `<option value="${o.id}">${esc(o.label)}${marks.length ? ' — ' + marks.join(' · ') : ''}</option>`;
       }
       return out + (group ? '</optgroup>' : '');
     };
@@ -715,15 +708,19 @@
     : md?.perfect || (it?.quality || '').includes('Perfect') ? 'perfect'
     : 'plain';
   const QUAL_RANK = { krangled: 103, sacred: 102, perfect: 101 };
+  // Krangled items are permanently locked: the site lists them (marked 🔒 in
+  // the option's own label) so you can see they're still there, but every
+  // craft against one fails. `keep` spares ids anyway — the row you're on.
+  const craftable = (o, keep) => !String(o.label ?? '').includes('🔒') || !!keep?.has(o.id);
 
   // Sort/filter state. `pipState` drives BOTH item pickers from the card beside
   // the craft form; `bagPipState` drives the bag grid from its own card. Same
   // renderer, different state + sort list, so the two stay consistent.
   // pipTargets holds each live picker's re-render fn.
   const newPipState = () => ({ sort: '', dir: 1, slots: new Set(), quals: new Set(), q: '' }); // sort '' = grouped order; empty sets = all
-  const pipState = newPipState();
+  const pipState = { ...newPipState(), locked: false }; // locked: show Krangled rows too (craft card only)
   let pipTargets = [];
-  const pipActive = (st) => st.sort || st.slots.size || st.quals.size || st.q;
+  const pipActive = (st) => st.sort || st.slots.size || st.quals.size || st.q || st.locked;
   // el: container, st: state object, sorts: [key,label][], onChange: re-render.
   function renderPips(el, st, sorts, onChange) {
     if (!el) return;
@@ -743,23 +740,30 @@
         [-1, st.sort === 'name' ? 'Z → A' : 'Low → High']]
         .map(([d, lbl]) => pip(st.dir === d, `data-dir="${d}"`, lbl)).join('')) : '') +
       sec('Quality', QUALS.map(([k, em, t]) => pip(st.quals.has(k), `data-qual="${k}"`, em, t, true)).join('')) +
-      sec('Slot', SLOTS.map(s => pip(st.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join(''));
+      sec('Slot', SLOTS.map(s => pip(st.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join('')) +
+      // Craft card only — the bag grid shows Krangled items either way, so its
+      // state object carries no `locked` key and gets no pip.
+      ('locked' in st ? sec('Locked', pip(st.locked, 'data-locked="1"', '🔒',
+        st.locked ? 'Hide Krangled items again' : 'Show Krangled items too — every craft against one fails', true)) : '');
     // Re-rendering the card would blow away the field the user is typing in, so
     // the search box updates state and refreshes only the list.
     const q = el.querySelector('.pip-q');
     q.oninput = () => { st.q = q.value; onChange(); };
     q.onkeydown = (e) => { if (e.key === 'Escape' && st.q) { st.q = q.value = ''; onChange(); } };
     el.onclick = (e) => {
-      if (e.target.closest('[data-clear]')) { st.sort = ''; st.dir = 1; st.slots.clear(); st.quals.clear(); st.q = ''; }
+      if (e.target.closest('[data-clear]')) { st.sort = ''; st.dir = 1; st.slots.clear(); st.quals.clear(); st.q = '';
+        if ('locked' in st) st.locked = false; } // assigning it would grow the key — and a pip — on the bag card
       else {
         const sb = e.target.closest('[data-sort]'), fb = e.target.closest('[data-slot]'),
-              qb = e.target.closest('[data-qual]'), db = e.target.closest('[data-dir]');
+              qb = e.target.closest('[data-qual]'), db = e.target.closest('[data-dir]'),
+              lb = e.target.closest('[data-locked]');
         // Re-clicking the active sort clears it (back to the site's grouped
         // order); direction is set explicitly by the Order pips.
         if (sb) { const k = sb.dataset.sort; if (st.sort === k) st.sort = ''; else st.sort = k; }
         else if (db) st.dir = +db.dataset.dir;
         else if (fb) { const s = fb.dataset.slot; st.slots.has(s) ? st.slots.delete(s) : st.slots.add(s); }
         else if (qb) { const q2 = qb.dataset.qual; st.quals.has(q2) ? st.quals.delete(q2) : st.quals.add(q2); }
+        else if (lb) st.locked = !st.locked;
         else return;
       }
       renderPips(el, st, sorts, onChange); onChange();
@@ -783,10 +787,16 @@
       // The label already carries name/slot/tier/mod-count/quality, so matching
       // it covers every field on screen without resolving the item.
       const q = pipState.q.trim().toLowerCase();
+      const keepRow = sel.value ? new Set([sel.value]) : null; // whatever is picked survives every filter below
       const rows = [...sel.options].filter(o => {
         if (!o.value) return true;                              // keep "None" always
         if (ex && o.value === ex) return false;
         if (q && !o.textContent.toLowerCase().includes(q)) return false;
+        // Locked rows are out by default. The row currently selected stays
+        // regardless (a just-Krangled item is usually exactly that one), and
+        // asking for the Krangled quality pip implies you want to see them.
+        if (!pipState.locked && !pipState.quals.has('krangled')
+            && !craftable(m[o.value] || { label: o.textContent }, keepRow)) return false;
         if (pipState.slots.size && !pipState.slots.has(optSlot(m[o.value], o.textContent))) return false;
         // One bucket per row; selecting several pips shows the union.
         if (pipState.quals.size && !pipState.quals.has(qualOf(null, m[o.value]))) return false;
