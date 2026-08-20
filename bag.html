@@ -306,8 +306,10 @@
       const dd = Math.round(numCur(after.divineDust) - numCur(before.divineDust));
       if (dd) parts.push(`<b>${dd > 0 ? '+' : ''}${dd.toLocaleString()}</b> ✨ divine dust`);
     }
-    // Pill text is "🎫 Scour ×3", or "🎫 Celestial Shard → Celestial Conversion ×2"
-    // for the shard tokens — the name is the part before the arrow.
+    // Pill text is "🎫 Scour ×3". Only the legacy "🎫 Celestial Shard → Celestial
+    // Conversion ×2" shape still carries an arrow — the surviving Unique Shard
+    // grants no fixed effect (the player picks at apply time), so it prints bare.
+    // The name is the part before the arrow either way.
     const toks = (inv) => { const m = {}; for (const t of (inv.tokens || [])) {
       const name = String(t).split('→')[0].replace(/[^A-Za-z ]/g, '').trim();
       const n = String(t).match(/[×x]\s*(\d+)/);
@@ -327,6 +329,12 @@
         const r = rollOf(m.tip);
         parts.push(`${esc(ai.name)}: ${m.crit ? `<span class="mt crit">${esc(m.t)} ✦ crit!</span>` : esc(m.t)}${r != null ? ` <b>(T${tierOf(r)}·${r}%)</b>` : ''}`);
       }
+      // Sacred/unique affixes land in `implicits`, not `mods` — without this a
+      // Divine Dust reroll on an already-Sacred (so already-Perfect) item moves
+      // nothing the diff can see, and 5 retries later it toasts a false
+      // "no change — likely rejected" even though the dust was spent.
+      const hadImp = new Set((bi.implicits || []).map(i => i.t));
+      for (const i of (ai.implicits || [])) if (!hadImp.has(i.t)) parts.push(`${esc(ai.name)}: ${esc(i.t)}`);
       if (ai.tier && bi.tier && ai.tier !== bi.tier) parts.push(`${esc(ai.name)}: ${esc(bi.tier)} → <b>${esc(ai.tier)}</b>`);
     }
     return parts;
@@ -504,8 +512,10 @@
     // preselection (whatever you crafted last) is the final fallback — that's
     // what the game does when it re-renders after a craft.
     const siteSel = (inv.craft.options.find(o => o.selected) || {}).id;
-    const prevA = $('itemA')?.value || localStorage.getItem('craftItemA') || siteSel;
-    const prevB = $('itemB')?.value || localStorage.getItem('craftItemB');
+    // Candidates in preference order — read now, before the form below
+    // replaces the selects.
+    const prevA = [$('itemA')?.value, localStorage.getItem('craftItemA'), siteSel];
+    const prevB = [$('itemB')?.value, localStorage.getItem('craftItemB')];
     // Mirror the site's grouping: an "Equipped" group first, then one per slot.
     const opts = (list, lead) => {
       let out = lead || '', group = null;
@@ -548,10 +558,24 @@
         'Craft Divine Dust', { currency: true });
       refresh();
     };
-    const keep = (sel, v) => { if (v && [...sel.options].some(o => o.value === v)) sel.value = v; };
-    keep($('itemA'), prevA); keep($('itemB'), prevB);
+    // First candidate that still exists wins. Recombine CONSUMES both its
+    // sources, so the in-page pick and the stored one can both be dead ids —
+    // a single-value keep() then silently left the <select> on its DOM default
+    // (the first option: equipped gear) instead of falling through to the
+    // site's own preselect, which already points at the item just produced.
+    function pickExisting(sel, vals) {
+      for (const v of vals) if (v && [...sel.options].some(o => o.value === v)) { sel.value = v; return v; }
+      return null;
+    }
+    const store = (k, v) => v ? localStorage.setItem(k, v) : localStorage.removeItem(k);
+    store('craftItemA', pickExisting($('itemA'), prevA));
+    store('craftItemB', pickExisting($('itemB'), prevB));
 
     lastCraft = inv.craft;
+    // Before updateCosts() — that calls renderPick(), which resolves both
+    // picked items THROUGH this cache. Clearing it further down left the
+    // Crafting card drawing the pre-craft item until it was re-picked.
+    itemForCache.clear(); // lastBag/lastEquipped/lastCraft are all assigned by now
     lastDD = inv.craft.divineDustRecipe; lastDustN = numCur(inv.dust); lastSandN = numCur(inv.sand);
     updateCosts();
     updateDD(); // reflect a stored ×10/×50 pick on first render
@@ -569,7 +593,6 @@
     if (hk) hk.onchange = () => cbSet('hideoutK', hk.checked);
 
     pipTargets = []; // fresh DOM each load — drop stale picker re-render closures
-    itemForCache.clear(); // lastBag/lastEquipped/lastCraft are all assigned by now
     dropdown($('itemA')); dropdown($('itemB'), () => $('itemA').value);
     renderCraftPips();
 
@@ -631,6 +654,15 @@
   // Slot parsed from an option label like "Crude Blade (Weapon, T3, 2 mods)".
   const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
   const slotFromLabel = (l) => ((l || '').match(/\(([^,)]+)/) || [])[1]?.trim().toLowerCase() || '';
+  // The slot is folded into the option TEXT only inside the "Equipped" group
+  // (the game passes show_slot=true there alone); a per-slot optgroup leaves it
+  // implied by the group label, so a bag option reads "Blade (T3, 2 mods Q40%)"
+  // and the label parse yields "t3" — matching no pip, which is what left a
+  // slot filter showing only that slot's equipped item.
+  function optSlot(md, text) {
+    const g = (md?.group || '').toLowerCase();
+    return SLOTS.includes(g) ? g : slotFromLabel(md?.label || text);
+  }
   const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
   const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'],
     ['krangled', '🔒', 'Krangled'], ['plain', '◦', 'Plain (not sacred/perfect/krangled)']];
@@ -721,10 +753,7 @@
         if (!o.value) return true;                              // keep "None" always
         if (ex && o.value === ex) return false;
         if (q && !o.textContent.toLowerCase().includes(q)) return false;
-        if (pipState.slots.size) {
-          const sl = slotFromLabel((m[o.value] || {}).label || o.textContent);
-          if (!pipState.slots.has(sl)) return false;
-        }
+        if (pipState.slots.size && !pipState.slots.has(optSlot(m[o.value], o.textContent))) return false;
         // One bucket per row; selecting several pips shows the union.
         if (pipState.quals.size && !pipState.quals.has(qualOf(null, m[o.value]))) return false;
         return true;
