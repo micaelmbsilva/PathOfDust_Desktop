@@ -61,3 +61,10 @@ assert.equal(pickExisting(s, [undefined, null, '']), null, 'nothing to restore l
 assert.equal(s.value, '');
 
 console.log('craft picker tests passed');
+
+// --- craftable: the site lists Krangled items marked 🔒, but no craft works on one ---
+const craftable = new Function(`${line('const craftable =')}
+return craftable;`)();
+assert.equal(craftable({ label: 'Blade (T1, 1 mod Sacred) 🔒' }), false, 'a locked item is not offered');
+assert.equal(craftable({ label: 'Blade (T1, 1 mod Sacred) ✦' }), true, '✦ is unique, a different marker — still craftable');
+assert.equal(craftable({ label: 'Blade (T1, 1 mod Q40%)' }), true, 'an unmarked item is craftable');

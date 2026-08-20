@@ -166,9 +166,11 @@
   <div id="nameItem"></div>
   <div id="veilChoice"></div>
 
-  <h2>Crafting</h2>
-  <div id="craftPick"></div>
-  <div class="craft" id="craft"></div>
+  <section id="craftWrap">
+    <h2>Crafting</h2>
+    <div id="craftPick"></div>
+    <div class="craft" id="craft"></div>
+  </section>
 
   <h2>Equipped</h2>
   <div class="grid" id="equipped"></div>
@@ -511,6 +513,12 @@
     // Your in-page choice wins over the stored one, and the site's own
     // preselection (whatever you crafted last) is the final fallback — that's
     // what the game does when it re-renders after a craft.
+    // Krangled items are permanently locked — the site lists them (marked 🔒)
+    // so you can see they're still there, but every craft against one fails.
+    // Drop them from both pickers; a dead id in the restore candidates below
+    // already falls through, and itemForOption only resolves ids that survive.
+    const craftable = (o) => !o.label.includes('🔒');
+    inv.craft.options = inv.craft.options.filter(craftable);
     const siteSel = (inv.craft.options.find(o => o.selected) || {}).id;
     // Candidates in preference order — read now, before the form below
     // replaces the selects.
@@ -596,13 +604,9 @@
     dropdown($('itemA')); dropdown($('itemB'), () => $('itemA').value);
     renderCraftPips();
 
-    // While a choice is pending the site rejects every craft — lock the form so
-    // "nothing happened" clicks can't pile up, and point at the pending card.
-    if (inv.veil) {
-      $('craft').querySelectorAll('button,select,input').forEach(el => el.disabled = true);
-      $('craft').insertAdjacentHTML('afterbegin',
-        '<p class="muted">⏳ Crafting is locked until you finish the pending choice above.</p>');
-    }
+    // While a choice is pending the site rejects every craft, so the whole
+    // section is hidden until the pending card above is answered.
+    $('craftWrap').hidden = !!inv.veil;
   }
 
   // ---- item picker with hover preview ----
@@ -665,7 +669,8 @@
   }
   const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
   const QUALS = [['sacred', '✦', 'Sacred'], ['perfect', '🌟', 'Perfect'],
-    ['krangled', '🔒', 'Krangled'], ['plain', '◦', 'Plain (not sacred/perfect/krangled)']];
+    // 🔨 not 🔒 — the bag already spends 🔒 on the Keep flag, a different axis.
+    ['krangled', '🔨', 'Krangled'], ['plain', '◦', 'Plain (not sacred/perfect/krangled)']];
   // One bucket per row, Krangled > Sacred > Perfect > plain — the same precedence
   // GROUPERS.rarity and numQual use, and the same one the game's own label uses
   // (Quality% < Perfect < Sacred). These were independent predicates, which is
