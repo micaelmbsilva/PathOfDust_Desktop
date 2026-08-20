@@ -517,8 +517,13 @@
     // so you can see they're still there, but every craft against one fails.
     // Drop them from both pickers; a dead id in the restore candidates below
     // already falls through, and itemForOption only resolves ids that survive.
-    const craftable = (o) => !o.label.includes('🔒');
-    inv.craft.options = inv.craft.options.filter(craftable);
+    // Keep (🔒) is a bag-only flag and the site still offers those items to
+    // every craft, marker-free — which is how a Keep'd piece gets Scoured by a
+    // misclick. Out of the pickers too, resolved by id (equipped gear carries
+    // no item_id, and has no Keep toggle either).
+    const craftable = (o, keep) => !o.label.includes('🔒') && !keep?.has(o.id);
+    const keepIds = new Set(inv.bag.filter(i => i.protected).map(i => i.id));
+    inv.craft.options = inv.craft.options.filter(o => craftable(o, keepIds));
     const siteSel = (inv.craft.options.find(o => o.selected) || {}).id;
     // Candidates in preference order — read now, before the form below
     // replaces the selects.
@@ -529,7 +534,10 @@
       let out = lead || '', group = null;
       for (const o of list) {
         if (o.group !== group) { if (group !== null) out += '</optgroup>'; group = o.group; if (group) out += `<optgroup label="${esc(group)}">`; }
-        out += `<option value="${o.id}">${esc(o.label)}</option>`;
+        // The "Equipped" optgroup is the only equipped signal, and it's gone
+        // in the sorted (flat) list and on the closed picker button. Fold it
+        // into the option text so it survives both.
+        out += `<option value="${o.id}">${esc(o.label)}${o.group === 'Equipped' ? ' — equipped' : ''}</option>`;
       }
       return out + (group ? '</optgroup>' : '');
     };
