@@ -430,8 +430,10 @@
     if (meData.name) document.title = `${GAME_NAME} — Bag — ${meData.name}`;
     const full = (v) => /^\d+$/.test(v) ? Number(v).toLocaleString('en-US') : v; // exact ints get commas
     const ad = inv.autoDisenchant;
-    $('cur').innerHTML = `<span class="chip">💰 ${full(inv.dust)} dust</span><span class="chip">🪵 ${full(inv.sand)} sand</span>` +
-      (inv.divineDust != null ? `<span class="chip" title="Spent 2 per item tier to make an item Sacred, or reroll an already-Sacred item's sacred affix">✨ ${full(inv.divineDust)} divine dust</span>` : '') +
+    // The numbers sit in their own spans so spend() can move them on click —
+    // see its comment for why that's the only part of a craft we can predict.
+    $('cur').innerHTML = `<span class="chip">💰 <span id="curDust">${full(inv.dust)}</span> dust</span><span class="chip">🪵 <span id="curSand">${full(inv.sand)}</span> sand</span>` +
+      (inv.divineDust != null ? `<span class="chip" title="Spent 2 per item tier to make an item Sacred, or reroll an already-Sacred item's sacred affix">✨ <span id="curDD">${full(inv.divineDust)}</span> divine dust</span>` : '') +
       inv.tokens.map(t => `<span class="chip">${esc(t)}</span>`).join('') +
       `<button class="chip repair ${meData.autoRepair ? 'on' : 'off'}" id="autoRep"${tip(meData.autoRepairTip)}>🔧 Auto-Repair: ${meData.autoRepair ? 'On' : 'Off'}</button>` +
       // Site omits the whole form when nothing is damaged, so no chip either.
@@ -584,6 +586,9 @@
     const ddBtn = $('ddCraft');
     if (ddBtn) ddBtn.onclick = async () => {
       const times = +([...document.querySelectorAll('.ddx')].find(b => b.checked)?.value || 1);
+      // This recipe's per-craft cost is fixed, so ×N is exact and safe to spend
+      // up front (unlike polish/reforge — see spend()).
+      if (lastDD) spend({ dust: lastDD.dustCost * times, sand: lastDD.sandCost * times });
       // Batches stop at the first shortfall and keep whatever landed, so the
       // currency diff is the only honest report of how many actually went through.
       await craftAct('craft', { action: 'divine dust craft', ...(times > 1 ? { times: String(times) } : {}) },
@@ -608,7 +613,7 @@
     // picked items THROUGH this cache. Clearing it further down left the
     // Crafting card drawing the pre-craft item until it was re-picked.
     itemForCache.clear(); // lastBag/lastEquipped/lastCraft are all assigned by now
-    lastDD = inv.craft.divineDustRecipe; lastDustN = numCur(inv.dust); lastSandN = numCur(inv.sand);
+    lastDD = inv.craft.divineDustRecipe; lastDustN = numCur(inv.dust); lastSandN = numCur(inv.sand); lastDDN = numCur(inv.divineDust);
     updateCosts();
     updateDD(); // reflect a stored ×10/×50 pick on first render
     $('itemA').onchange = () => {
@@ -986,7 +991,7 @@
   // for the selected item (base + 3*tier; veil extras; reforge 30*tier; polish
   // by quality). Token-based buttons (Regal/Krangle) keep the server label.
   let lastCraft = { options: [], actions: [] };
-  let lastDD = null, lastDustN = 0, lastSandN = 0; // Divine Dust recipe + numeric balances for its ×N redraw
+  let lastDD = null, lastDustN = 0, lastSandN = 0, lastDDN = 0; // Divine Dust recipe + numeric balances for its ×N redraw
   let pendChoices = null; // pending-card choices, indexed by data-veilpick
   const batchTimes = () => +([...document.querySelectorAll('.batchx')].find(b => b.checked)?.value || 1);
   // Divine Dust's per-craft cost is fixed, so scaling by the selected ×N is
@@ -999,28 +1004,66 @@
     span.textContent = `✨ Craft Divine Dust (${d.toLocaleString()}d + ${s.toLocaleString()}s → ${o}):`;
     const btn = $('ddCraft'); if (btn) btn.disabled = !(lastDustN >= d && lastSandN >= s);
   }
-  function updateCosts() {
+  // What the pickers currently say, as the cost math needs it.
+  function craftCtx() {
     const byId = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
     const A = byId[$('itemA')?.value], B = byId[$('itemB')?.value];
-    const tierA = A?.tier || 0, qualA = A?.quality || 0, perfA = !!A?.perfect;
-    const pool = (A?.affixes || 0) + (B?.affixes || 0);
-    const veiled = $('veil')?.checked;
+    return { A, B, tierA: A?.tier || 0, qualA: A?.quality || 0, perfA: !!A?.perfect,
+      pool: (A?.affixes || 0) + (B?.affixes || 0), veiled: !!$('veil')?.checked };
+  }
+  // One action's price for that state — the same numbers the button labels
+  // print, shaped like the balances so spend() can subtract it directly.
+  // Empty for the token buttons (Regal/Krangle), which cost no currency.
+  function craftCost(a, c) {
+    if (a.polish) return { sand: c.perfA ? 12 : Math.ceil(c.qualA / 10) };
+    if (a.reforge) return { dust: 30 * c.tierA };
+    if (a.divineDustApply) return { dd: 2 * c.tierA };
+    if (a.base == null) return {};
+    let dust = a.recombine ? a.base : a.base + 3 * c.tierA;
+    if (c.veiled && a.veilExtra != null) dust += a.veilExtra + (a.recombine ? 500 * c.pool : 0);
+    return { dust };
+  }
+  // A craft's RESULT is the server's dice and can't be predicted, but its
+  // PRICE is known the moment you click. Spending it here moves the chips and
+  // every affordability check now instead of a round trip later, so chained
+  // crafts don't run on numbers that are one craft stale. The read that
+  // follows overwrites all of it, including when the site rejects the craft.
+  // Balances the site abbreviates ("1.2K") come back exact here — a cosmetic
+  // difference that lasts until that read lands.
+  function spend({ dust = 0, sand = 0, dd = 0 }) {
+    if (!dust && !sand && !dd) return;
+    lastDustN = Math.max(0, lastDustN - dust);
+    lastSandN = Math.max(0, lastSandN - sand);
+    lastDDN = Math.max(0, lastDDN - dd);
+    // The buttons carry the player's balance in their own data — the source
+    // updateCosts checks affordability against, so it has to move too.
+    for (const a of lastCraft.actions || []) {
+      if (a.dust != null) a.dust = Math.max(0, a.dust - dust);
+      if (a.sand != null) a.sand = Math.max(0, a.sand - sand);
+      if (a.divineDust != null) a.divineDust = Math.max(0, a.divineDust - dd);
+    }
+    const set = (id, n) => { const el = $(id); if (el) el.textContent = n.toLocaleString('en-US'); };
+    set('curDust', lastDustN); set('curSand', lastSandN); if (dd) set('curDD', lastDDN);
+    updateCosts(); updateDD();
+  }
+  function updateCosts() {
+    const ctx = craftCtx(), A = ctx.A;
     // ×N label suffix only — per-cast cost rises as quality/tier climb mid-batch,
     // so a multiplied total would be a lie; affordability stays per-cast.
     const xN = batchTimes() > 1 ? ` ×${batchTimes()}` : '';
     for (const a of lastCraft.actions || []) {
       const btn = document.querySelector(`[data-craft="${a.action}"]`);
       if (!btn) continue;
-      if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c || A?.polishRoom === 0; continue; }
-      if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
+      const price = craftCost(a, ctx);
+      if (a.polish) { const c = price.sand; btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c || A?.polishRoom === 0; continue; }
+      if (a.reforge) { const c = price.dust; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
       // 2 ✨ per tier, never batched (the ×N above is the recipe's own thing).
       // Already-Sacred items reroll the affix instead of gaining one.
-      if (a.divineDustApply) { const c = 2 * tierA;
+      if (a.divineDustApply) { const c = price.dd;
         btn.textContent = `${A?.sacred ? 'Reroll Sacred Affix' : 'Apply Divine Dust'} (${c} ✨)`;
         btn.disabled = (a.divineDust ?? 0) < c; continue; }
       if (a.base == null) { btn.textContent = a.label; btn.disabled = false; continue; } // Regal/Krangle: token label
-      let cost = a.recombine ? a.base : a.base + 3 * tierA;
-      if (veiled && a.veilExtra != null) { cost += a.veilExtra; if (a.recombine) cost += 500 * pool; }
+      const cost = price.dust;
       btn.textContent = `${a.dataLabel} (${cost > 0 ? cost + 'd' : 'Free'})`;
       btn.disabled = false;
     }
@@ -1260,6 +1303,9 @@
           !confirm('Reroll this item’s sacred affix? The current one is lost.')) return;
       if ((aDef?.confirm || action === 'scour' || action === 'krangle') &&
           !confirm(`${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
+      // Batches are exempt: per-cast cost climbs mid-batch, so ×N of the first
+      // cast's price is a guess, and a batch that runs out of sand stops early.
+      if (times === 1 && aDef) spend(craftCost(aDef, craftCtx()));
       if (action === 'recombine') {
         const aName = itemForOption($('itemA').value)?.name, bName = itemForOption($('itemB').value)?.name;
         const opts = { recombine: true };
