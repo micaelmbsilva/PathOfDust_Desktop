@@ -167,7 +167,7 @@
   <div id="veilChoice"></div>
 
   <section id="craftWrap">
-    <h2>Crafting</h2>
+    <h2 id="craftHead">Crafting</h2>
     <div id="craftPick"></div>
     <div class="craft" id="craft"></div>
   </section>
@@ -520,6 +520,12 @@
         <button id="ddCraft"${r.affordable ? '' : ' disabled'}>Craft</button>
       </div>`;
 
+    // A pending choice replaces the whole crafting card on the site, so the
+    // scrape comes back with no options and no actions. Keep the last real set:
+    // the form built from it is hidden anyway, but the pick card is not, and
+    // itemForOption resolves EQUIPPED gear through these labels (bag items go
+    // by id and don't need them).
+    if (inv.veil && !inv.craft.options.length && lastCraft.options.length) inv.craft = lastCraft;
     // crafting form — keep the selection across reloads AND app restarts (localStorage fallback)
     // Your in-page choice wins over the stored one, and the site's own
     // preselection (whatever you crafted last) is the final fallback — that's
@@ -626,9 +632,12 @@
     dropdown($('itemA')); dropdown($('itemB'), () => $('itemA').value);
     renderCraftPips();
 
-    // While a choice is pending the site rejects every craft, so the whole
-    // section is hidden until the pending card above is answered.
-    $('craftWrap').hidden = !!inv.veil;
+    // While a choice is pending the site rejects every craft, so the form goes
+    // away until the pending card above is answered. The pick card stays: the
+    // item is untouched until you choose, and its mods/tier/quality are what
+    // the three outcomes have to be judged against. Its own caption reads
+    // "Crafting", so the heading goes with the form.
+    $('craftHead').hidden = $('craft').hidden = !!inv.veil;
   }
 
   // ---- item picker with hover preview ----
@@ -858,8 +867,13 @@
   // already survives reloads and restarts via localStorage, so this does too.
   let recombResult = null; // set after a recombine — {a, b, id} of the fresh result item
   function renderPick() {
-    const aVal = $('itemA') && $('itemA').value;
-    const items = [aVal, $('itemB') && $('itemB').value].map(itemForOption).filter(Boolean);
+    // Reloading the page while a choice is pending leaves the pickers empty —
+    // the site renders no crafting card at all. The stored pick still names the
+    // item the outcomes apply to, and a bag item resolves by id alone.
+    const empty = !$('itemA')?.options.length;
+    const pick = (sel, k) => (sel && sel.value) || (empty ? localStorage.getItem(k) : '');
+    const aVal = pick($('itemA'), 'craftItemA');
+    const items = [aVal, pick($('itemB'), 'craftItemB')].map(itemForOption).filter(Boolean);
     // Only while the recombine result is still the selected Item A: name its
     // sources and flag the crit-granted modifier ("how it was affected").
     let note = '';
