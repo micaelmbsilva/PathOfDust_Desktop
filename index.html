@@ -1456,6 +1456,15 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         parts.push('<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">Running total of shield you\'ve granted this fight — the only buff the log ties to a caster.</div>');
       }
     }
+    // All three sections above read buffSnapshot/shield events, which the game
+    // stopped broadcasting on 2026-08-20 (see thinningOf's note). They'd render
+    // as nothing at all otherwise, which reads as "no buffs active" — a lie.
+    // Gated on all three being empty so it disappears by itself if the feed ever
+    // carries them again, and on `fight` so it stays quiet before the first one.
+    if (fight && !fight.mySnaps?.length && !fight.enemySnaps?.length && !fight.myShieldsOut?.length) {
+      parts.push('<div class="fhead" style="margin-bottom:2px">🗡️ In-fight buffs</div>' +
+        '<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">The game no longer sends buff or shield events to the live feed, so what\'s on you, what\'s on your target, and the shields you cast can\'t be shown here any more. Fight History is unaffected — it reads the game\'s own records.</div>');
+    }
     // Channel-point events, which are party-wide rather than about you.
     const t = lastMe?.buffTable;
     if (t && t.length > 1) {
@@ -1686,6 +1695,9 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         return { pct: 100, lvl: 'ok', shPct: 0, notch: n, title: `Full HP${max ? ` — ${fmtN(max)}` : ''}${scale(n)}` }; }
       const pct = Math.max(0, Math.min(100, u.hp / u.max * 100));
       const lvl = pct > 50 ? 'ok' : pct > 20 ? 'warn' : 'low';
+      // u.shield is fed by buffSnapshot's shield_hp, which the game stopped
+      // broadcasting on 2026-08-20 — so this stays 0 and the segment never
+      // shows. Kept wired: the day the feed carries it again, it just works.
       const shPct = u.shield > 0 ? Math.max(0, Math.min(100, u.shield / u.max * 100)) : 0;
       const title = `${fmtN(u.hp)} / ${fmtN(u.max)} HP${u.shield > 0 ? ` · \u{1F6E1} ${fmtN(u.shield)} shield` : ''}`;
       const n = notchOf(u.max, refMax);
@@ -1817,27 +1829,35 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // count scales with party size and stage, and the whole thing is pushed to
   // every viewer on the overlay socket.
   // Did the game drop events out of this fight's live feed?
-  // thin_events_for_overlay (PathofDust combat.rs, 2026-08-17) caps how many
-  // events per second of DISPLAY time reach the socket — 500 player-caused,
-  // 1000 boss-caused — and drops the overflow. It runs after the fight is
-  // decided and persisted, so the site's own /fights page still has everything;
-  // only our copy is short. That makes every total we derive here an
-  // under-count, and not a fair sample either: it keeps the first N in each
-  // bucket by emission order, so the same units win every time. We can't
-  // recover the data, so the least we can do is not present it as complete.
+  // thin_events_for_overlay (PathofDust combat.rs) caps how many ATTACK events
+  // per second of DISPLAY time reach the socket — 500 player-caused, 1000
+  // boss-caused. Reworked 2026-08-20 from a flat all-event head-keep into a
+  // priority tier: heal/defeat/skillCast are exempt from the budget entirely
+  // (the old rule silently dropped 100% of heals and 74% of defeats), shield
+  // and buffSnapshot are no longer broadcast at all, and the attacks that do
+  // get cut are now sampled evenly across the second instead of the second's
+  // tail being annihilated. It runs after the fight is decided and persisted,
+  // so the site's own /fights page still has everything; only our copy is
+  // short. Attack-derived totals here are therefore still an under-count in a
+  // capped second — a fairer sample than before, but not complete, and we say
+  // so rather than presenting them as exact.
   //
-  // A bucket can never EXCEED its cap, so landing exactly on it is the tell.
+  // A bucket can never EXCEED its cap, so landing exactly on it is the tell —
+  // an over-budget second keeps exactly `cap` attacks, an under-budget one keeps
+  // all of them. Attacks ONLY: heal/defeat/skill events are exempt server-side
+  // and would otherwise push an honest second past the cap and flag it.
   // ponytail: caps hardcoded to mirror the server's constants — if it retunes
   // them we get false negatives (silence), which is the safe direction.
   const OVERLAY_CAP = { player: 500, boss: 1000 };
   const partialNote = (t) => !t ? '' :
-    `<div class="partial" data-tip="The game caps its live feed at ${OVERLAY_CAP.player} player and ${OVERLAY_CAP.boss} boss events per second to keep the overlay smooth, and drops the rest. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. Fight History reads the game's own records instead, so its numbers are unaffected.">` +
-    `⚠️ Busy fight — some of your events were trimmed from the live feed. Fight History has the exact totals.</div>`;
+    `<div class="partial" data-tip="The game caps how many ATTACK events per second reach its live feed — ${OVERLAY_CAP.player} player-caused, ${OVERLAY_CAP.boss} boss-caused — and samples evenly across the second, dropping the rest. Heal, defeat and skill events are never dropped. It happened in ${t.player || 0} of ${t.secs} seconds for players and ${t.boss || 0} for the boss. Fight History reads the game's own records instead, so its numbers are unaffected.">` +
+    `⚠️ Busy fight — some of your attacks were trimmed from the live feed. Fight History has the exact totals.</div>`;
   const actorOf = (ev) => ev.attacker || ev.healer || ev.unit || '';
   function thinningOf(d) {
     const boss = new Set((d.units || []).filter(u => u.isBoss || /^__enemy/.test(u.id)).map(u => u.id));
     const perSec = new Map(); // sec -> [playerCount, bossCount]
     for (const ev of d.events || []) {
+      if (ev.kind !== 'attack') continue; // only attacks are budgeted — see above
       const sec = Math.floor((ev.atMs || 0) / 1000);
       let c = perSec.get(sec);
       if (!c) perSec.set(sec, c = [0, 0]);
@@ -2111,20 +2131,23 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       if (v.diedAtMs != null) vitalsMaxAt = Math.max(vitalsMaxAt, v.diedAtMs);
     }
     const evs = [...(d.events || [])].sort((a, b) => (a.atMs || 0) - (b.atMs || 0));
-    // Thinning can drop a fight's LAST events, so the events-only maxAt could
-    // stop the cursor (fightCursor clamps to it) short of a late vitals sample
-    // or death — a player whose diedAtMs lands past the last surviving event
-    // would never render dead. Widen the bound with the vitals timeline.
+    // The events-only maxAt can stop the cursor (fightCursor clamps to it) short
+    // of a late vitals sample — a player whose diedAtMs lands past the last
+    // surviving event would never render dead. Much less likely since defeat
+    // events stopped being thinnable (2026-08-20), but vitals still outlive the
+    // event log when a fight ends on a dropped attack, so keep widening the
+    // bound with the vitals timeline.
     const maxAt = Math.max(evs.length ? evs[evs.length - 1].atMs || 1 : 1, vitalsMaxAt);
     // group my events into 1s sim-time buckets so the log reads, not spams
     const mySnaps = [];
     // Every player who went down this fight (by display name). Fight History has
     // no per-player death flag from the summary, only firstToDie — so we hand it
     // the full set. players[] is non-boss, non-enemy only, so bosses/adds never
-    // count as a death. Seeded from vitals' diedAtMs (authoritative — a thinned
-    // event log can drop Defeat events); the event scan below still adds any it
-    // finds, which is a subset when vitals are present and the only source when
-    // they're not.
+    // count as a death. Seeded from vitals' diedAtMs, which stays authoritative:
+    // defeat events are exempt from thinning as of 2026-08-20, but vitals is the
+    // one source that never depended on that. The event scan below still adds
+    // any it finds — now a complete set rather than the ~26% that used to
+    // survive, and still the only source when vitals are absent.
     const downed = new Set();
     for (const id in vitals) if (vitals[id].diedAt != null && players[id]) downed.add(players[id]);
     // Buff snapshots on the enemy — the offensive side of the same effects the
@@ -2141,6 +2164,11 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     for (const ev of evs) {
       const b = Math.floor((ev.atMs || 0) / 1000);
       if (ev.kind === 'defeat' && players[ev.unit]) downed.add(players[ev.unit]);
+      // These two, and the buffgain/bufflost lines below, never match any more:
+      // the game stopped broadcasting buffSnapshot and shield on 2026-08-20, so
+      // all three arrays stay empty and renderBuffs says so out loud. Left wired
+      // rather than deleted — it costs nothing and revives itself if the feed
+      // ever carries them again.
       if (ev.kind === 'buffSnapshot' && enemyIds.has(ev.unit)) enemySnaps.push({ at: ev.atMs || 0, unit: ev.unit, buffs: ev.buffs || [] });
       if (ev.kind === 'shield' && ev.healer === myId && (ev.amount || 0) > 0) myShieldsOut.push({ at: ev.atMs || 0, target: ev.target, amt: ev.amount || 0 });
       // absorbed/mitigated portion of a hit (armor, shields, damage-reduction buffs)
@@ -2181,14 +2209,16 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       }
     }
     const dur = d.displayDurationMs || maxAt;
-    // Spread each second's lines across the second they belong to. The server
-    // caps how many events per second reach the overlay and keeps the EARLIEST
-    // ones, so everything that survives a given second is stamped within its
-    // first few milliseconds — measured on a stage-903 boss fight: 7-20 groups
-    // per second, all sharing one timestamp. Revealed by timestamp that is a
-    // block of lines followed by a second of nothing, no matter how often the
-    // panel repaints. The shift is under a second and stays inside its own
-    // second, so a line's time label still reads true.
+    // Spread each second's lines across the second they belong to. Written when
+    // the server kept the EARLIEST events of each second, which stamped every
+    // survivor within its first few milliseconds — measured on a stage-903 boss
+    // fight: 7-20 groups per second, all sharing one timestamp, read as a block
+    // of lines followed by a second of nothing. The server samples evenly across
+    // the second since 2026-08-20, so the clustering is largely gone; this is now
+    // a normalizer rather than a repair, and it still earns its place because
+    // groups are per-second buckets whose `at` is whichever event opened the
+    // bucket. The shift is under a second and stays inside its own second, so a
+    // line's time label still reads true (fightRecord records feedSmeared).
     const feed = [...groups.values()].sort((a, b) => a.at - b.at);
     {
       const bySec = new Map();
@@ -2216,7 +2246,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // drive the bar hit by hit, and a vitals sample re-anchors it whenever one
   // lands — the anchor is authoritative, which is what keeps a thinned event
   // log from drifting, but it is far too sparse to animate from. A unit with no
-  // events in a gap (thinning drops them) glides between anchors instead.
+  // events in a gap (thinning drops attacks — heals and defeats are exempt as of
+  // 2026-08-20, so bars now rise on heals too) glides between anchors instead.
   // diedAtMs still pins to 0. Both walks are
   // incremental (fight.hpIdx / per-player vitals idx) so the whole fight costs
   // O(total events + samples), not that per render. Shared by every party bar.
@@ -2228,7 +2259,10 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       if (!u) continue;
       if (ev.kind === 'defeat') { u.hp = 0; u.shield = 0; u.evAt = ev.atMs || 0; }
       else if (ev.kind === 'buffSnapshot') {
-        // shield_hp is the remaining absorb; its absence in a later snapshot
+        // Dead branch since 2026-08-20 — the game no longer broadcasts
+        // buffSnapshot, so u.shield stays 0 and the plate's shield segment never
+        // renders. Kept for the day it comes back. Below: shield_hp is the
+        // remaining absorb; its absence in a later snapshot
         // means the shield is gone, so a missing key reads as 0. Only present
         // for units the feed snapshots (always me; others when included).
         const s = (ev.buffs || []).find(b => b[0] === 'shield_hp');
