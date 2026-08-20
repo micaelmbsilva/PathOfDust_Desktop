@@ -6,9 +6,9 @@
  "counts": {
   "nodes": 471,
   "withEffect": 470,
-  "tuned": 29
+  "tuned": 36
  },
- "tunedScraped": "2026-08-19T19:32:06.521Z",
+ "tunedScraped": "2026-08-20T11:05:09.085Z",
  "tunedSource": "https://adventure.lokati.net/wiki/passives",
  "classes": {
   "Warrior": [
@@ -1320,7 +1320,12 @@
     "effect": {
      "kind": "special",
      "r1": 0.15,
-     "per": 0.15
+     "per": 0.15,
+     "ranks": [
+      1,
+      2,
+      3
+     ]
     }
    },
    {
@@ -1395,7 +1400,12 @@
     "effect": {
      "kind": "special",
      "r1": 0.05,
-     "per": 0.05
+     "per": 0.05,
+     "ranks": [
+      0.2,
+      0.4,
+      0.6
+     ]
     }
    },
    {
@@ -1507,7 +1517,12 @@
     "effect": {
      "kind": "special",
      "r1": 0.1,
-     "per": 0.1
+     "per": 0.1,
+     "ranks": [
+      0.33,
+      0.66,
+      1
+     ]
     }
    },
    {
@@ -1522,7 +1537,12 @@
     "effect": {
      "kind": "special",
      "r1": 0.05,
-     "per": 0.05
+     "per": 0.05,
+     "ranks": [
+      1,
+      2,
+      3
+     ]
     }
    },
    {
@@ -1801,7 +1821,12 @@
     "effect": {
      "kind": "special",
      "r1": 0.1,
-     "per": 0.1
+     "per": 0.1,
+     "ranks": [
+      0.33,
+      0.66,
+      1
+     ]
     }
    },
    {
@@ -2001,7 +2026,12 @@
      "r1": 0.5,
      "per": 0.25,
      "input": "Evasion",
-     "output": "IncreasedDamage"
+     "output": "IncreasedDamage",
+     "ranks": [
+      0.1,
+      0.2,
+      0.3
+     ]
     }
    },
    {
@@ -2363,7 +2393,12 @@
      "r1": 0.15,
      "per": 0.15,
      "input": "Evasion",
-     "output": "IncreasedDamage"
+     "output": "IncreasedDamage",
+     "ranks": [
+      0.1,
+      0.2,
+      0.3
+     ]
     }
    },
    {
@@ -2427,7 +2462,12 @@
      "r1": 0.15,
      "per": 0.15,
      "input": "Evasion",
-     "output": "IncreasedDamage"
+     "output": "IncreasedDamage",
+     "ranks": [
+      0.1,
+      0.2,
+      0.3
+     ]
     }
    },
    {
@@ -4759,9 +4799,9 @@
      "r1": 0.15,
      "per": 0.15,
      "ranks": [
-      0.05,
-      0.1,
-      0.15
+      0.02,
+      0.04,
+      0.06
      ]
     }
    },
@@ -6724,9 +6764,9 @@
      "r1": 0.1,
      "per": 0.1,
      "ranks": [
-      100,
-      200,
-      300
+      0.5,
+      1,
+      1.5
      ]
     }
    },
@@ -6742,12 +6782,7 @@
     "effect": {
      "kind": "special",
      "r1": 0.05,
-     "per": 0.05,
-     "ranks": [
-      0.1,
-      0.2,
-      0.3
-     ]
+     "per": 0.05
     }
    },
    {
@@ -6807,12 +6842,7 @@
     "effect": {
      "kind": "special",
      "r1": 0.1,
-     "per": 0.1,
-     "ranks": [
-      0.25,
-      0.5,
-      0.75
-     ]
+     "per": 0.1
     }
    },
    {
@@ -7314,7 +7344,12 @@
     "effect": {
      "kind": "special",
      "r1": 1,
-     "per": 1
+     "per": 1,
+     "ranks": [
+      0.0001,
+      0.0001,
+      0.0001
+     ]
     }
    }
   ]
