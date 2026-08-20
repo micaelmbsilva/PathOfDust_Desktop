@@ -1151,7 +1151,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     fight: { label: '🗡️ Live Fight', title: 'Your own blow-by-blow for the fight in progress', act: () => toggleModal('fight'), isActive: panelOpen('fight') },
     stream: { label: '📺 Stream', title: 'Watch the stream in a small panel', act: () => toggleStream(), isActive: panelOpen('stream') },
     highlight: { label: '✨ Highlight Me', title: 'Dim other players, highlight your character', act: () => toggleHighlight(), isActive: () => localStorage.getItem('highlight') === '1' },
-    autolock: { label: '🔒 Auto-Lock ✨', title: 'Automatically 🔒 Lock Perfect, Sacred, and unique (Celestial Shard) items when they drop', act: () => toggleAutoLock(), isActive: () => autoLockOn() },
+    autolock: { label: '🔒 Auto-Lock ✨', title: 'Automatically 🔒 Lock Perfect, Sacred, and unique (Unique Shard) items when they drop', act: () => toggleAutoLock(), isActive: () => autoLockOn() },
     settings: { label: '⚙️ Settings', title: 'App options — notifications, display, performance, history retention', act: () => toggleModal('settings'), isActive: panelOpen('settings') },
     wiki: { label: '📖 Wiki', title: 'Open the game wiki in your browser', act: () => openPage('wiki') },
     'patch-notes': { label: '📜 Patch Notes', title: "Open the game's patch notes in your browser", act: () => openPage('patch-notes') },
@@ -2425,7 +2425,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       for (const item of bag.items) {
         if (known.has(item.id)) continue;
         known.add(item.id);
-        // auto-lock Perfect/Sacred/unique (e.g. Celestial Shard) drops before
+        // auto-lock Perfect/Sacred/unique (Unique Shard) drops before
         // toasting, so the toast shows it locked
         const rare = (item.quality || '').includes('Perfect') || item.sacred || item.unique;
         if (autoLockOn() && !item.protected && rare) {

@@ -1,19 +1,161 @@
 {
- "level": 231,
- "tier": 231,
- "points": 58,
+ "level": 259,
+ "tier": 259,
+ "points": 65,
  "ruleset": "Source-derived constants from PathofDust (Rust). Per-tier affix values are the code defaults from affix_def() (src/adventure/affix.rs:184-240); the live game server may override them via a gitignored adventure-item-balance.toml — the advisor cross-checks api/affix-rates and prefers empirical values when they disagree by >20%. Ruleset modeled: max 4 crafted mods per item + 1 Sacred, no unique affixes/shards, no krangle/reforge-crit/recombine-crit extras. Passive-tree magnitudes live in passive-tree.json (generated from game/src/passive_tree.rs by tools/passive-tree-export.mjs).",
  "results": {
   "damage": [
    {
-    "cls": "Warrior",
-    "dps": 7734184603.955698,
+    "cls": "Elementalist",
+    "dps": 7138933683608.615,
     "hps": 0,
-    "ehp": 71820.51631205674,
-    "hp": 10126.6928,
-    "inc": 551.8891918322153,
-    "critChance": 3.2377999999999996,
-    "critMult": 145.45099999999996,
+    "ehp": 280956.0304,
+    "hp": 5790.5199999999995,
+    "inc": 43871.28509999997,
+    "critChance": 4.711459999999999,
+    "critMult": 211.6907,
+    "eff": {
+     "dr": 0,
+     "block": 0,
+     "evasion": 0,
+     "intervene": 0
+    },
+    "taken": 1,
+    "healPower": 0,
+    "intervalMs": 206.58121855374787,
+    "splash": 4.035,
+    "linger": 0.089355,
+    "tree": {
+     "Righteous Fire": 3,
+     "Flame Golem": 3,
+     "Golem Master": 3,
+     "Electrical Overload": 3,
+     "Shocking Focus": 4,
+     "Elemental Focus": 1,
+     "Blizzard": 3,
+     "Chilling Focus": 4,
+     "Terrifying": 3,
+     "Thunder Golem": 4,
+     "Growing": 3,
+     "Gigantify": 3
+    },
+    "alloc": [
+     {
+      "key": "righteousfire",
+      "name": "Righteous Fire",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "golemmaster",
+      "name": "Golem Master",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "elementalfocus",
+      "name": "Elemental Focus",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "flamegolem",
+      "name": "Flame Golem",
+      "rank": 3,
+      "tier": "spec"
+     },
+     {
+      "key": "shockingfocus",
+      "name": "Shocking Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "chillingfocus",
+      "name": "Chilling Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "thundergolem",
+      "name": "Thunder Golem",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "electricaloverload",
+      "name": "Electrical Overload",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "hoarfrost",
+      "name": "Blizzard",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "terrifying",
+      "name": "Terrifying",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "growing",
+      "name": "Growing",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "gigantify",
+      "name": "Gigantify",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
+    "gear": {
+     "weapon": [
+      "lightning damage",
+      "crit chance",
+      "crit dmg dealt",
+      "cold damage"
+     ],
+     "helm": [
+      "crit dmg dealt",
+      "crit dmg dealt",
+      "lightning damage",
+      "crit dmg dealt"
+     ],
+     "body": [
+      "fire damage",
+      "cold damage",
+      "crit dmg dealt",
+      "fire damage"
+     ],
+     "gloves": [
+      "chaos damage",
+      "crit dmg dealt",
+      "crit dmg dealt",
+      "crit dmg dealt"
+     ],
+     "boots": [
+      "cold damage",
+      "lingering effect",
+      "cold damage",
+      "divine damage"
+     ]
+    },
+    "sacred": "crit dmg dealt"
+   },
+   {
+    "cls": "Warrior",
+    "dps": 23675929329.822296,
+    "hps": 0,
+    "ehp": 80492.33475177304,
+    "hp": 11349.419199999998,
+    "inc": 584.7104339247181,
+    "critChance": 3.624199999999999,
+    "critMult": 144.968,
     "eff": {
      "dr": 0.765,
      "block": 0.8,
@@ -22,9 +164,9 @@
     },
     "taken": 0.141,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {
      "Momentous Blow": 3,
      "Overwhelming Force": 4,
@@ -94,47 +236,47 @@
     ],
     "gear": {
      "weapon": [
-      "block chance",
       "lightning damage",
+      "block chance",
       "splash",
       "crit chance"
      ],
      "helm": [
       "crit dmg dealt",
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage"
+      "chaos damage",
+      "crit dmg dealt"
      ],
      "body": [
+      "cold damage",
+      "fire damage",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "lightning damage"
      ],
      "gloves": [
-      "dmg dealt",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "divine damage",
+      "crit dmg dealt",
+      "dmg dealt"
      ],
      "boots": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Warlock",
-    "dps": 4021795107.675979,
+    "dps": 12700416299.000723,
     "hps": 0,
-    "ehp": 10333.36,
-    "hp": 5166.68,
-    "inc": 102.68367047999999,
-    "critChance": 3.7234699999999994,
-    "critMult": 145.45099999999996,
+    "ehp": 11581.04,
+    "hp": 5790.5199999999995,
+    "inc": 108.72281267999998,
+    "critChance": 4.167829999999999,
+    "critMult": 144.968,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -143,14 +285,14 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 80.46579179251069,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 72.95890886157936,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {
+     "Fel Haste": 4,
      "Dark Pact": 3,
      "Life Tap": 4,
      "Soul Siphon": 1,
-     "Fel Haste": 4,
      "Burning Rage": 3,
      "Chaos Bolt": 3,
      "Soul Exchange": 3
@@ -169,14 +311,14 @@
       "tier": "skill"
      },
      {
-      "key": "lifetap",
-      "name": "Life Tap",
+      "key": "felhaste",
+      "name": "Fel Haste",
       "rank": 4,
       "tier": "spec"
      },
      {
-      "key": "felhaste",
-      "name": "Fel Haste",
+      "key": "lifetap",
+      "name": "Life Tap",
       "rank": 4,
       "tier": "spec"
      },
@@ -201,157 +343,22 @@
     ],
     "gear": {
      "weapon": [
-      "dmg dealt",
       "lightning damage",
-      "splash",
-      "crit chance"
-     ],
-     "helm": [
-      "crit dmg dealt",
-      "crit dmg dealt",
-      "lightning damage",
-      "lightning damage"
-     ],
-     "body": [
-      "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ],
-     "gloves": [
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ],
-     "boots": [
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ]
-    },
-    "sacred": "lightning damage"
-   },
-   {
-    "cls": "Elementalist",
-    "dps": 3684966637.45706,
-    "hps": 0,
-    "ehp": 250687.31360000002,
-    "hp": 5166.68,
-    "inc": 109.97909999999997,
-    "critChance": 4.20914,
-    "critMult": 209.80699999999996,
-    "eff": {
-     "dr": 0,
-     "block": 0,
-     "evasion": 0,
-     "intervene": 0
-    },
-    "taken": 1,
-    "healPower": 0,
-    "intervalMs": 225.35154841552824,
-    "splash": 3.615,
-    "linger": 0.079695,
-    "tree": {
-     "Flame Golem": 3,
-     "Golem Master": 2,
-     "Electrical Overload": 3,
-     "Shocking Focus": 4,
-     "Elemental Focus": 1,
-     "Blizzard": 3,
-     "Chilling Focus": 4,
-     "Terrifying": 3,
-     "Thunder Golem": 4,
-     "Growing": 3,
-     "Gigantify": 3
-    },
-    "alloc": [
-     {
-      "key": "golemmaster",
-      "name": "Golem Master",
-      "rank": 2,
-      "tier": "skill"
-     },
-     {
-      "key": "elementalfocus",
-      "name": "Elemental Focus",
-      "rank": 1,
-      "tier": "skill"
-     },
-     {
-      "key": "flamegolem",
-      "name": "Flame Golem",
-      "rank": 3,
-      "tier": "spec"
-     },
-     {
-      "key": "shockingfocus",
-      "name": "Shocking Focus",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "chillingfocus",
-      "name": "Chilling Focus",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "thundergolem",
-      "name": "Thunder Golem",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "electricaloverload",
-      "name": "Electrical Overload",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "hoarfrost",
-      "name": "Blizzard",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "terrifying",
-      "name": "Terrifying",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "growing",
-      "name": "Growing",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "gigantify",
-      "name": "Gigantify",
-      "rank": 3,
-      "tier": "modifier"
-     }
-    ],
-    "gear": {
-     "weapon": [
-      "lightning damage",
+      "cold damage",
       "crit chance",
-      "crit dmg dealt",
-      "lightning damage"
+      "crit dmg dealt"
      ],
      "helm": [
+      "splash",
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage",
+      "fire damage",
       "crit dmg dealt"
      ],
      "body": [
+      "chaos damage",
+      "lightning damage",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
+      "divine damage"
      ],
      "gloves": [
       "crit dmg dealt",
@@ -361,22 +368,22 @@
      ],
      "boots": [
       "crit dmg dealt",
-      "lingering effect",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Mage",
-    "dps": 3379421003.81415,
+    "dps": 10554285263.814697,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 95.63399999999999,
-    "critChance": 3.9177379999999995,
-    "critMult": 218.96115999999992,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 91.14209999999997,
+    "critChance": 4.385281999999999,
+    "critMult": 245.06723999999997,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -385,15 +392,15 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 157.5884953954743,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 144.46239059702646,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {
      "Arcane Mastery": 3,
-     "Quickcast": 4,
      "Spell Weaving": 3,
-     "Overload": 4,
+     "Quickcast": 4,
      "Haste": 3,
+     "Overload": 4,
      "Cataclysm": 3,
      "Critical Mass": 4,
      "Mana Surge": 3
@@ -450,22 +457,22 @@
     ],
     "gear": {
      "weapon": [
-      "dmg dealt",
+      "lightning damage",
       "crit chance",
       "crit dmg dealt",
-      "lightning damage"
+      "cold damage"
      ],
      "helm": [
       "splash",
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage"
+      "fire damage",
+      "crit dmg dealt"
      ],
      "body": [
+      "chaos damage",
+      "lightning damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
+      "divine damage"
      ],
      "gloves": [
       "crit dmg dealt",
@@ -477,20 +484,20 @@
       "crit dmg dealt",
       "dmg dealt",
       "crit dmg dealt",
-      "dmg dealt"
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Berserker",
-    "dps": 2549220249.9421906,
+    "dps": 7834651640.884789,
     "hps": 0,
-    "ehp": 3884.721804511278,
-    "hp": 5166.68,
-    "inc": 181.23463700000002,
-    "critChance": 3.2377999999999996,
-    "critMult": 145.45099999999996,
+    "ehp": 4353.774436090225,
+    "hp": 5790.5199999999995,
+    "inc": 171.54285875,
+    "critChance": 3.624199999999999,
+    "critMult": 162.839,
     "eff": {
      "dr": -0.33000000000000007,
      "block": 0,
@@ -499,9 +506,9 @@
     },
     "taken": 1.33,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {
      "Reckless Swing": 3,
      "Death Wish": 4,
@@ -536,18 +543,18 @@
      ],
      "helm": [
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage",
-      "crit dmg dealt"
+      "chaos damage",
+      "crit dmg dealt",
+      "fire damage"
      ],
      "body": [
-      "dmg dealt",
+      "cold damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "lightning damage",
+      "divine damage"
      ],
      "gloves": [
-      "dmg dealt",
+      "crit dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
       "crit dmg dealt"
@@ -556,20 +563,20 @@
       "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Monk",
-    "dps": 2266450165.297673,
+    "dps": 7649577917.775854,
     "hps": 0,
-    "ehp": 21985.872340425536,
-    "hp": 5166.68,
-    "inc": 182.20689999999996,
-    "critChance": 3.2377999999999996,
-    "critMult": 145.45099999999996,
+    "ehp": 24640.51063829787,
+    "hp": 5790.5199999999995,
+    "inc": 188.24019999999996,
+    "critChance": 3.624199999999999,
+    "critMult": 144.968,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -578,9 +585,9 @@
     },
     "taken": 0.235,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {
      "Granite Skin": 3,
      "Stone Fist": 4,
@@ -622,47 +629,47 @@
     ],
     "gear": {
      "weapon": [
-      "dmg dealt",
+      "lightning damage",
+      "cold damage",
       "splash",
-      "crit chance",
-      "crit dmg dealt"
+      "crit chance"
      ],
      "helm": [
-      "lightning damage",
       "crit dmg dealt",
-      "lightning damage",
+      "crit dmg dealt",
+      "chaos damage",
       "crit dmg dealt"
      ],
      "body": [
-      "dmg dealt",
+      "fire damage",
+      "lightning damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "divine damage"
      ],
      "gloves": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "dmg dealt"
      ],
      "boots": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Ranger",
-    "dps": 2263619068.3464146,
+    "dps": 7102472787.978963,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 95.63399999999999,
-    "critChance": 3.7234699999999994,
-    "critMult": 145.45099999999996,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 91.14209999999997,
+    "critChance": 4.167829999999999,
+    "critMult": 162.839,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -671,9 +678,9 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 153.30037307178793,
-    "splash": 3.9842000000000004,
-    "linger": 0,
+    "intervalMs": 140.53144119302576,
+    "splash": 4.4378,
+    "linger": 0.089355,
     "tree": {
      "Fleet Step": 3,
      "Rapid Fire": 4,
@@ -722,47 +729,47 @@
     ],
     "gear": {
      "weapon": [
-      "dmg dealt",
       "lightning damage",
+      "cold damage",
       "crit chance",
       "crit dmg dealt"
      ],
      "helm": [
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage",
-      "crit dmg dealt"
+      "fire damage",
+      "crit dmg dealt",
+      "lightning damage"
      ],
      "body": [
+      "chaos damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
+      "divine damage",
+      "crit dmg dealt"
      ],
      "gloves": [
-      "crit dmg dealt",
       "dmg dealt",
       "crit dmg dealt",
-      "dmg dealt"
+      "dmg dealt",
+      "crit dmg dealt"
      ],
      "boots": [
-      "crit dmg dealt",
       "dmg dealt",
       "crit dmg dealt",
+      "lingering effect",
       "dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Rogue",
-    "dps": 1762482618.6384096,
+    "dps": 5350969565.109007,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 86.07059999999998,
-    "critChance": 4.6838,
-    "critMult": 196.35884999999996,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 91.14209999999997,
+    "critChance": 5.238199999999999,
+    "critMult": 195.7068,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -771,9 +778,9 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {
      "Deadly Precision": 3
     },
@@ -787,47 +794,47 @@
     ],
     "gear": {
      "weapon": [
-      "dmg dealt",
-      "crit dmg dealt",
       "lightning damage",
+      "crit dmg dealt",
+      "cold damage",
       "splash"
      ],
      "helm": [
       "crit dmg dealt",
-      "lightning damage",
-      "crit chance",
-      "lightning damage"
+      "fire damage",
+      "crit dmg dealt",
+      "crit chance"
      ],
      "body": [
+      "chaos damage",
+      "lightning damage",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "divine damage"
      ],
      "gloves": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "dmg dealt"
      ],
      "boots": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Slayer",
-    "dps": 1218001914.1729708,
+    "dps": 3724621795.250134,
     "hps": 0,
-    "ehp": 10333.36,
-    "hp": 5166.68,
-    "inc": 86.07059999999998,
-    "critChance": 3.2377999999999996,
-    "critMult": 145.45099999999996,
+    "ehp": 11581.04,
+    "hp": 5790.5199999999995,
+    "inc": 91.14209999999997,
+    "critChance": 3.624199999999999,
+    "critMult": 144.968,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -836,54 +843,54 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {},
     "alloc": [],
     "gear": {
      "weapon": [
-      "dmg dealt",
       "lightning damage",
+      "cold damage",
       "splash",
       "crit chance"
      ],
      "helm": [
       "crit dmg dealt",
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage"
+      "fire damage",
+      "crit dmg dealt"
      ],
      "body": [
+      "chaos damage",
+      "lightning damage",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "divine damage"
      ],
      "gloves": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "dmg dealt"
      ],
      "boots": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Druid",
-    "dps": 900617738.1763138,
-    "hps": 900617738.1763138,
-    "ehp": 27193.052631578958,
-    "hp": 5166.68,
-    "inc": 154.72586499999997,
-    "critChance": 4.20914,
-    "critMult": 145.45099999999996,
+    "dps": 2903056398.9832406,
+    "hps": 2903056398.9832406,
+    "ehp": 30476.421052631584,
+    "hp": 5790.5199999999995,
+    "inc": 164.411275,
+    "critChance": 4.711459999999999,
+    "critMult": 144.968,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -892,9 +899,9 @@
     },
     "taken": 0.18999999999999995,
     "healPower": 0.5,
-    "intervalMs": 390.5174641247686,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "intervalMs": 357.9898792470656,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {
      "Primal Shift": 3,
      "Shifting Form": 4,
@@ -943,45 +950,45 @@
     ],
     "gear": {
      "weapon": [
-      "dmg dealt",
+      "lightning damage",
       "crit chance",
       "crit dmg dealt",
-      "splash"
+      "cold damage"
      ],
      "helm": [
-      "lightning damage",
+      "splash",
       "crit dmg dealt",
-      "lightning damage",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "fire damage"
      ],
      "body": [
-      "dmg dealt",
+      "chaos damage",
+      "lightning damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "dmg dealt"
      ],
      "gloves": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "dmg dealt"
      ],
      "boots": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Paladin",
     "dps": 0,
-    "hps": 1072721.350890585,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 7.877549999999999,
+    "hps": 1751939.2448729624,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 8.886949999999999,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -991,7 +998,7 @@
      "intervene": 0.5
     },
     "taken": 1,
-    "healPower": 12.05,
+    "healPower": 13.450000000000001,
     "intervalMs": 50,
     "splash": 0,
     "linger": 0,
@@ -1009,10 +1016,10 @@
    {
     "cls": "Cleric",
     "dps": 0,
-    "hps": 886371.7630860145,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 7.1725499999999975,
+    "hps": 1438319.2902403234,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 8.041949999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1022,7 +1029,7 @@
      "intervene": 0
     },
     "taken": 1,
-    "healPower": 12.55,
+    "healPower": 13.950000000000001,
     "intervalMs": 50,
     "splash": 0,
     "linger": 0,
@@ -1041,11 +1048,11 @@
   "tank": [
    {
     "cls": "Warrior",
-    "dps": 505836.74314083275,
+    "dps": 673419.1741798248,
     "hps": 0,
-    "ehp": 158704308.4358945,
-    "hp": 3729551.2482435196,
-    "inc": 18.377512,
+    "ehp": 199282674.03548592,
+    "hp": 4683142.839833918,
+    "inc": 20.912968,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1056,7 +1063,7 @@
     },
     "taken": 0.023499999999999993,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {
@@ -1120,12 +1127,12 @@
      ],
      "body": [
       "max hp flat",
-      "max hp %",
       "max hp flat",
-      "max hp %"
+      "max hp %",
+      "max hp flat"
      ],
      "gloves": [
-      "max hp flat",
+      "max hp %",
       "max hp %",
       "max hp flat",
       "max hp %"
@@ -1141,11 +1148,11 @@
    },
    {
     "cls": "Druid",
-    "dps": 159792.8207273737,
-    "hps": 159792.8207273737,
-    "ehp": 154471241.7932684,
-    "hp": 1902832.2695119998,
-    "inc": 13.393199999999998,
+    "dps": 211286.3243204449,
+    "hps": 211286.3243204449,
+    "ehp": 193967274.2947556,
+    "hp": 2389358.591751999,
+    "inc": 15.274799999999999,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1156,7 +1163,7 @@
     },
     "taken": 0.012318359375,
     "healPower": 0.5,
-    "intervalMs": 425.6640358959978,
+    "intervalMs": 390.2089683793015,
     "splash": 0,
     "linger": 0,
     "tree": {
@@ -1220,12 +1227,12 @@
      ],
      "body": [
       "max hp flat",
-      "max hp %",
       "max hp flat",
-      "max hp %"
+      "max hp %",
+      "max hp flat"
      ],
      "gloves": [
-      "max hp flat",
+      "max hp %",
       "max hp %",
       "max hp flat",
       "max hp %"
@@ -1242,10 +1249,10 @@
    {
     "cls": "Paladin",
     "dps": 0,
-    "hps": 1951299.7870448001,
-    "ehp": 147930814.60497075,
-    "hp": 1733564.233652,
-    "inc": 16.30668,
+    "hps": 2478378.3020207994,
+    "ehp": 185752366.8217174,
+    "hp": 2176785.5486919996,
+    "inc": 18.610519999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1255,7 +1262,7 @@
      "intervene": 0.5
     },
     "taken": 0.011718749999999993,
-    "healPower": 12.05,
+    "healPower": 13.450000000000001,
     "intervalMs": 50,
     "splash": 0,
     "linger": 0,
@@ -1300,8 +1307,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1320,10 +1327,10 @@
    },
    {
     "cls": "Elementalist",
-    "dps": 65232.66535804444,
+    "dps": 102932.95548431465,
     "hps": 0,
-    "ehp": 109592088.20310849,
-    "hp": 2258699.262224,
+    "ehp": 137626120.74495807,
+    "hp": 2836482.290704,
     "inc": 0,
     "critChance": 0.05,
     "critMult": 2,
@@ -1335,8 +1342,8 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 225.35154841552824,
-    "splash": 3.615,
+    "intervalMs": 206.58121855374787,
+    "splash": 4.035,
     "linger": 0,
     "tree": {
      "Growing": 3,
@@ -1381,10 +1388,10 @@
       "max hp flat",
       "max hp %",
       "max hp flat",
-      "max hp %"
+      "max hp flat"
      ],
      "body": [
-      "max hp flat",
+      "max hp %",
       "max hp %",
       "max hp flat",
       "max hp %"
@@ -1406,11 +1413,11 @@
    },
    {
     "cls": "Monk",
-    "dps": 526014.5459295542,
+    "dps": 700209.45251773,
     "hps": 0,
-    "ehp": 73635183.63878997,
-    "hp": 2473681.9503655997,
-    "inc": 19.150479999999998,
+    "ehp": 92462620.8529146,
+    "hp": 3106166.169277599,
+    "inc": 21.784719999999997,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1421,7 +1428,7 @@
     },
     "taken": 0.03359374999999999,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {
@@ -1464,12 +1471,12 @@
      ],
      "body": [
       "max hp flat",
-      "max hp %",
       "max hp flat",
-      "max hp %"
+      "max hp %",
+      "max hp flat"
      ],
      "gloves": [
-      "max hp flat",
+      "max hp %",
       "max hp %",
       "max hp flat",
       "max hp %"
@@ -1485,11 +1492,11 @@
    },
    {
     "cls": "Ranger",
-    "dps": 1124661.4686427475,
+    "dps": 1509948.1630459488,
     "hps": 0,
-    "ehp": 66237678.18133016,
-    "hp": 1733564.233652,
-    "inc": 15.601679999999998,
+    "ehp": 83172701.56196298,
+    "hp": 2176785.5486919996,
+    "inc": 17.76552,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1500,8 +1507,8 @@
     },
     "taken": 0.026171874999999997,
     "healPower": 0,
-    "intervalMs": 212.59580039200776,
-    "splash": 3.615,
+    "intervalMs": 194.8879420318376,
+    "splash": 4.035,
     "linger": 0,
     "tree": {
      "Swift Wind": 3,
@@ -1544,8 +1551,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1564,12 +1571,12 @@
    },
    {
     "cls": "Rogue",
-    "dps": 712849.9138985127,
+    "dps": 984035.62348815,
     "hps": 0,
-    "ehp": 55474055.47686402,
-    "hp": 1733564.233652,
-    "inc": 15.601679999999998,
-    "critChance": 1.496,
+    "ehp": 69657137.558144,
+    "hp": 2176785.5486919996,
+    "inc": 17.76552,
+    "critChance": 1.6640000000000001,
     "critMult": 2,
     "eff": {
      "dr": 0.75,
@@ -1579,7 +1586,7 @@
     },
     "taken": 0.031249999999999993,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {
@@ -1609,8 +1616,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1629,11 +1636,11 @@
    },
    {
     "cls": "Warlock",
-    "dps": 1394789.2847843731,
+    "dps": 1918995.3533379165,
     "hps": 0,
-    "ehp": 44588462.77420886,
-    "hp": 1733564.233652,
-    "inc": 18.769280544,
+    "ehp": 56013559.34951588,
+    "hp": 2176785.5486919996,
+    "inc": 21.345981216,
     "critChance": 0.057499999999999996,
     "critMult": 2,
     "eff": {
@@ -1644,7 +1651,7 @@
     },
     "taken": 0.0390625,
     "healPower": 0,
-    "intervalMs": 80.46579179251069,
+    "intervalMs": 72.95890886157936,
     "splash": 0,
     "linger": 0,
     "tree": {
@@ -1716,8 +1723,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1736,11 +1743,11 @@
    },
    {
     "cls": "Slayer",
-    "dps": 433375.54077459994,
+    "dps": 576693.2613352507,
     "hps": 0,
-    "ehp": 44431466.134154536,
-    "hp": 1733564.233652,
-    "inc": 15.601679999999998,
+    "ehp": 55803275.29016478,
+    "hp": 2176785.5486919996,
+    "inc": 17.76552,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1751,7 +1758,7 @@
     },
     "taken": 0.0390625,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -1772,8 +1779,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1792,11 +1799,11 @@
    },
    {
     "cls": "Berserker",
-    "dps": 590654.05916352,
+    "dps": 783362.8437651307,
     "hps": 0,
-    "ehp": 44379244.3814912,
-    "hp": 1733564.233652,
-    "inc": 21.62668,
+    "ehp": 55725710.04651519,
+    "hp": 2176785.5486919996,
+    "inc": 24.49052,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1807,7 +1814,7 @@
     },
     "taken": 0.0390625,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -1828,8 +1835,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1848,13 +1855,13 @@
    },
    {
     "cls": "Mage",
-    "dps": 605143.5306991922,
+    "dps": 821448.4170733975,
     "hps": 0,
-    "ehp": 44379244.3814912,
-    "hp": 1733564.233652,
-    "inc": 15.601679999999998,
+    "ehp": 55725710.04651519,
+    "hp": 2176785.5486919996,
+    "inc": 17.76552,
     "critChance": 0.05,
-    "critMult": 6.82,
+    "critMult": 7.380000000000001,
     "eff": {
      "dr": 0.75,
      "block": 0.75,
@@ -1863,7 +1870,7 @@
     },
     "taken": 0.0390625,
     "healPower": 0,
-    "intervalMs": 225.35154841552824,
+    "intervalMs": 206.58121855374787,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -1884,8 +1891,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1905,10 +1912,10 @@
    {
     "cls": "Cleric",
     "dps": 0,
-    "hps": 1680067.7697487997,
-    "ehp": 44379244.3814912,
-    "hp": 1733564.233652,
-    "inc": 15.601679999999998,
+    "hps": 2128999.661524799,
+    "ehp": 55725710.04651519,
+    "hp": 2176785.5486919996,
+    "inc": 17.76552,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -1918,7 +1925,7 @@
      "intervene": 0
     },
     "taken": 0.0390625,
-    "healPower": 12.55,
+    "healPower": 13.950000000000001,
     "intervalMs": 50,
     "splash": 0,
     "linger": 0,
@@ -1940,8 +1947,8 @@
      "body": [
       "max hp %",
       "max hp flat",
-      "max hp %",
-      "max hp flat"
+      "max hp flat",
+      "max hp %"
      ],
      "gloves": [
       "max hp %",
@@ -1961,14 +1968,142 @@
   ],
   "healing": [
    {
+    "cls": "Elementalist",
+    "dps": 4771247129145.957,
+    "hps": 3551529818107.6904,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 43871.28509999997,
+    "critChance": 4.711459999999999,
+    "critMult": 211.6907,
+    "eff": {
+     "dr": 0,
+     "block": 0,
+     "evasion": 0,
+     "intervene": 0
+    },
+    "taken": 1,
+    "healPower": 0,
+    "intervalMs": 206.58121855374787,
+    "splash": 4.035,
+    "linger": 0.089355,
+    "tree": {
+     "Replenishing": 3,
+     "Water Golem": 4,
+     "Golem Master": 1,
+     "Righteous Fire": 3,
+     "Flame Golem": 3,
+     "Electrical Overload": 3,
+     "Shocking Focus": 4,
+     "Elemental Focus": 1,
+     "Blizzard": 3,
+     "Chilling Focus": 4
+    },
+    "alloc": [
+     {
+      "key": "golemmaster",
+      "name": "Golem Master",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "righteousfire",
+      "name": "Righteous Fire",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "elementalfocus",
+      "name": "Elemental Focus",
+      "rank": 1,
+      "tier": "skill"
+     },
+     {
+      "key": "watergolem",
+      "name": "Water Golem",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "flamegolem",
+      "name": "Flame Golem",
+      "rank": 3,
+      "tier": "spec"
+     },
+     {
+      "key": "shockingfocus",
+      "name": "Shocking Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "chillingfocus",
+      "name": "Chilling Focus",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "replenishing",
+      "name": "Replenishing",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "electricaloverload",
+      "name": "Electrical Overload",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "hoarfrost",
+      "name": "Blizzard",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
+    "gear": {
+     "weapon": [
+      "lightning damage",
+      "crit chance",
+      "crit dmg dealt",
+      "cold damage"
+     ],
+     "helm": [
+      "crit dmg dealt",
+      "crit dmg dealt",
+      "lightning damage",
+      "crit dmg dealt"
+     ],
+     "body": [
+      "fire damage",
+      "cold damage",
+      "crit dmg dealt",
+      "fire damage"
+     ],
+     "gloves": [
+      "chaos damage",
+      "crit dmg dealt",
+      "crit dmg dealt",
+      "crit dmg dealt"
+     ],
+     "boots": [
+      "cold damage",
+      "lingering effect",
+      "cold damage",
+      "divine damage"
+     ]
+    },
+    "sacred": "crit dmg dealt"
+   },
+   {
     "cls": "Druid",
     "dps": 0,
-    "hps": 74453099489.81754,
-    "ehp": 21985.872340425536,
-    "hp": 5166.68,
-    "inc": 146.596975,
-    "critChance": 6.15182,
-    "critMult": 145.45099999999996,
+    "hps": 466410723668.3191,
+    "ehp": 24640.51063829787,
+    "hp": 5790.5199999999995,
+    "inc": 182.63969499999996,
+    "critChance": 6.885979999999999,
+    "critMult": 109.22599999999998,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -1976,10 +2111,10 @@
      "intervene": 0
     },
     "taken": 0.235,
-    "healPower": 87.60384,
+    "healPower": 176.50803200000001,
     "intervalMs": 50,
-    "splash": 9.563399999999998,
-    "linger": 7.8843456000000005,
+    "splash": 10.722599999999998,
+    "linger": 15.885722880000001,
     "tree": {
      "Evergrowth": 3,
      "Rejuvenation": 4,
@@ -2057,46 +2192,46 @@
     "gear": {
      "weapon": [
       "divine damage",
+      "lightning damage",
       "divine damage",
-      "crit chance",
-      "crit dmg dealt"
+      "crit chance"
      ],
      "helm": [
-      "divine damage",
+      "crit dmg dealt",
       "splash",
       "crit dmg dealt",
       "divine damage"
      ],
      "body": [
+      "divine damage",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "divine damage",
+      "divine damage"
      ],
      "gloves": [
-      "dmg dealt",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "cold damage",
+      "divine damage",
+      "fire damage"
      ],
      "boots": [
-      "dmg dealt",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "divine damage",
+      "chaos damage",
+      "divine damage"
      ]
     },
-    "sacred": "divine damage"
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Paladin",
     "dps": 0,
-    "hps": 5303323453.760206,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 86.77559999999998,
-    "critChance": 3.2377999999999996,
-    "critMult": 145.45099999999996,
+    "hps": 15457561853.122574,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 91.98709999999997,
+    "critChance": 3.624199999999999,
+    "critMult": 144.968,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -2104,55 +2239,55 @@
      "intervene": 0.5
     },
     "taken": 1,
-    "healPower": 12.05,
+    "healPower": 19.85,
     "intervalMs": 50,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {},
     "alloc": [],
     "gear": {
      "weapon": [
-      "dmg dealt",
-      "splash",
       "lightning damage",
+      "cold damage",
+      "splash",
       "crit chance"
      ],
      "helm": [
       "crit dmg dealt",
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage"
+      "fire damage",
+      "crit dmg dealt"
      ],
      "body": [
+      "chaos damage",
+      "lightning damage",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "divine damage"
      ],
      "gloves": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "dmg dealt"
      ],
      "boots": [
-      "dmg dealt",
       "crit dmg dealt",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Cleric",
     "dps": 0,
-    "hps": 4721830299.506109,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 86.07059999999998,
-    "critChance": 3.2377999999999996,
-    "critMult": 145.45099999999996,
+    "hps": 13750322871.876978,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 91.14209999999997,
+    "critChance": 3.624199999999999,
+    "critMult": 144.968,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -2160,151 +2295,30 @@
      "intervene": 0
     },
     "taken": 1,
-    "healPower": 12.55,
+    "healPower": 20.35,
     "intervalMs": 50,
-    "splash": 9.563399999999998,
-    "linger": 0,
+    "splash": 10.722599999999998,
+    "linger": 0.089355,
     "tree": {},
     "alloc": [],
     "gear": {
      "weapon": [
-      "dmg dealt",
       "lightning damage",
+      "cold damage",
       "splash",
       "crit chance"
      ],
      "helm": [
       "crit dmg dealt",
       "crit dmg dealt",
-      "lightning damage",
-      "lightning damage"
-     ],
-     "body": [
-      "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ],
-     "gloves": [
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ],
-     "boots": [
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ]
-    },
-    "sacred": "lightning damage"
-   },
-   {
-    "cls": "Elementalist",
-    "dps": 3684958453.4359393,
-    "hps": 3648109022.351976,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 109.97909999999997,
-    "critChance": 4.20914,
-    "critMult": 209.80699999999996,
-    "eff": {
-     "dr": 0,
-     "block": 0,
-     "evasion": 0,
-     "intervene": 0
-    },
-    "taken": 1,
-    "healPower": 0,
-    "intervalMs": 225.35154841552824,
-    "splash": 3.615,
-    "linger": 0.079695,
-    "tree": {
-     "Replenishing": 3,
-     "Water Golem": 4,
-     "Golem Master": 1,
-     "Flame Golem": 3,
-     "Electrical Overload": 3,
-     "Shocking Focus": 4,
-     "Elemental Focus": 1,
-     "Blizzard": 3,
-     "Chilling Focus": 4
-    },
-    "alloc": [
-     {
-      "key": "golemmaster",
-      "name": "Golem Master",
-      "rank": 1,
-      "tier": "skill"
-     },
-     {
-      "key": "elementalfocus",
-      "name": "Elemental Focus",
-      "rank": 1,
-      "tier": "skill"
-     },
-     {
-      "key": "watergolem",
-      "name": "Water Golem",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "flamegolem",
-      "name": "Flame Golem",
-      "rank": 3,
-      "tier": "spec"
-     },
-     {
-      "key": "shockingfocus",
-      "name": "Shocking Focus",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "chillingfocus",
-      "name": "Chilling Focus",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "replenishing",
-      "name": "Replenishing",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "electricaloverload",
-      "name": "Electrical Overload",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "hoarfrost",
-      "name": "Blizzard",
-      "rank": 3,
-      "tier": "modifier"
-     }
-    ],
-    "gear": {
-     "weapon": [
-      "lightning damage",
-      "crit chance",
-      "crit dmg dealt",
-      "lightning damage"
-     ],
-     "helm": [
-      "crit dmg dealt",
-      "lightning damage",
-      "lightning damage",
+      "chaos damage",
       "crit dmg dealt"
      ],
      "body": [
+      "fire damage",
+      "lightning damage",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
+      "divine damage"
      ],
      "gloves": [
       "crit dmg dealt",
@@ -2314,20 +2328,20 @@
      ],
      "boots": [
       "crit dmg dealt",
-      "lingering effect",
       "dmg dealt",
-      "crit dmg dealt"
+      "crit dmg dealt",
+      "lingering effect"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Warrior",
-    "dps": 308793.82436170825,
+    "dps": 531151.1458071034,
     "hps": 0,
-    "ehp": 20666.72,
-    "hp": 5166.68,
-    "inc": 10.03755,
+    "ehp": 23162.079999999998,
+    "hp": 5790.5199999999995,
+    "inc": 11.326949999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -2338,7 +2352,7 @@
     },
     "taken": 0.25,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -2354,11 +2368,11 @@
    },
    {
     "cls": "Berserker",
-    "dps": 397200.08163646574,
+    "dps": 679375.9655375668,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 13.19755,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 14.766949999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -2369,7 +2383,7 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -2385,12 +2399,12 @@
    },
    {
     "cls": "Rogue",
-    "dps": 376086.04032229685,
+    "dps": 664799.2694057003,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 7.1725499999999975,
-    "critChance": 1.496,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 8.041949999999998,
+    "critChance": 1.6640000000000001,
     "critMult": 2,
     "eff": {
      "dr": 0,
@@ -2400,7 +2414,7 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -2416,11 +2430,11 @@
    },
    {
     "cls": "Monk",
-    "dps": 288566.69651055336,
+    "dps": 496378.637224986,
     "hps": 0,
-    "ehp": 20666.72,
-    "hp": 5166.68,
-    "inc": 9.314549999999999,
+    "ehp": 23162.079999999998,
+    "hp": 5790.5199999999995,
+    "inc": 10.519949999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -2431,7 +2445,7 @@
     },
     "taken": 0.25,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -2447,11 +2461,11 @@
    },
    {
     "cls": "Ranger",
-    "dps": 571355.3183827716,
+    "dps": 981167.4176907764,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 7.1725499999999975,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 8.041949999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -2462,8 +2476,8 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 225.35154841552824,
-    "splash": 3.615,
+    "intervalMs": 206.58121855374787,
+    "splash": 4.035,
     "linger": 0,
     "tree": {},
     "alloc": [],
@@ -2478,13 +2492,13 @@
    },
    {
     "cls": "Mage",
-    "dps": 319262.20351583645,
+    "dps": 554957.8638109538,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 7.1725499999999975,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 8.041949999999998,
     "critChance": 0.05,
-    "critMult": 6.82,
+    "critMult": 7.380000000000001,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -2493,7 +2507,7 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 225.35154841552824,
+    "intervalMs": 206.58121855374787,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -2509,11 +2523,11 @@
    },
    {
     "cls": "Warlock",
-    "dps": 451583.72877096484,
+    "dps": 791051.352524326,
     "hps": 0,
-    "ehp": 5166.68,
-    "hp": 5166.68,
-    "inc": 7.1725499999999975,
+    "ehp": 5790.5199999999995,
+    "hp": 5790.5199999999995,
+    "inc": 8.041949999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -2524,7 +2538,7 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 118.28471393499072,
+    "intervalMs": 107.24959602652164,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -2540,11 +2554,11 @@
    },
    {
     "cls": "Slayer",
-    "dps": 228640.6828768412,
+    "dps": 389605.0606865882,
     "hps": 0,
-    "ehp": 10333.36,
-    "hp": 5166.68,
-    "inc": 7.1725499999999975,
+    "ehp": 11581.04,
+    "hp": 5790.5199999999995,
+    "inc": 8.041949999999998,
     "critChance": 0.05,
     "critMult": 2,
     "eff": {
@@ -2555,7 +2569,7 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
+    "intervalMs": 321.3485621947189,
     "splash": 0,
     "linger": 0,
     "tree": {},
@@ -2572,177 +2586,14 @@
   ],
   "overall": [
    {
-    "cls": "Druid",
-    "dps": 0,
-    "hps": 29799072025.266647,
-    "ehp": 12452937.754626919,
-    "hp": 153399.76253599997,
-    "inc": 125.07956499999999,
-    "critChance": 6.15182,
-    "critMult": 113.57299999999998,
-    "eff": {
-     "dr": 0.8512500000000001,
-     "block": 0.75,
-     "evasion": 0.8674999999999999,
-     "intervene": 0
-    },
-    "taken": 0.012318359375,
-    "healPower": 53.96441600000001,
-    "intervalMs": 50,
-    "splash": 9.563399999999998,
-    "linger": 4.85679744,
-    "tree": {
-     "Evergrowth": 3,
-     "Rejuvenation": 4,
-     "Regrowth": 3,
-     "Primal Shift": 3,
-     "Shifting Form": 4,
-     "Predator's Instinct": 3,
-     "Blooming Field": 3,
-     "Feral Reflexes": 4,
-     "Quick Paw": 3,
-     "Thorned Barrier": 3,
-     "Living Armor": 4,
-     "Ironbark": 3,
-     "Nature's Blessing": 4,
-     "Claw Strike": 3,
-     "Bloom Strike": 3
-    },
-    "alloc": [
-     {
-      "key": "regrowth",
-      "name": "Regrowth",
-      "rank": 3,
-      "tier": "skill"
-     },
-     {
-      "key": "instinct",
-      "name": "Predator's Instinct",
-      "rank": 3,
-      "tier": "skill"
-     },
-     {
-      "key": "barrier",
-      "name": "Thorned Barrier",
-      "rank": 3,
-      "tier": "skill"
-     },
-     {
-      "key": "rejuvenation",
-      "name": "Rejuvenation",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "shiftingform",
-      "name": "Shifting Form",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "feralreflexes",
-      "name": "Feral Reflexes",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "livingarmor",
-      "name": "Living Armor",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "naturesblessing",
-      "name": "Nature's Blessing",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "evergrowth",
-      "name": "Evergrowth",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "primalshift",
-      "name": "Primal Shift",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "bloomingfield",
-      "name": "Blooming Field",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "quickpaw",
-      "name": "Quick Paw",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "ironbark",
-      "name": "Ironbark",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "clawstrike",
-      "name": "Claw Strike",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "bloomstrike",
-      "name": "Bloom Strike",
-      "rank": 3,
-      "tier": "modifier"
-     }
-    ],
-    "gear": {
-     "weapon": [
-      "divine damage",
-      "max hp %",
-      "dmg taken reduction",
-      "divine damage"
-     ],
-     "helm": [
-      "crit chance",
-      "crit dmg dealt",
-      "splash",
-      "crit dmg dealt"
-     ],
-     "body": [
-      "block chance",
-      "crit dmg dealt",
-      "max hp %",
-      "dmg dealt"
-     ],
-     "gloves": [
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "max hp %"
-     ],
-     "boots": [
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ]
-    },
-    "sacred": "divine damage"
-   },
-   {
     "cls": "Elementalist",
-    "dps": 2186372955.9144926,
-    "hps": 2164100954.2973313,
-    "ehp": 12876097.041829757,
-    "hp": 265377.1030879999,
-    "inc": 90.85229999999999,
-    "critChance": 4.20914,
-    "critMult": 168.36559999999997,
+    "dps": 3860980916904.593,
+    "hps": 1920789249168.9282,
+    "ehp": 16137013.178584956,
+    "hp": 332584.7728479999,
+    "inc": 36609.404249999985,
+    "critChance": 4.711459999999999,
+    "critMult": 165.2261,
     "eff": {
      "dr": 0,
      "block": 0,
@@ -2751,15 +2602,16 @@
     },
     "taken": 1,
     "healPower": 0,
-    "intervalMs": 225.35154841552824,
-    "splash": 3.615,
+    "intervalMs": 206.58121855374787,
+    "splash": 4.035,
     "linger": 0,
     "tree": {
-     "Growing": 3,
+     "Righteous Fire": 3,
      "Thunder Golem": 4,
-     "Golem Master": 1,
-     "Gigantify": 3,
+     "Golem Master": 3,
      "Flame Golem": 3,
+     "Growing": 3,
+     "Gigantify": 3,
      "Replenishing": 3,
      "Water Golem": 4,
      "Electrical Overload": 3,
@@ -2771,9 +2623,15 @@
     },
     "alloc": [
      {
+      "key": "righteousfire",
+      "name": "Righteous Fire",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
       "key": "golemmaster",
       "name": "Golem Master",
-      "rank": 1,
+      "rank": 3,
       "tier": "skill"
      },
      {
@@ -2857,41 +2715,204 @@
       "crit dmg dealt"
      ],
      "helm": [
-      "lightning damage",
+      "cold damage",
       "crit dmg dealt",
-      "lightning damage",
+      "crit dmg dealt",
       "lightning damage"
      ],
      "body": [
-      "crit dmg dealt",
+      "fire damage",
       "max hp %",
       "crit dmg dealt",
-      "crit dmg dealt"
+      "cold damage"
      ],
      "gloves": [
-      "max hp %",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "fire damage",
+      "max hp %",
+      "chaos damage"
      ],
      "boots": [
+      "crit dmg dealt",
+      "crit dmg dealt",
+      "cold damage",
+      "max hp %"
+     ]
+    },
+    "sacred": "max hp flat"
+   },
+   {
+    "cls": "Druid",
+    "dps": 0,
+    "hps": 246225972753.962,
+    "ehp": 10550867.655945454,
+    "hp": 129969.37950399995,
+    "inc": 163.38030999999998,
+    "critChance": 6.885979999999999,
+    "critMult": 91.35499999999999,
+    "eff": {
+     "dr": 0.8512500000000001,
+     "block": 0.75,
+     "evasion": 0.8674999999999999,
+     "intervene": 0
+    },
+    "taken": 0.012318359375,
+    "healPower": 138.06297600000002,
+    "intervalMs": 50,
+    "splash": 10.722599999999998,
+    "linger": 12.425667840000001,
+    "tree": {
+     "Evergrowth": 3,
+     "Rejuvenation": 4,
+     "Regrowth": 3,
+     "Blooming Field": 3,
+     "Primal Shift": 3,
+     "Shifting Form": 4,
+     "Predator's Instinct": 3,
+     "Feral Reflexes": 4,
+     "Quick Paw": 3,
+     "Thorned Barrier": 3,
+     "Living Armor": 4,
+     "Ironbark": 3,
+     "Nature's Blessing": 4,
+     "Claw Strike": 3,
+     "Bloom Strike": 3
+    },
+    "alloc": [
+     {
+      "key": "regrowth",
+      "name": "Regrowth",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "instinct",
+      "name": "Predator's Instinct",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "barrier",
+      "name": "Thorned Barrier",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "rejuvenation",
+      "name": "Rejuvenation",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "shiftingform",
+      "name": "Shifting Form",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "feralreflexes",
+      "name": "Feral Reflexes",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "livingarmor",
+      "name": "Living Armor",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "naturesblessing",
+      "name": "Nature's Blessing",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "evergrowth",
+      "name": "Evergrowth",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "bloomingfield",
+      "name": "Blooming Field",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "primalshift",
+      "name": "Primal Shift",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "quickpaw",
+      "name": "Quick Paw",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "ironbark",
+      "name": "Ironbark",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "clawstrike",
+      "name": "Claw Strike",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "bloomstrike",
+      "name": "Bloom Strike",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
+    "gear": {
+     "weapon": [
+      "divine damage",
       "max hp %",
-      "max hp flat",
-      "dmg dealt",
+      "lightning damage",
+      "dmg taken reduction"
+     ],
+     "helm": [
+      "divine damage",
+      "crit chance",
+      "crit dmg dealt",
+      "splash"
+     ],
+     "body": [
+      "crit dmg dealt",
+      "divine damage",
+      "crit dmg dealt",
+      "block chance"
+     ],
+     "gloves": [
+      "divine damage",
+      "divine damage",
+      "max hp %",
+      "divine damage"
+     ],
+     "boots": [
+      "crit dmg dealt",
+      "cold damage",
+      "divine damage",
       "crit dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "chaos damage"
    },
    {
     "cls": "Warrior",
-    "dps": 4102707362.991246,
+    "dps": 14993025222.202784,
     "hps": 0,
-    "ehp": 12794192.960449362,
-    "hp": 300663.5345705599,
-    "inc": 487.63269486985007,
-    "critChance": 3.2377999999999996,
-    "critMult": 113.57299999999998,
+    "ehp": 16018521.963479148,
+    "hp": 376435.2661417599,
+    "inc": 478.78135537341035,
+    "critChance": 3.624199999999999,
+    "critMult": 127.09699999999998,
     "eff": {
      "dr": 0.765,
      "block": 0.8,
@@ -2900,8 +2921,8 @@
     },
     "taken": 0.023499999999999993,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
     "linger": 0,
     "tree": {
      "Second Skin": 3,
@@ -2980,46 +3001,46 @@
     "gear": {
      "weapon": [
       "block chance",
+      "lightning damage",
       "max hp %",
-      "evasion",
-      "splash"
+      "evasion"
      ],
      "helm": [
+      "splash",
       "crit chance",
       "crit dmg dealt",
-      "crit dmg dealt",
-      "lightning damage"
+      "crit dmg dealt"
      ],
      "body": [
       "crit dmg dealt",
-      "dmg dealt",
+      "chaos damage",
       "max hp %",
-      "crit dmg dealt"
+      "fire damage"
      ],
      "gloves": [
-      "dmg dealt",
+      "cold damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "max hp %"
+      "lightning damage",
+      "crit dmg dealt"
      ],
      "boots": [
-      "crit dmg dealt",
-      "dmg dealt",
+      "divine damage",
+      "max hp %",
       "crit dmg dealt",
       "dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Paladin",
     "dps": 0,
-    "hps": 2535108167.248844,
-    "ehp": 13090113.069738671,
-    "hp": 153399.76253599997,
-    "inc": 68.90538,
-    "critChance": 3.2377999999999996,
-    "critMult": 113.57299999999998,
+    "hps": 8721038074.341154,
+    "ehp": 16389018.38984534,
+    "hp": 192058.80925599995,
+    "inc": 66.86221999999998,
+    "critChance": 3.624199999999999,
+    "critMult": 127.09699999999998,
     "eff": {
      "dr": 0.925,
      "block": 0.75,
@@ -3027,9 +3048,9 @@
      "intervene": 0.5
     },
     "taken": 0.011718749999999993,
-    "healPower": 12.05,
+    "healPower": 19.85,
     "intervalMs": 50,
-    "splash": 9.563399999999998,
+    "splash": 10.722599999999998,
     "linger": 0,
     "tree": {
      "Sanctified Armor": 3,
@@ -3058,66 +3079,10 @@
     ],
     "gear": {
      "weapon": [
-      "dmg taken reduction",
-      "max hp %",
-      "evasion",
-      "splash"
-     ],
-     "helm": [
-      "crit chance",
-      "crit dmg dealt",
       "lightning damage",
-      "crit dmg dealt"
-     ],
-     "body": [
-      "block chance",
-      "crit dmg dealt",
-      "dmg dealt",
-      "max hp %"
-     ],
-     "gloves": [
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
-     ],
-     "boots": [
       "max hp %",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ]
-    },
-    "sacred": "lightning damage"
-   },
-   {
-    "cls": "Cleric",
-    "dps": 0,
-    "hps": 2252469408.012778,
-    "ehp": 3927033.920921599,
-    "hp": 153399.76253599997,
-    "inc": 68.20038,
-    "critChance": 3.2377999999999996,
-    "critMult": 113.57299999999998,
-    "eff": {
-     "dr": 0.75,
-     "block": 0.75,
-     "evasion": 0.75,
-     "intervene": 0
-    },
-    "taken": 0.0390625,
-    "healPower": 12.55,
-    "intervalMs": 50,
-    "splash": 9.563399999999998,
-    "linger": 0,
-    "tree": {},
-    "alloc": [],
-    "gear": {
-     "weapon": [
       "dmg taken reduction",
-      "evasion",
-      "max hp %",
-      "lightning damage"
+      "evasion"
      ],
      "helm": [
       "splash",
@@ -3127,34 +3092,90 @@
      ],
      "body": [
       "block chance",
+      "cold damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "max hp %"
+      "chaos damage"
      ],
      "gloves": [
+      "max hp %",
+      "fire damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
+      "lightning damage"
      ],
      "boots": [
-      "max hp %",
       "crit dmg dealt",
-      "dmg dealt",
+      "max hp %",
+      "divine damage",
       "crit dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
+   },
+   {
+    "cls": "Cleric",
+    "dps": 0,
+    "hps": 7731486979.216269,
+    "ehp": 4916705.516953599,
+    "hp": 192058.80925599995,
+    "inc": 66.01721999999998,
+    "critChance": 3.624199999999999,
+    "critMult": 127.09699999999998,
+    "eff": {
+     "dr": 0.75,
+     "block": 0.75,
+     "evasion": 0.75,
+     "intervene": 0
+    },
+    "taken": 0.0390625,
+    "healPower": 20.35,
+    "intervalMs": 50,
+    "splash": 10.722599999999998,
+    "linger": 0,
+    "tree": {},
+    "alloc": [],
+    "gear": {
+     "weapon": [
+      "lightning damage",
+      "max hp %",
+      "dmg taken reduction",
+      "evasion"
+     ],
+     "helm": [
+      "splash",
+      "crit chance",
+      "crit dmg dealt",
+      "crit dmg dealt"
+     ],
+     "body": [
+      "block chance",
+      "cold damage",
+      "crit dmg dealt",
+      "chaos damage"
+     ],
+     "gloves": [
+      "max hp %",
+      "fire damage",
+      "crit dmg dealt",
+      "lightning damage"
+     ],
+     "boots": [
+      "crit dmg dealt",
+      "max hp %",
+      "divine damage",
+      "crit dmg dealt"
+     ]
+    },
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Warlock",
-    "dps": 1686133475.3458784,
+    "dps": 7140963023.711563,
     "hps": 0,
-    "ehp": 4080433.683457599,
-    "hp": 153399.76253599997,
-    "inc": 84.250836684,
-    "critChance": 3.7234699999999994,
-    "critMult": 113.57299999999998,
+    "ehp": 5108764.326209598,
+    "hp": 192058.80925599995,
+    "inc": 78.80410557599998,
+    "critChance": 4.167829999999999,
+    "critMult": 127.09699999999998,
     "eff": {
      "dr": 0.75,
      "block": 0.75,
@@ -3163,14 +3184,14 @@
     },
     "taken": 0.0390625,
     "healPower": 0,
-    "intervalMs": 80.46579179251069,
-    "splash": 9.563399999999998,
+    "intervalMs": 72.95890886157936,
+    "splash": 10.722599999999998,
     "linger": 0,
     "tree": {
      "Life Tap": 4,
      "Soul Siphon": 1,
-     "Dark Pact": 3,
      "Fel Haste": 4,
+     "Dark Pact": 3,
      "Burning Rage": 3,
      "Chaos Bolt": 3,
      "Soul Exchange": 3
@@ -3221,47 +3242,47 @@
     ],
     "gear": {
      "weapon": [
-      "dmg dealt",
+      "lightning damage",
       "max hp %",
       "dmg taken reduction",
       "evasion"
      ],
      "helm": [
-      "splash",
       "crit chance",
       "crit dmg dealt",
+      "splash",
       "crit dmg dealt"
      ],
      "body": [
       "block chance",
       "crit dmg dealt",
-      "max hp %",
-      "dmg dealt"
-     ],
-     "gloves": [
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
+      "chaos damage",
       "max hp %"
      ],
-     "boots": [
-      "dmg dealt",
+     "gloves": [
+      "cold damage",
+      "fire damage",
       "crit dmg dealt",
-      "dmg dealt",
+      "lightning damage"
+     ],
+     "boots": [
+      "crit dmg dealt",
+      "max hp %",
+      "divine damage",
       "crit dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Mage",
-    "dps": 1639526158.2014298,
+    "dps": 5984928266.746094,
     "hps": 0,
-    "ehp": 3927033.920921599,
-    "hp": 153399.76253599997,
-    "inc": 68.20038,
-    "critChance": 3.9177379999999995,
-    "critMult": 192.98058999999995,
+    "ehp": 4916705.516953599,
+    "hp": 192058.80925599995,
+    "inc": 76.73981999999998,
+    "critChance": 4.385281999999999,
+    "critMult": 186.80777999999995,
     "eff": {
      "dr": 0.75,
      "block": 0.75,
@@ -3270,15 +3291,15 @@
     },
     "taken": 0.0390625,
     "healPower": 0,
-    "intervalMs": 157.5884953954743,
-    "splash": 9.563399999999998,
+    "intervalMs": 144.46239059702646,
+    "splash": 10.722599999999998,
     "linger": 0,
     "tree": {
      "Arcane Mastery": 3,
      "Spell Weaving": 3,
      "Quickcast": 4,
-     "Overload": 4,
      "Haste": 3,
+     "Overload": 4,
      "Cataclysm": 3,
      "Critical Mass": 4,
      "Mana Surge": 3
@@ -3335,147 +3356,47 @@
     ],
     "gear": {
      "weapon": [
-      "dmg taken reduction",
+      "lightning damage",
       "crit chance",
       "crit dmg dealt",
-      "evasion"
+      "max hp %"
      ],
      "helm": [
-      "max hp %",
-      "lightning damage",
+      "dmg taken reduction",
+      "evasion",
       "splash",
       "crit dmg dealt"
      ],
      "body": [
       "block chance",
-      "crit dmg dealt",
-      "dmg dealt",
-      "max hp %"
-     ],
-     "gloves": [
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
-     ],
-     "boots": [
-      "max hp %",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ]
-    },
-    "sacred": "lightning damage"
-   },
-   {
-    "cls": "Monk",
-    "dps": 1285562739.798497,
-    "hps": 0,
-    "ehp": 5936214.066509396,
-    "hp": 199419.69129679995,
-    "inc": 152.11059999999998,
-    "critChance": 3.2377999999999996,
-    "critMult": 113.57299999999998,
-    "eff": {
-     "dr": 0.75,
-     "block": 0.75,
-     "evasion": 0.785,
-     "intervene": 0
-    },
-    "taken": 0.03359374999999999,
-    "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
-    "linger": 0,
-    "tree": {
-     "Granite Skin": 3,
-     "Stone Fist": 4,
-     "Iron Body": 3,
-     "Earthen Will": 3,
-     "Overgrown Reach": 3,
-     "Unbroken": 4
-    },
-    "alloc": [
-     {
-      "key": "ironbody",
-      "name": "Iron Body",
-      "rank": 3,
-      "tier": "skill"
-     },
-     {
-      "key": "stonefist",
-      "name": "Stone Fist",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "unbroken",
-      "name": "Unbroken",
-      "rank": 4,
-      "tier": "spec"
-     },
-     {
-      "key": "graniteskin",
-      "name": "Granite Skin",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "earthenwill",
-      "name": "Earthen Will",
-      "rank": 3,
-      "tier": "modifier"
-     },
-     {
-      "key": "risingdefiance",
-      "name": "Overgrown Reach",
-      "rank": 3,
-      "tier": "modifier"
-     }
-    ],
-    "gear": {
-     "weapon": [
-      "dmg taken reduction",
-      "max hp %",
-      "lightning damage",
-      "splash"
-     ],
-     "helm": [
-      "crit chance",
-      "crit dmg dealt",
-      "crit dmg dealt",
-      "block chance"
-     ],
-     "body": [
-      "crit dmg dealt",
-      "dmg dealt",
-      "max hp %",
+      "cold damage",
+      "chaos damage",
       "crit dmg dealt"
      ],
      "gloves": [
-      "dmg dealt",
+      "max hp %",
+      "fire damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "max hp %"
+      "lightning damage"
      ],
      "boots": [
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt"
+      "max hp %",
+      "divine damage",
+      "crit dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "dmg dealt"
    },
    {
     "cls": "Ranger",
-    "dps": 1271116743.262157,
+    "dps": 4747932145.600749,
     "hps": 0,
-    "ehp": 5861244.65809194,
-    "hp": 153399.76253599997,
-    "inc": 77.76378,
-    "critChance": 3.7234699999999994,
-    "critMult": 113.57299999999998,
+    "ehp": 7338366.443214327,
+    "hp": 192058.80925599995,
+    "inc": 76.73981999999998,
+    "critChance": 4.167829999999999,
+    "critMult": 127.097,
     "eff": {
      "dr": 0.75,
      "block": 0.75,
@@ -3484,8 +3405,8 @@
     },
     "taken": 0.026171874999999997,
     "healPower": 0,
-    "intervalMs": 127.31725899182386,
-    "splash": 3.9842000000000004,
+    "intervalMs": 116.71255285522477,
+    "splash": 4.4378,
     "linger": 0,
     "tree": {
      "Lightfoot": 3,
@@ -3556,10 +3477,10 @@
     ],
     "gear": {
      "weapon": [
-      "dmg taken reduction",
+      "lightning damage",
       "evasion",
       "max hp %",
-      "lightning damage"
+      "dmg taken reduction"
      ],
      "helm": [
       "crit chance",
@@ -3568,35 +3489,135 @@
       "block chance"
      ],
      "body": [
+      "cold damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "max hp %",
-      "crit dmg dealt"
-     ],
-     "gloves": [
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
+      "fire damage",
       "max hp %"
      ],
-     "boots": [
+     "gloves": [
+      "chaos damage",
       "crit dmg dealt",
-      "dmg dealt",
+      "lightning damage",
+      "crit dmg dealt"
+     ],
+     "boots": [
+      "max hp %",
+      "divine damage",
+      "crit dmg dealt",
+      "crit dmg dealt"
+     ]
+    },
+    "sacred": "dmg dealt"
+   },
+   {
+    "cls": "Monk",
+    "dps": 4703024165.538822,
+    "hps": 0,
+    "ehp": 7432229.269813581,
+    "hp": 249676.45203279995,
+    "inc": 149.49819999999997,
+    "critChance": 3.624199999999999,
+    "critMult": 127.09699999999998,
+    "eff": {
+     "dr": 0.75,
+     "block": 0.75,
+     "evasion": 0.785,
+     "intervene": 0
+    },
+    "taken": 0.03359374999999999,
+    "healPower": 0,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
+    "linger": 0,
+    "tree": {
+     "Granite Skin": 3,
+     "Stone Fist": 4,
+     "Iron Body": 3,
+     "Earthen Will": 3,
+     "Overgrown Reach": 3,
+     "Unbroken": 4
+    },
+    "alloc": [
+     {
+      "key": "ironbody",
+      "name": "Iron Body",
+      "rank": 3,
+      "tier": "skill"
+     },
+     {
+      "key": "stonefist",
+      "name": "Stone Fist",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "unbroken",
+      "name": "Unbroken",
+      "rank": 4,
+      "tier": "spec"
+     },
+     {
+      "key": "graniteskin",
+      "name": "Granite Skin",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "earthenwill",
+      "name": "Earthen Will",
+      "rank": 3,
+      "tier": "modifier"
+     },
+     {
+      "key": "risingdefiance",
+      "name": "Overgrown Reach",
+      "rank": 3,
+      "tier": "modifier"
+     }
+    ],
+    "gear": {
+     "weapon": [
+      "lightning damage",
+      "max hp %",
+      "dmg taken reduction",
+      "splash"
+     ],
+     "helm": [
+      "crit chance",
+      "crit dmg dealt",
+      "crit dmg dealt",
+      "block chance"
+     ],
+     "body": [
+      "cold damage",
+      "crit dmg dealt",
+      "fire damage",
+      "max hp %"
+     ],
+     "gloves": [
+      "chaos damage",
+      "crit dmg dealt",
+      "lightning damage",
+      "crit dmg dealt"
+     ],
+     "boots": [
+      "divine damage",
+      "max hp %",
       "crit dmg dealt",
       "dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Rogue",
-    "dps": 1040471537.0366633,
+    "dps": 3715680240.3758144,
     "hps": 0,
-    "ehp": 4908792.401152,
-    "hp": 153399.76253599997,
-    "inc": 68.20038,
-    "critChance": 7.96246,
-    "critMult": 153.32354999999998,
+    "ehp": 6145881.896191999,
+    "hp": 192058.80925599995,
+    "inc": 66.01721999999998,
+    "critChance": 8.90494,
+    "critMult": 171.58094999999997,
     "eff": {
      "dr": 0.75,
      "block": 0.75,
@@ -3605,8 +3626,8 @@
     },
     "taken": 0.031249999999999993,
     "healPower": 0,
-    "intervalMs": 269.6514254544782,
-    "splash": 9.563399999999998,
+    "intervalMs": 247.1912016882453,
+    "splash": 10.722599999999998,
     "linger": 0,
     "tree": {
      "Deadly Precision": 3,
@@ -3649,47 +3670,47 @@
     ],
     "gear": {
      "weapon": [
-      "evasion",
+      "lightning damage",
       "crit dmg dealt",
-      "dmg taken reduction",
+      "evasion",
       "max hp %"
      ],
      "helm": [
-      "lightning damage",
+      "dmg taken reduction",
       "splash",
       "crit dmg dealt",
       "block chance"
      ],
      "body": [
+      "cold damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "max hp %",
-      "crit dmg dealt"
+      "chaos damage",
+      "max hp %"
      ],
      "gloves": [
-      "dmg dealt",
+      "fire damage",
       "crit dmg dealt",
-      "crit chance",
-      "dmg dealt"
+      "lightning damage",
+      "crit dmg dealt"
      ],
      "boots": [
       "max hp %",
+      "divine damage",
       "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
+      "crit chance"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
    },
    {
     "cls": "Berserker",
-    "dps": 1236386285.7419465,
+    "dps": 4510907100.862603,
     "hps": 0,
-    "ehp": 3327994.848238644,
-    "hp": 153399.76253599997,
-    "inc": 146.25368135,
-    "critChance": 3.2377999999999996,
-    "critMult": 113.57299999999998,
+    "ehp": 4166699.590638644,
+    "hp": 192058.80925599995,
+    "inc": 143.35039565,
+    "critChance": 3.624199999999999,
+    "critMult": 127.09699999999998,
     "eff": {
      "dr": 0.7050000000000001,
      "block": 0.75,
@@ -3698,8 +3719,8 @@
     },
     "taken": 0.04609374999999999,
     "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
     "linger": 0,
     "tree": {
      "Reckless Swing": 3,
@@ -3735,63 +3756,7 @@
     ],
     "gear": {
      "weapon": [
-      "dmg taken reduction",
-      "max hp %",
-      "evasion",
-      "splash"
-     ],
-     "helm": [
-      "crit chance",
-      "crit dmg dealt",
-      "crit dmg dealt",
-      "lightning damage"
-     ],
-     "body": [
-      "block chance",
-      "crit dmg dealt",
-      "max hp %",
-      "dmg dealt"
-     ],
-     "gloves": [
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
-      "max hp %"
-     ],
-     "boots": [
-      "dmg dealt",
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt"
-     ]
-    },
-    "sacred": "lightning damage"
-   },
-   {
-    "cls": "Slayer",
-    "dps": 510674265.84402144,
-    "hps": 0,
-    "ehp": 4080433.683457599,
-    "hp": 153399.76253599997,
-    "inc": 70.59123,
-    "critChance": 3.2377999999999996,
-    "critMult": 113.57299999999998,
-    "eff": {
-     "dr": 0.75,
-     "block": 0.75,
-     "evasion": 0.75,
-     "intervene": 0
-    },
-    "taken": 0.0390625,
-    "healPower": 0,
-    "intervalMs": 350.54685309082174,
-    "splash": 9.563399999999998,
-    "linger": 0,
-    "tree": {},
-    "alloc": [],
-    "gear": {
-     "weapon": [
-      "dmg dealt",
+      "lightning damage",
       "max hp %",
       "dmg taken reduction",
       "evasion"
@@ -3805,23 +3770,79 @@
      "body": [
       "block chance",
       "crit dmg dealt",
-      "max hp %",
-      "dmg dealt"
-     ],
-     "gloves": [
-      "crit dmg dealt",
-      "dmg dealt",
-      "crit dmg dealt",
+      "cold damage",
       "max hp %"
      ],
-     "boots": [
-      "dmg dealt",
+     "gloves": [
+      "chaos damage",
       "crit dmg dealt",
-      "dmg dealt",
+      "fire damage",
+      "crit dmg dealt"
+     ],
+     "boots": [
+      "lightning damage",
+      "max hp %",
+      "crit dmg dealt",
+      "divine damage"
+     ]
+    },
+    "sacred": "crit dmg dealt"
+   },
+   {
+    "cls": "Slayer",
+    "dps": 2094268271.4293702,
+    "hps": 0,
+    "ehp": 5108764.326209598,
+    "hp": 192058.80925599995,
+    "inc": 66.01721999999998,
+    "critChance": 3.624199999999999,
+    "critMult": 127.09699999999998,
+    "eff": {
+     "dr": 0.75,
+     "block": 0.75,
+     "evasion": 0.75,
+     "intervene": 0
+    },
+    "taken": 0.0390625,
+    "healPower": 0,
+    "intervalMs": 321.3485621947189,
+    "splash": 10.722599999999998,
+    "linger": 0,
+    "tree": {},
+    "alloc": [],
+    "gear": {
+     "weapon": [
+      "lightning damage",
+      "max hp %",
+      "dmg taken reduction",
+      "evasion"
+     ],
+     "helm": [
+      "splash",
+      "crit chance",
+      "crit dmg dealt",
+      "crit dmg dealt"
+     ],
+     "body": [
+      "block chance",
+      "crit dmg dealt",
+      "chaos damage",
+      "max hp %"
+     ],
+     "gloves": [
+      "cold damage",
+      "fire damage",
+      "crit dmg dealt",
+      "lightning damage"
+     ],
+     "boots": [
+      "crit dmg dealt",
+      "max hp %",
+      "divine damage",
       "crit dmg dealt"
      ]
     },
-    "sacred": "lightning damage"
+    "sacred": "crit dmg dealt"
    }
   ]
  },

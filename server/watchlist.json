@@ -30,7 +30,7 @@
   {
    "title": "The 7-modifier item blueprint",
    "classes": [],
-   "text": "Hard ceiling per item: 4 base modifiers + at most one each from Reforge's crit, Recombine's crit, and Krangle. Reforge's bonus-modifier crit scales with quality (2.2% on Perfect, once EVER per item, survives Recombine) — order: roll 4 mods, Polish to Perfect, spam targeted Reforge for the crit, Recombine-crit, Krangle last. From stage 200, Sacred bases add a maxed implicit outside the cap. Tier growth: the currency crafts (Transmute/Scour/Augment/Regal/Exalt/Krangle/Celestial Shard) each bump tier as a side effect (+3 under t25, +2 under t50, +1 after) — Recombine doesn't.",
+   "text": "Hard ceiling per item: 4 base modifiers + at most one each from Reforge's crit, Recombine's crit, and Krangle. Reforge's bonus-modifier crit scales with quality (2.2% on Perfect, once EVER per item, survives Recombine) — order: roll 4 mods, Polish to Perfect, spam targeted Reforge for the crit, Recombine-crit, Krangle last. From stage 200, Sacred bases add a maxed implicit outside the cap. Tier growth: the currency crafts (Transmute/Scour/Augment/Regal/Exalt/Krangle/Unique Shard) each bump tier as a side effect (+3 under t25, +2 under t50, +1 after) — Recombine doesn't.",
    "type": "economy"
   },
   {

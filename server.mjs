@@ -176,7 +176,7 @@ const modsOf = (chunk) => [...chunk.matchAll(/<li([^>]*)>([^<]*)</g)]
 // the gear-quality element's tooltip (Perfect Quality etc.)
 const qtipOf = (chunk) => tipOf((chunk.match(/class="gear-quality[^"]*"([^>]*)>/) || [])[1] || '');
 // Sacred/unique implicit callouts ("✦ Sacred: +224% splash" / the gold unique
-// line, e.g. Celestial Shard's "✦ Celestial Conversion: …"). An item can carry
+// line, e.g. a Unique Shard's "✦ Celestial Conversion: …"). An item can carry
 // BOTH — Krangle conflicts with unique, Sacred doesn't — so this returns every
 // line in the site's own order, each with its own gold flag. The old
 // single-string + separate implicitGold boolean lost the unique line entirely on
@@ -253,7 +253,7 @@ export function elementalOf(stats) {
 // covers them; the owner-only bits (id, protect, repair) just come back null.
 // `unique` reads the gear-unique affix line, NOT the gear-name-unique class:
 // the site's item_name_class picks locked > sacred > unique, so a Sacred or
-// Krangled item carrying a Celestial/Unique Shard affix never gets that class.
+// Krangled item carrying a Unique Shard affix never gets that class.
 const itemOf = (chunk) => {
   const grab = (cls) => strip((chunk.match(new RegExp(`class="${cls}[^"]*"[^>]*>([^<]*)<`)) || [])[1] || '');
   return {
@@ -508,7 +508,8 @@ export async function inventory() { // exported for scrape smoke-tests
     ?? (nav.match(/✨\s*([\d.KM]+)/) || [])[1] ?? '?';
   // Token pills carry a data-tip between the class and the '>' — an anchored
   // `class="token-pill">` matched nothing and read every player as tokenless.
-  // Text: "🎫 Celestial Shard → Celestial Conversion ×2".
+  // Text: "🎫 Unique Shard ×2" (the retired Celestial Shard token still
+  // prints its "→ Celestial Conversion" suffix; nothing else does).
   // These used to arrive doubled; that was never a second nav copy of the pills
   // (the site has exactly one emitter) but the whole page body arriving twice —
   // handled once now in getAuthed's firstBody, so no dedupe belongs here.

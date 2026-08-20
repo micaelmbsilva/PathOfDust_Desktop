@@ -38,7 +38,7 @@ export const MODELED_SPECIAL_KEYS = new Set(['barrier', 'bloomingfield', 'coloss
   'lifetap', 'momentousblow', 'overgrowth', 'overwhelmingforce', 'primalforce', 'reckless',
   'recklessabandon', 'regrowth', 'secondskin', 'soulexchange', 'titansgrip', 'wildsurge',
   'golemmaster', 'thundergolem', 'flamegolem', 'watergolem', 'gigantify', 'growing',
-  'terrifying', 'replenishing']);
+  'terrifying', 'replenishing', 'righteousfire']);
 
 // Does the closed-form put a number on this node? FlatStat nodes mapped to a
 // bucket and OverflowConversion nodes are modeled generically; Special nodes only
@@ -247,11 +247,14 @@ export function classScore(cls, g, level, model, tree) {
     overflow += Math.max(0, gearRaw[b] - cap[b][1]) * R.overflowToInc;
   }
 
-  let elemTotal = ELEMS.reduce((s, e) => s + g[e], 0);
-  // Flame Golem: the OWNER's elemental-damage increases are multiplied
+  // Flame Golem multiplies the OWNER's elemental-damage increases by
   // 1.33/1.66/2.0× (passive_tree.rs "flamegolem"; golems inherit the result,
-  // which the per-golem output share below already reflects).
-  if (mag('flamegolem')) elemTotal *= mag('flamegolem');
+  // which the per-golem output share below already reflects) — but only for
+  // fire/cold/lightning: combat.rs:10623-10626 applies flamegolem_mult to
+  // those three alone, chaos and divine are not "elemental" for this node.
+  const fgMult = mag('flamegolem') || 1;
+  const FG_ELEMS = new Set(['elemFire', 'elemCold', 'elemLightning']);
+  const elemTotal = ELEMS.reduce((s, e) => s + g[e] * (FG_ELEMS.has(e) ? fgMult : 1), 0);
   // Every bespoke conversion is its own multiplicative layer, not a term in
   // the tree's additive pool (character.rs combat_increased_damage).
   const layers = [
@@ -263,6 +266,15 @@ export function classScore(cls, g, level, model, tree) {
     1 + step(RECKLESS_DEALT, rank('reckless')),
     1 + step(DEATHWISH_DEALT, rank('deathwish')) + mag('gloryhound'),
     1 + mag('lifetap') * (2 + mag('soulexchange')),
+    // Righteous Fire (combat.rs:4260 resolve_hit, raw_dmg *= 1 +
+    // righteousfire_pct). Since 2026-08-20 this is a plain multiplicative
+    // layer on every landed hit, splash included — it used to be its own
+    // per-second true-damage tick, which the closed form couldn't value.
+    // ponytail: RF's self-burn (rf_self_damage_pct, 10/20/30% of max HP per
+    // second) is NOT charged against ehp, so an RF build scores optimistic.
+    // Upgrade path: subtract it over assumedFightDurationMs once ehp has a
+    // time-based term to spend it against.
+    1 + mag('righteousfire'),
   ];
   const inc = Math.max(-0.9, layers.reduce((a, b) => a * b, 1) - 1);
 
@@ -280,7 +292,12 @@ export function classScore(cls, g, level, model, tree) {
   const ccFloor = Math.floor(cc), ccRem = cc - ccFloor;
   const critF = 1 + (1 - ccRem) * stackBonus(ccFloor) + ccRem * stackBonus(ccFloor + 1);
 
-  const procF = 1 + ELEMS.reduce((s, e) => s + (g[e] / R.elemProcDivisor) * (model.proxies.elemProcValue[e] || 0.5), 0);
+  // Proc chance is roll / elemProcDivisor, then clamped to 100% by the game
+  // itself (combat.rs:7170 roll_elemental_proc) — raw past the divisor buys
+  // nothing more on the proc side. The clamp matters now that all 5 slots can
+  // roll elemental, so one element can genuinely saturate.
+  const procF = 1 + ELEMS.reduce((s, e) =>
+    s + Math.min(1, g[e] / R.elemProcDivisor) * (model.proxies.elemProcValue[e] || 0.5), 0);
   // Splash: each extra target takes min(splash, 1) of the hit, and crossing
   // 100% buys 2 more targets (apply_splash) — a step, not a linear ramp.
   const splash = Math.max(0, (1 + g.splash + (B.splash || 0)) * (1 + T.get('splash')) * (1 + mag('primalforce')) - 1);
@@ -334,17 +351,25 @@ export function classScore(cls, g, level, model, tree) {
   const leechHps = Math.min(leech * dps, R.leechCapPerSec * hp);
   let ehp = hp / Math.max(0.01, taken) + leechHps * model.proxies.leechSeconds;
 
-  // --- Elementalist golems (combat.rs spawn_golem / thunder_golem_redirect;
-  // GOLEM_STAT_SCALE 0.33, dmg penalty 0.33 per golem, additive). One golem
-  // per Golem Master rank; a golem has 33% of the owner's base stats but
-  // inherits the damage MULTIPLIERS whole, so each golem's output ≈ 33% of
-  // the owner's — golems are pure attackers (no heal share). Golem TYPE is a
-  // character-page choice the tree can't see: assume one golem of each
-  // invested type spec, which is how anyone paying those points plays it.
+  // --- Elementalist golems (combat.rs spawn_golem / thunder_golem_redirect).
+  // One golem per Golem Master rank. GOLEM_STAT_SCALE (0.33) applies ONLY to
+  // atk/max_hp/evasion/damage_reduction/block_chance; since 2026-08-20 every
+  // other multiplier the owner carries — splash and lingering included — is
+  // inherited whole, and a golem reads the owner's LIVE speed stacks each
+  // turn instead of a flat 1.0 snapshot. So each golem's output really is
+  // ≈33% of the owner's, which is what `gs * output` says; it used to be an
+  // over-estimate. The owner's own damage is NOT reduced by golem count any
+  // more: golem_summon_dmg_penalty was deleted from the game outright (the
+  // ~100x power jump at 3 golems is accepted design). The game's own
+  // "golemmaster" node prose still describes the old penalty — it is stale in
+  // the source; model the code. Golems are pure attackers (no heal share).
+  // Golem TYPE is a character-page choice the tree can't see: assume one
+  // golem of each invested type spec, which is how anyone paying those points
+  // plays it.
   const golems = rank('golemmaster');
   if (golems) {
     const gs = R.golemStatScale;
-    dps = dps * Math.max(0.01, 1 - R.golemDmgPenaltyPer * golems) + golems * gs * output;
+    dps += golems * gs * output;
     // Thunder: absorbs ALL party-bound damage while alive and reforms on a
     // timer (4/3/2s — mag is the delay), Growing compounding its max hp each
     // reform. Closed form: the enemy must burn N incarnations' worth of pool
@@ -514,8 +539,9 @@ export function rollTargets(cls, level, tier, model, baseBuckets, empirical, tre
 // Stat priority: rank every craftable affix by the marginal class-score gain of
 // ONE average roll on top of the current build, so when a veil can't land the
 // exact mod you know what to chase instead. `global` values each affix at its
-// best eligible slot; `bySlot` values it per slot (weapon/helm can roll the
-// elementals; other slots can't). Mirrors rollTargets' gain(). `tier` is a number
+// best eligible slot; `bySlot` values it per slot (no affix is slot-restricted
+// today — the 5 elementals were, until the 2026-08-20 widen — but the model
+// keeps `slots` so a future one can be). Mirrors rollTargets' gain(). `tier` is a number
 // or a {slot:tier} map. Each list is sorted desc with weight = gain/topGain
 // (1.0 = strongest); `capped` flags an affix whose marginal gain has gone
 // near-zero (a defense already past its cap, only paying through overflow).

@@ -99,15 +99,18 @@ assert.deepEqual(trimOrder(order, 6), [{ n: 'A', r: 3 }, { n: 'B', r: 3 }]);
   assert.ok(!r.items.some(i => i.unique));
 }
 
-// rollTargets: elementals only ever planned on weapon/helm; 4 picks per slot, sacred present
+// rollTargets: 4 picks per slot, sacred present, and every slot may now be
+// planned with an elemental (affix.rs 2026-08-20 widen — eligible_slots: None).
 {
   const r = rollTargets('Berserker', 50, 100, model, null, null);
   for (const slot of ['body', 'gloves', 'boots']) {
-    assert.ok(r.plan[slot].every(pk => !/damage \(/.test(pk.match) || false));
-    assert.ok(r.plan[slot].every(pk => !pk.match.includes(' damage')), `${slot} got elemental`);
     assert.equal(r.plan[slot].length, 4);
   }
   assert.equal(r.plan.weapon.length, 4);
+  // affix.rs is eligible_slots: None for every affix as of 2026-08-20, so no
+  // model entry may carry a `slots` restriction. (The key stays supported —
+  // a future affix can restrict itself again — it just isn't used today.)
+  assert.ok(model.affixes.every(a => !a.slots), 'no affix is slot-restricted any more');
   assert.ok(r.sacred && r.sacred.avg > 0);
   // empirical override: perTier 0.03 vs empirical 0.06 (>20% off) → avg uses 0.06
   const r2 = rollTargets('Berserker', 50, 100, model, null, { 'dmg dealt': 0.06 });
@@ -246,7 +249,7 @@ assert.equal(pointsForLevel(119), 30);
   assert.ok(MODELED_SPECIAL_KEYS.has('grimresolve'));
 }
 
-// statPriority: ranked desc, weight normalized to 1.0, elementals only on weapon/helm
+// statPriority: ranked desc, weight normalized to 1.0, elementals on every slot
 {
   const g = { ...emptyBuckets(), weaponPower: 1500, attackSpeed: 0.4 };
   const sp = statPriority('Ranger', 119, 119, model, g, { nodes: tree.classes.Ranger, alloc: {} });
@@ -254,7 +257,9 @@ assert.equal(pointsForLevel(119), 30);
   assert.ok(sp.global.every((e, i) => i === 0 || sp.global[i - 1].gain >= e.gain), 'global not sorted desc');
   assert.ok(Math.abs(sp.global[0].weight - 1) < 1e-9, 'top weight must be 1.0');
   assert.ok(sp.bySlot.weapon.some((e) => e.match === 'lightning damage'), 'weapon can roll elementals');
-  assert.ok(!sp.bySlot.boots.some((e) => /lightning damage/.test(e.match)), 'boots cannot roll elementals');
+  // 2026-08-20 widen: the 5 elementals are eligible on every slot now.
+  assert.ok(sp.bySlot.boots.some((e) => e.match === 'lightning damage'), 'boots can roll elementals');
+  assert.equal(sp.bySlot.boots.length, sp.bySlot.weapon.length, 'every slot has the same affix pool');
 }
 
 // Elementalist golems (combat.rs spawn_golem/thunder_golem_redirect): Thunder
@@ -273,6 +278,37 @@ assert.equal(pointsForLevel(119), 30);
   assert.ok(water.hps > 0, 'water golem regen must produce hps');
   const tank = searchBuild('Elementalist', ele, 231, 231, model, { objective: (s) => s.ehp });
   assert.ok(tank.alloc.thundergolem > 0 && tank.alloc.golemmaster > 0, 'tank solve must take the thunder golem line');
+}
+
+// golem_summon_dmg_penalty was deleted from the game 2026-08-20: summoning
+// golems must never reduce the owner's own damage. Each golem adds
+// golemStatScale of the owner's output on top, so 3 golems reach ~1.99x.
+{
+  const ele = tree.classes.Elementalist;
+  const g = { ...emptyBuckets(), weaponPower: 800 };
+  const none = classScore('Elementalist', g, 231, model, { nodes: ele, alloc: {} });
+  const three = classScore('Elementalist', g, 231, model, { nodes: ele, alloc: { golemmaster: 3 } });
+  assert.ok(three.dps > none.dps, 'golems must never cost the owner damage');
+  const expected = none.dps * (1 + 3 * model.rules.golemStatScale);
+  assert.ok(Math.abs(three.dps / expected - 1) < 1e-9, `3 golems: ${three.dps} vs ${expected}`);
+  assert.equal(model.rules.golemDmgPenaltyPer, undefined, 'the removed penalty must not come back');
+}
+
+// Righteous Fire is a plain multiplicative damage layer since 2026-08-20
+// (combat.rs:4260, raw_dmg *= 1 + righteousfire_pct). Asserted against the
+// node's own live magnitude, not a literal: RF carries a streamer override
+// (passive_overrides.rs) that is currently 1000x its compiled default, and
+// the game reads the override — so a hardcoded 1.3 here would be testing the
+// source's default rather than what the ladder actually runs.
+{
+  const ele = tree.classes.Elementalist;
+  const rfNode = ele.find((n) => n.key === 'righteousfire');
+  const g = { ...emptyBuckets(), weaponPower: 800 };
+  const off = classScore('Elementalist', g, 231, model, { nodes: ele, alloc: {} });
+  const rf = classScore('Elementalist', g, 231, model, { nodes: ele, alloc: { righteousfire: 3 } });
+  const expected = 1 + nodeMagnitude(rfNode, 3);
+  assert.ok(Math.abs(rf.dps / off.dps - expected) < 1e-9, `RF 3/3: ${rf.dps / off.dps} vs ${expected}`);
+  assert.ok(nodeScored(rfNode), 'righteousfire must score');
 }
 
 console.log('advisor-core tests passed');

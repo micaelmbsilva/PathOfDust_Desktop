@@ -68,7 +68,7 @@
            border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; margin-left: 6px; }
   .badge.sacred { color: #7fd4ff; border-color: #7fd4ff55; }
   .badge.unique { color: #ffd76b; border-color: #ffd76b55; } /* game's .gear-name-unique gold */
-  .item .implicit.gold { color: #ffd76b; font-style: normal; } /* unique (Celestial) line */
+  .item .implicit.gold { color: #ffd76b; font-style: normal; } /* unique-affix line */
   .badge.krangled { color: #d55181; border-color: #d5518155; }
   .passives li { padding: 2px 0; }
   .passives .rank { color: var(--muted); }
@@ -320,8 +320,9 @@ function advStats(players, passives) {
     el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:14px 16px' }, cards));
 }
 
-// Rare gear = items carrying a unique affix (Celestial Shard → Celestial
-// Conversion, Unique Shard → Split Personality), equipped or in the bag — both
+// Rare gear = items carrying a unique affix (Celestial Conversion or Split
+// Personality, both granted by the Unique Shard craft since the 2026-08-19
+// currency merge), equipped or in the bag — both
 // are public on the game's own character page. Sacred and krangled bases are
 // craftable, so they aren't rare. `shards` are unspent shard tokens, which only
 // app-reporting players expose. /api/ladder sends both.
@@ -431,7 +432,7 @@ function rareBoard(players, passives) {
     el('h2', null, 'Rare gear'),
     el('p', { class: 'sub' }, `${plural(owners.length, 'player')} · ${plural(items, 'unique item')} across `
       + `${plural(affixes.length, 'affix', 'es')}${tokens ? ` · ${plural(tokens, 'unspent shard token')}` : ''}. `
-      + 'Uniques come from the Celestial and Unique Shard crafts — sacred and krangled bases are craftable, so they do not count. '
+      + 'Uniques come from the Unique Shard craft, which grants Celestial Conversion or Split Personality by the crafter’s choice — sacred and krangled bases are craftable, so they do not count. '
       + 'Worn and bagged items both count; unspent tokens are only visible for players running the app. '
       + 'Click headers to sort, chips to filter.'),
     playersTable(owners, passives, { rarity: filters, sort: 'rare',

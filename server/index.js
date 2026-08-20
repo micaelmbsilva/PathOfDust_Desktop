@@ -203,8 +203,9 @@ app.get('/api/ladder', h(async (_req, res) => {
   if (!pool) return res.sendStatus(503);
   const [players, byClass, levels, total] = await Promise.all([
     // Rare gear rides along with the ladder rows (the board is the same players,
-    // different columns). "Rare" = a unique affix from the Celestial/Unique Shard
-    // crafts, read off the gold implicit line rather than the item's name class:
+    // different columns). "Rare" = a unique affix from the Unique Shard craft
+    // (Celestial Shard merged into it 2026-08-19), read off the gold implicit
+    // line rather than the item's name class:
     // the game's item_name_class picks locked > sacred > unique, so a Sacred or
     // Krangled item carrying one never gets the gear-name-unique class. Sacred and
     // krangled bases themselves are craftable, so they don't count as rare.
@@ -586,10 +587,10 @@ function parseCharacter(text) {
       .map(m => ({ t: strip(m[2]), tip: strip((m[1].match(/data-tip="([^"]*)"/) || [])[1] || '') })),
     sacred: /gear-name-sacred/.test(chunk), krangled: /gear-name-locked/.test(chunk),
     // The site's item_name_class picks locked > sacred > unique, so a Sacred or
-    // Krangled item with a Celestial/Unique Shard affix carries no
+    // Krangled item with a Unique Shard affix carries no
     // gear-name-unique class — the affix line is the only reliable marker.
     unique: /class="gear-unique"/.test(chunk),
-    // Sacred and unique (Celestial Shard) implicits can BOTH be on one item —
+    // Sacred and unique (Unique Shard) implicits can BOTH be on one item —
     // the old single-match regex dropped the unique line. Same parse as
     // implicitsOf in ../server.mjs (separate deploy, so a duplicated one-liner
     // rather than an ESM import of a module that opens the bridge listener).
