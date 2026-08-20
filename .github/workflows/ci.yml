@@ -1,0 +1,37 @@
+name: CI
+
+# release.yml only fires on a version tag, so before this workflow existed an
+# ordinary push to main — which is what every running client hot-pulls from —
+# ran no checks at all. The manifest check matters most here: a version.json
+# listing a file that was never pushed makes the pull throw and back off, which
+# freezes interface updates for every client until someone notices.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Interface manifest is coherent
+        run: node .github/check-manifest.mjs
+
+      # npm test, so package.json's list is the only list — a hand-copy here
+      # would let a new test file silently skip CI. The app's tests use only
+      # node built-ins, so no install step is needed.
+      - name: App tests
+        run: npm test
+
+      # The ladder site is a separate deployment with its own manifest, and its
+      # scraper tests need express installed.
+      - name: Site tests
+        working-directory: server
+        run: npm ci --no-audit --no-fund && node test-server.js

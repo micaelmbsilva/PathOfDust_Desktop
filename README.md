@@ -139,3 +139,6 @@ three separate version numbers and how a release is cut, are in [CLAUDE.md](CLAU
 - No build step and no runtime dependencies in the app — Node built-ins and the browser only.
 - Pages are single files: styles in `<style>`, logic in `<script>`. Match the surrounding code.
 - Stage explicit paths when committing (`git add <file>`), never `git add -A`.
+- CI runs `npm test`, the manifest check and the site's own tests on every push and pull
+  request to `main` (`.github/workflows/ci.yml`). Installers are built separately, on a
+  version tag only.
