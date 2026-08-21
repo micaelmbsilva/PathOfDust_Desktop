@@ -116,4 +116,40 @@ assert.ok(!wantsBuffs(null));
   assert.equal(r.shields.get('kazesosa|lokati_gaming'), 15000);
 }
 
+// ---- fetched once per bundleSeq, success or failure -----------------------
+// The "a second open of the same fight never refetches" guarantee lives in
+// loadBuffsFor's cache, not in the parser — so it gets its own counting mock.
+// A null result is cached too: a denial must be asked for once, not hammered
+// on every toggle.
+const makeLoadBuffsFor = (fetchImpl) => new Function('fetch', `
+  ${parseBuffsMemberSrc}
+  ${fetchAndParseBuffsSrc}
+  const buffsCache = new Map();
+  ${liftFn('async function loadBuffsFor(seq) {')}
+  return loadBuffsFor;
+`)(fetchImpl);
+
+{
+  let calls = 0;
+  const load = makeLoadBuffsFor(async () => {
+    calls++;
+    return { ok: true, json: async () => ({ ok: true, events: buffEvents }) };
+  });
+  const [a, b] = await Promise.all([load(7), load(7)]); // both while in flight
+  assert.equal(calls, 1, 'two opens racing the same fight share one fetch');
+  assert.equal(a, b, 'and get the same parsed member back');
+  const c = await load(7); // and again, long after it settled
+  assert.equal(calls, 1, 'a later open of the same fight never refetches');
+  assert.equal(c, a);
+  await load(8);
+  assert.equal(calls, 2, 'a different fight is its own cache entry');
+}
+{
+  let calls = 0;
+  const load = makeLoadBuffsFor(async () => { calls++; return { ok: false }; });
+  assert.equal(await load(7), null);
+  assert.equal(await load(7), null);
+  assert.equal(calls, 1, 'a denial is cached too — no retry on every toggle');
+}
+
 console.log('fight-buffs tests passed');

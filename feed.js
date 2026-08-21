@@ -132,6 +132,22 @@
     return b ? { key: k, label: b[0], kind: b[1], origin: b[2], desc: b[3], from: b[4] }
       : { key: k, label: prettyKey(k), kind: 'unknown', origin: 'unknown', desc: '', from: '' }; };
   const KIND_ICON = { buff: '🟢', debuff: '🔴', charge: '🔵', mixed: '🟡', unknown: '⚪' };
+  // Values arrive as raw numbers. Stack counters read best as plain integers;
+  // the multiplier-style ones are fractions where 0.25 means +25%. Shared so
+  // the live Buffs & Debuffs pane and Fight History's per-card readout can't
+  // drift — they did: a copy of this that dropped the `unknown` branch below
+  // brought "500%" straight back.
+  const buffVal = (k, v, kind) => {
+    const n = +v;
+    if (!isFinite(n)) return String(v);
+    // An unrecognised key gets its number shown as-is. Guessing that a small
+    // value means a percentage is how "5" became "500%".
+    if (kind === 'unknown') return fmtN(n);
+    if (/stacks|count|charges|uses/.test(k)) return String(Math.round(n));
+    if (k === 'marked') return 'active';
+    if (k === 'shield_hp') return fmtN(n);
+    return Math.abs(n) < 10 ? `${(n * 100).toFixed(0)}%` : fmtN(n);
+  };
 
   // Role comes from the class's kit, never inferred from a fight's numbers —
   // a healer who out-damages the party is still a healer. Dual-role classes
@@ -176,5 +192,5 @@
   const bindChips = (root, onPick) => root.querySelectorAll('[data-fcat]').forEach(el =>
     el.onclick = () => onPick(el.dataset.fcat));
 
-  window.PodFeed = { entries, render, folds, chips, bindChips, fmtT, fmtN, buff, KIND_ICON, ROLE_ICON, CLASS_ROLES, rolesOf };
+  window.PodFeed = { entries, render, folds, chips, bindChips, fmtT, fmtN, buff, buffVal, KIND_ICON, ROLE_ICON, CLASS_ROLES, rolesOf };
 })();

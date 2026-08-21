@@ -177,20 +177,14 @@
   // follow) and a second open of the same fight never refetches.
   const buffsCache = new Map();
 
-  // Values arrive as raw numbers, same convention as index.html's buffVal —
-  // duplicated rather than imported because the two pages share no module
-  // boundary, only feed.js's PodFeed.
-  const buffChipVal = (k, v) => {
-    const n = +v;
-    if (!isFinite(n)) return String(v);
-    if (/stacks|count|charges|uses/.test(k)) return String(Math.round(n));
-    if (k === 'marked') return 'active';
-    if (k === 'shield_hp') return fmtN(n);
-    return Math.abs(n) < 10 ? `${(n * 100).toFixed(0)}%` : fmtN(n);
-  };
+  const buffVal = PodFeed.buffVal; // shared with index.html's Buffs & Debuffs pane
+  // A bundle names units by login; the enemies it also snapshots have no login
+  // at all, only the synthetic `__enemy_N__` the replay uses (same test as
+  // index.html's boss/enemy split), which is not a name to show a player.
   const nameFor = (f, unitId) => {
     const p = (f.players || []).find(pl => (pl.id || '').toLowerCase() === String(unitId).toLowerCase());
-    return p ? p.displayName : unitId;
+    if (p) return p.displayName;
+    return /^__enemy/.test(String(unitId)) ? 'Enemy' : unitId;
   };
 
   // Defensive by hand rather than pulling in replay-bundle-validator.mjs for
@@ -226,7 +220,7 @@
         const b = PodFeed.buff(k);
         const tip = [b.desc, `${nameFor(f, unit)} — ${b.key} = ${v}`].filter(Boolean).join('\n\n');
         chips.push(`<span class="chip bchip ${b.kind}" data-tip="${esc(tip)}">${PodFeed.KIND_ICON[b.kind]} ` +
-          `${esc(nameFor(f, unit))} — ${esc(b.label)}: <b>${esc(buffChipVal(b.key, v))}</b></span>`);
+          `${esc(nameFor(f, unit))} — ${esc(b.label)}: <b>${esc(buffVal(b.key, v, b.kind))}</b></span>`);
       }
       if (chips.length) parts.push(`<h3>Buffs at Fight End</h3><div class="rolechips">${chips.join('')}</div>`);
     }

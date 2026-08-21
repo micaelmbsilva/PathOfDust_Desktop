@@ -1368,19 +1368,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // generically via /api/me) + my own in-fight buffs from the replay's
   // buffSnapshot events. Ticks while open.
   let buffsTimer = null, lastMe = null;
-  // Values arrive as raw numbers. Stack counters read best as plain integers;
-  // the multiplier-style ones are fractions where 0.25 means +25%.
-  const buffVal = (k, v, kind) => {
-    const n = +v;
-    if (!isFinite(n)) return String(v);
-    // An unrecognised key gets its number shown as-is. Guessing that a small
-    // value means a percentage is how "5" became "500%".
-    if (kind === 'unknown') return fmtN(n);
-    if (/stacks|count|charges|uses/.test(k)) return String(Math.round(n));
-    if (k === 'marked') return 'active';
-    if (k === 'shield_hp') return fmtN(n);
-    return Math.abs(n) < 10 ? `${(n * 100).toFixed(0)}%` : fmtN(n);
-  };
+  const buffVal = PodFeed.buffVal; // shared with Fight History's card readout
   function renderBuffs() {
     const body = document.getElementById('buffsBody');
     const parts = [];
