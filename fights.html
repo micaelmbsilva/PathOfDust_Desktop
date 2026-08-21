@@ -44,6 +44,15 @@
   .rolechips .chip.muted { cursor: help; }
   .muted { color: #8a7fb0; }
   #err { color: #ff8080; }
+  /* Shield/buff readouts on an expanded card — same palette as the live
+     Buffs & Debuffs pane in index.html (colour carries good/bad, the icon
+     repeats it for anyone who can't rely on colour alone). */
+  .chip.bchip { cursor: help; }
+  .chip.bchip.buff { border-color: rgba(127,219,163,0.45); color: #b6f0cd; }
+  .chip.bchip.debuff { border-color: rgba(255,128,128,0.5); color: #ffb3b3; }
+  .chip.bchip.charge { border-color: rgba(130,170,255,0.45); color: #b9cdff; }
+  .chip.bchip.mixed { border-color: rgba(255,212,121,0.45); color: #ffe3a8; }
+  .chip.bchip.unknown { border-color: rgba(160,140,255,0.3); }
 </style>
 </head>
 <body>
@@ -58,6 +67,7 @@
   <div id="list"><p class="muted">Loading… the game rebuilds this page from every logged fight, so it takes a few seconds.</p></div>
 
 <script src="/feed.js"></script>
+<script src="/tooltip.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -155,6 +165,108 @@
   const getRole = () => localStorage.getItem('fhRole') || 'all';
   const valOf = (p, key, secs) => key === 'dps' ? (p.damageDealt || 0) / secs : (p[key] || 0);
 
+  // ---- shield/buffSnapshot readout on an expanded card (2026-08-21) ----
+  // The live feed stopped carrying buffSnapshot/shield on 2026-08-20 (see
+  // index.html's Buffs & Debuffs pane), but the game's per-fight bundle still
+  // has them at participant tier. bundleSeq on a fight row is the key into it
+  // (GET /fights/:seq/members/buffs). Fetched lazily, once per bundleSeq, only
+  // when a card is actually opened — never prefetched for the whole list.
+  const wantsBuffs = (f) => f && Number.isInteger(f.bundleSeq);
+  // bundleSeq -> Promise<parsed|null> while in flight, then the settled
+  // parsed|null value. Module-scope so it survives re-renders (sort/filter/
+  // follow) and a second open of the same fight never refetches.
+  const buffsCache = new Map();
+
+  const buffVal = PodFeed.buffVal; // shared with index.html's Buffs & Debuffs pane
+  // A bundle names units by login; the enemies it also snapshots have no login
+  // at all, only the synthetic `__enemy_N__` the replay uses (same test as
+  // index.html's boss/enemy split), which is not a name to show a player.
+  const nameFor = (f, unitId) => {
+    const p = (f.players || []).find(pl => (pl.id || '').toLowerCase() === String(unitId).toLowerCase());
+    if (p) return p.displayName;
+    return /^__enemy/.test(String(unitId)) ? 'Enemy' : unitId;
+  };
+
+  // Defensive by hand rather than pulling in replay-bundle-validator.mjs for
+  // two event kinds: the member is participant-tier data straight off the
+  // wire, not something this app controls the shape of, so anything that
+  // doesn't look right is dropped, never thrown — same "readers must not
+  // throw" rule the validator itself enforces.
+  function parseBuffsMember(events) {
+    if (!Array.isArray(events) || !events.length) return null;
+    const shields = new Map(); // "healer|target" -> total amount
+    const snaps = new Map();   // unit -> latest buffs array (events arrive seq-ordered)
+    for (const e of events) {
+      if (!e || typeof e !== 'object') continue;
+      if (e.kind === 'shield' && typeof e.healer === 'string' && typeof e.target === 'string'
+          && Number.isFinite(e.amount) && e.amount > 0) {
+        const key = e.healer + '|' + e.target;
+        shields.set(key, (shields.get(key) || 0) + e.amount);
+      } else if (e.kind === 'buffSnapshot' && typeof e.unit === 'string' && Array.isArray(e.buffs)) {
+        snaps.set(e.unit, e.buffs.filter(b => Array.isArray(b) && b.length === 2
+          && typeof b[0] === 'string' && Number.isFinite(+b[1])));
+      }
+    }
+    if (!shields.size && !snaps.size) return null;
+    return { shields, snaps };
+  }
+
+  function renderBuffsSection(parsed, f) {
+    if (!parsed) return '';
+    const parts = [];
+    if (parsed.snaps.size) {
+      const chips = [];
+      for (const [unit, buffs] of parsed.snaps) for (const [k, v] of buffs) {
+        const b = PodFeed.buff(k);
+        const tip = [b.desc, `${nameFor(f, unit)} — ${b.key} = ${v}`].filter(Boolean).join('\n\n');
+        chips.push(`<span class="chip bchip ${b.kind}" data-tip="${esc(tip)}">${PodFeed.KIND_ICON[b.kind]} ` +
+          `${esc(nameFor(f, unit))} — ${esc(b.label)}: <b>${esc(buffVal(b.key, v, b.kind))}</b></span>`);
+      }
+      if (chips.length) parts.push(`<h3>Buffs at Fight End</h3><div class="rolechips">${chips.join('')}</div>`);
+    }
+    if (parsed.shields.size) {
+      const rows = [...parsed.shields].sort((a, b) => b[1] - a[1]).map(([key, amt]) => {
+        const [healer, target] = key.split('|');
+        const who = healer === target ? `${nameFor(f, healer)} (self)` : `${nameFor(f, healer)} → ${nameFor(f, target)}`;
+        return `<span class="chip bchip buff" data-tip="Total absorb cast this fight.">🟢 ${esc(who)}: <b>${esc(fmtN(amt))}</b></span>`;
+      });
+      parts.push(`<h3>Shields Cast</h3><div class="rolechips">${rows.join('')}</div>`);
+    }
+    return parts.join('');
+  }
+
+  async function fetchAndParseBuffs(seq) {
+    try {
+      const r = await fetch(`/api/fights/${seq}/members/buffs`, { cache: 'no-store' });
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (!d || d.ok !== true) return null; // missing bundle, 404, non-participant denial
+      return parseBuffsMember(d.events);
+    } catch { return null; } // network hiccup — degrade quietly, no retry storm
+  }
+  async function loadBuffsFor(seq) {
+    if (!buffsCache.has(seq)) buffsCache.set(seq, fetchAndParseBuffs(seq).then((parsed) => {
+      buffsCache.set(seq, parsed); // settle the cache to the plain value so a later open resolves instantly
+      return parsed;
+    }));
+    return buffsCache.get(seq);
+  }
+  // One listener per card, bound after every render (cards are recreated each
+  // time). Fires on both open and close; only open triggers a fetch. `d` stays
+  // the correct target to paint into even if a later re-render replaces
+  // #list's contents while this fetch is still in flight — the paint just
+  // lands on a detached node and is harmlessly invisible.
+  function bindBuffToggle(d, f) {
+    if (!wantsBuffs(f)) return;
+    d.addEventListener('toggle', () => {
+      if (!d.open) return;
+      loadBuffsFor(f.bundleSeq).then((parsed) => {
+        const box = d.querySelector('.buffbox');
+        if (box) box.innerHTML = renderBuffsSection(parsed, f);
+      });
+    });
+  }
+
   function filterBar() {
     const role = getRole();
     const chip = (v, l) => `<span class="chip pf${role === v ? ' on' : ''}" data-role="${v}">${l}</span>`;
@@ -230,6 +342,7 @@
         <h3>Loot</h3>${list((f.loot || []).map(l =>
           `${l.displayName} — ${l.itemName} T${l.tier} (${l.slot}${l.outcome ? ', ' + outcomeText(l.outcome) : ''})`), 'None.')}
         <h3>Broken Gear</h3>${list((f.broken || []).map(b => `${b.displayName} — ${b.itemName}`), 'None.')}
+        ${wantsBuffs(f) ? '<div class="buffbox"></div>' : ''}
       </details>`;
     }).join('');
     // Reapply expansion by fight id. On a new-fight follow, open only the newest
@@ -238,6 +351,7 @@
     const cards = [...$('list').querySelectorAll('details.fight[data-fid]')];
     const freshFollow = pendingFreshFollow; pendingFreshFollow = false;
     cards.forEach((d, n) => {
+      bindBuffToggle(d, fights[n]); // before .open, so a restored-open card's toggle fires the fetch
       d.open = freshFollow ? n === 0
         : wasOpen.size ? wasOpen.has(d.dataset.fid)
         : n === 0;
