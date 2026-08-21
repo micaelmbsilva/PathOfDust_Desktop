@@ -768,6 +768,27 @@ async function fights() {
   const { text } = await getAuthed('/fights');
   return { ...fightsOf(text), source: 'scrape' };
 }
+// GET /fights/:seq/members/buffs on the game site returns the bundle's
+// participant-tier "buffs" member (shield + buffSnapshot events) as a bare
+// JSON array - or a 404 for every one of "no such fight", "fight has no
+// bundle" and "caller isn't a participant", indistinguishably by design (see
+// replay_bundle_tiers_http.rs: a 403 would itself confirm the member exists,
+// which is exactly what non-participant tiers must not learn). This bridge
+// forwards that shape as-is rather than inventing one: {ok:false} covers
+// every degrade case uniformly, {ok:true, events} is the untouched member.
+async function fightBuffs(seq) {
+  try {
+    const { status, text } = await getAuthed(`/fights/${seq}/members/buffs`);
+    if (status < 400) {
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) return { ok: true, events: data };
+    }
+  } catch (e) {
+    if (e.expired) throw e; // dead session — let the 401 path handle it
+    // anything else (network hiccup, malformed JSON): degrade to {ok:false}
+  }
+  return { ok: false };
+}
 export function fightsOf(text) { // exported for scrape smoke-tests
   if (!/<h1>Fight History<\/h1>/.test(text)) return { gated: true, fights: [] };
   const list = [];
@@ -1070,6 +1091,10 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/fights') {
       return json(res, await fights());
+    }
+    if (/^\/api\/fights\/\d+\/members\/buffs$/.test(url.pathname)) {
+      const seq = url.pathname.split('/')[3];
+      return json(res, await fightBuffs(seq));
     }
     if (url.pathname === '/api/netstats') {
       // How much this bridge has pulled off the game site since it started.
