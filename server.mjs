@@ -1214,11 +1214,32 @@ const srv = createServer(async (req, res) => {
 });
 // Resolves once the bridge is accepting connections — the shell awaits this
 // instead of polling the port.
-export const ready = new Promise((resolve, reject) => {
+const listening = new Promise((resolve, reject) => {
   srv.once('error', reject);
   // loopback only — the bridge holds the user's session and (new) fs side effects
   srv.listen(PORT, '127.0.0.1', () => { console.log(`bridge on http://localhost:${PORT}`); resolve(); });
 });
+// Rescue for shells older than 4.5.0. Their main.cjs logs in by loading
+// `${SITE}/login` (the Twitch OAuth route) and waiting for the adv_session
+// cookie; since the game's Linux cutover (2026-09-02) that route answers a
+// 0-byte 404, which renders as a blank window, and the old shell only starts
+// electron-updater AFTER the login resolves — so it can neither log in nor
+// update itself out. This module runs inside the shell's main process and DOES
+// hot-update, so it can fix the navigation the shell is about to make:
+// redirect the dead route to the account login at the session level. Harmless
+// on a 4.5.0+ shell (nothing loads /login any more) and outside Electron
+// (tests import this file under plain Node). Gated into `ready` so the hook
+// is in place before the shell's first loadURL.
+async function installLoginRedirect() {
+  if (!process.versions?.electron) return;
+  try {
+    const { session } = await import('electron');
+    session.defaultSession.webRequest.onBeforeRequest(
+      { urls: [`${SITE}/login`, `${SITE}/login?*`] },
+      (details, cb) => cb(details.resourceType === 'mainFrame' ? { redirectURL: `${SITE}/account/login` } : {}));
+  } catch (e) { console.warn('login redirect hook not installed:', e.message); }
+}
+export const ready = listening.then(installLoginRedirect);
 
 const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 // 2MB byte cap — fight reports are the biggest client, and they're compact by
