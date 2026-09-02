@@ -6,7 +6,7 @@ character sheet, and the full bag / crafting / passives dashboard into one app �
 your character and watch the action without juggling browser tabs.
 
 > A community companion app, built and released **with Lokati_Gaming's approval** — but not the
-> official app, and not authored by Lokati_Gaming. It uses your own Twitch login to show and
+> official app, and not authored by Lokati_Gaming. It uses your own game account login to show and
 > manage *your* character, exactly as the website does.
 
 ---
@@ -23,10 +23,10 @@ your character and watch the action without juggling browser tabs.
   Sort and group your bag (and it remembers how you like it).
 - **Roll tiers** — every modifier shows a **T1–T8** badge and its roll %, gold for top rolls.
 - **Passives** — the full skill tree, laid out like the site, allocate/respec in place.
-- **Twitch chat** — the channel chat in a movable panel, **already logged in**, with your **7TV**
-  emotes if you have the extension installed.
+- **Twitch chat** — the channel chat in a movable panel (log in to Twitch there to send
+  messages), with your **7TV** emotes if you have the extension installed.
 - **Notifications** — a toast when a new item drops (with quick Disenchant / Lock / Bag), and a
-  top-of-the-hour reminder when the **Reforge Gear** channel reward is available.
+  top-of-the-hour reminder when the site's once-per-hour **Reforge Gear** (1k dust) is available.
 - **Share gear** — one click copies a clean, chat-ready line for any item.
 
 ---
@@ -90,7 +90,7 @@ The app **updates itself** — no reinstall, ever.
 ## Requirements
 
 - Windows 10/11 (64-bit)
-- A Twitch account with a Path of Dust character
+- A Path of Dust game account with a character
 - *(optional)* Chrome with the 7TV extension, for custom chat emotes
 
 ---
@@ -106,7 +106,7 @@ npm start                             # launches the Electron shell
 npm test                              # solver, scrape, codec, party-HP and craft-picker suites
 ```
 
-First `npm start` opens the Twitch login, exactly as the installed app does. Everything after that
+First `npm start` opens the game's account login, exactly as the installed app does. Everything after that
 runs against your own character.
 
 ### How it fits together

@@ -69,12 +69,14 @@ Item IDs and passive `node_key`s are parsed out of the authed pages by
 therefore no `node_key` — only names and "2 / 4" ranks, which is why the build
 dossier maps names back through `solver/passive-tree.json`.
 
-## NOT available this way
-Stream-wide actions (`!nextencounter`, `!giftdust`, channel-point redemptions)
-run through Twitch, not the site — they need a Twitch token, not `adv_session`.
+## Gone from the game
+The Twitch chat commands (`!nextencounter`, `!giftdust`, ...) and the channel-point
+redemptions were deleted from the game on 2026-09-02 along with its Twitch bot
+seam — there is nothing to route around any more. The operator's next-encounter
+control lives on the site (`/admin/ops/next-encounter`, operator session only).
 
 ## Files
-- `main.cjs` — the Electron shell: windows, the Twitch login, auto-update.
+- `main.cjs` — the Electron shell: windows, the account login, auto-update.
 - `server.mjs` — bridge on `127.0.0.1:8787`: serves the pages and
   `/api/me|inventory|passives|roster|fights|character|action`, and does all the
   scraping.

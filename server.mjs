@@ -29,7 +29,7 @@ async function ping() {
   const snap = { platform: process.platform };
   try {
     const m = await me();
-    snap.name = m.name; // character/Twitch name (operator opted in to collecting it)
+    snap.name = m.name; // character name (operator opted in to collecting it)
     const lv = (m.nav || '').match(/Lv\s*(\d+)\s+([A-Za-z]+)/);
     if (lv) { snap.level = +lv[1]; snap.archetype = lv[2]; }
     snap.autoRepair = m.autoRepair;
@@ -96,7 +96,8 @@ async function me() {
   const autoRepairTip = strip((text.match(/name="auto_repair"[^>]*>([^<]*)</) || [])[1] || '')
     || 'Auto-repair gear with dust after every boss fight';
 
-  // Reforge Gear card: once/hour, shared between 1k-dust and channel-points.
+  // Reforge Gear card: once/hour, 1k dust (the channel-points redemption that
+  // shared the hour is gone since 2026-09-02; the site's blurb still mentions it).
   // Parse availability + reset + (when available) the dust form's endpoint.
   let reforge = { available: false, resetMs: 0, action: null, label: null, canDust: false };
   const ci = text.indexOf('Reforge Gear');
@@ -129,11 +130,6 @@ async function me() {
     options: [...archRegion.matchAll(/<option value="([^"]+)"([^>]*)>([^<]*)</g)]
       .map(m => ({ value: m[1], selected: /selected/.test(m[2]), label: strip(m[3]) })),
   };
-  // Channel-point buff/debuff activity table — only rendered while something is
-  // active, exact markup unseen, so parse it generically: every row's cell texts.
-  const bt = (text.match(/<table class="buff-activity-table"[\s\S]*?<\/table>/) || [])[0] || '';
-  const buffTable = [...bt.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
-    .map(m => [...m[1].matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/g)].map(c => strip(c[1])));
   // Character Model picker: a radio per sprite, plus a Custom Sprites section
   // that only exists when someone has dropped PNGs in for this login. `free`
   // covers both the global free-for-all flag and banked free changes — the site
@@ -157,7 +153,7 @@ async function me() {
   // Same derived stat the character sheet carries (see elementalOf) — the
   // overlay's own stats panel reads /api/me, not /api/character, so it needs
   // its own copy or the card only ever shows up on other people's sheets.
-  return { name, nav, stats, elemental: elementalOf(stats), autoRepair, autoRepairTip, repairAll, reforge, xp, wings, buyWings, model, canJoin, countdowns, archetype, buffTable };
+  return { name, nav, stats, elemental: elementalOf(stats), autoRepair, autoRepairTip, repairAll, reforge, xp, wings, buyWings, model, canJoin, countdowns, archetype };
 }
 const strip = (s) => s.replace(/<[^>]*>/g, '')
   .replace(/&middot;/g, '·').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
@@ -1105,7 +1101,7 @@ const srv = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/character' || url.pathname === '/api/character-passives') {
       // Path segment goes straight into a URL we fetch with the session cookie —
-      // keep it to the shape Twitch logins actually take.
+      // keep it to the shape character logins take.
       const login = url.searchParams.get('login') || '';
       if (!/^[a-z0-9_]{1,40}$/i.test(login)) { res.writeHead(400); return res.end('bad login'); }
       return json(res, url.pathname === '/api/character'

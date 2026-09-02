@@ -159,7 +159,7 @@
     border-radius: 8px; padding: 5px 12px; font-size: 0.8rem; }
   #dismissAll:hover { background: rgba(200,70,70,0.36); }
 
-  /* Twitch chat — .apanel shell; the embed includes the channel-points redeem button */
+  /* Twitch chat — .apanel shell (Twitch's own popout; the game no longer reads it) */
   #chatpanel { top: 60px; right: 16px; z-index: 36; width: 360px; height: 560px;
     min-width: 280px; min-height: 260px; }
   .apanel .cwrap { flex: 1; min-height: 0; }
@@ -902,7 +902,6 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       const jr = document.getElementById('joinRow');
       if (jr) jr.onclick = async () => { await action('join', {}); loadStats(); };
       reconcileReforge(r.reforge);
-      lastMe = r; // buffTable etc. for the Buffs panel
       siteFails = 0; setDown(false);
       document.getElementById('overlay').classList.add('live'); // site reachable — reveal the overlay
     } catch {
@@ -1197,7 +1196,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     characters: { label: '🧍 Characters', title: "Browse the roster — anyone's gear, stats, and passive tree", act: () => toggleModal('characters'), isActive: panelOpen('characters') },
     chat: { label: '💬 Chat', act: () => toggleChat(), isActive: panelOpen('chat') },
     party: { label: '👥 Party', title: "Who's fighting right now — DPS/Heal/Tank, status", act: () => toggleModal('party'), isActive: panelOpen('party') },
-    buffs: { label: '✨ Buffs &amp; Debuffs', title: 'Active buffs/debuffs — channel-point events and your in-fight buffs', act: () => toggleModal('buffs'), isActive: panelOpen('buffs') },
+    buffs: { label: '✨ Buffs &amp; Debuffs', title: 'Active buffs/debuffs — your in-fight buffs', act: () => toggleModal('buffs'), isActive: panelOpen('buffs') },
     fight: { label: '🗡️ Live Fight', title: 'Your own blow-by-blow for the fight in progress', act: () => toggleModal('fight'), isActive: panelOpen('fight') },
     stream: { label: '📺 Stream', title: 'Watch the stream in a small panel', act: () => toggleStream(), isActive: panelOpen('stream') },
     highlight: { label: '✨ Highlight Me', title: 'Dim other players, highlight your character', act: () => toggleHighlight(), isActive: () => localStorage.getItem('highlight') === '1' },
@@ -1416,10 +1415,10 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   }
   renderToolbar();
 
-  // ---- Buffs & Debuffs: the site's channel-point activity table (scraped
-  // generically via /api/me) + my own in-fight buffs from the replay's
-  // buffSnapshot events. Ticks while open.
-  let buffsTimer = null, lastMe = null;
+  // ---- Buffs & Debuffs: my own in-fight buffs from the replay's buffSnapshot
+  // events. (The site's channel-point activity table used to be shown here too;
+  // channel points left the game with its Twitch bot seam on 2026-09-02.) Ticks while open.
+  let buffsTimer = null;
   const buffVal = PodFeed.buffVal; // shared with Fight History's card readout
   function renderBuffs() {
     const body = document.getElementById('buffsBody');
@@ -1496,25 +1495,14 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         parts.push('<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">Running total of shield you\'ve granted this fight — the only buff the log ties to a caster.</div>');
       }
     }
-    // All three sections above read buffSnapshot/shield events, which the game
-    // stopped broadcasting on 2026-08-20 (see thinningOf's note). They'd render
-    // as nothing at all otherwise, which reads as "no buffs active" — a lie.
-    // Gated on all three being empty so it disappears by itself if the feed ever
-    // carries them again, and on `fight` so it stays quiet before the first one.
+    // All three sections above read buffSnapshot/shield events. The game
+    // restored those to the live feed on 2026-08-22 (it had thinned them out
+    // two days earlier), so an empty fight is just a fight with no events yet
+    // — say that, rather than rendering nothing, which reads as "no buffs
+    // active". Gated on `fight` so it stays quiet before the first one.
     if (fight && !fight.mySnaps?.length && !fight.enemySnaps?.length && !fight.myShieldsOut?.length) {
       parts.push('<div class="fhead" style="margin-bottom:2px">🗡️ In-fight buffs</div>' +
-        '<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">The game no longer sends buff or shield events to the live feed, so what\'s on you, what\'s on your target, and the shields you cast can\'t be shown here any more. Fight History is unaffected — it reads the game\'s own records.</div>');
-    }
-    // Channel-point events, which are party-wide rather than about you.
-    const t = lastMe?.buffTable;
-    if (t && t.length > 1) {
-      const meCol = (rw) => (rw[0] || '').toLowerCase() === myName.toLowerCase();
-      parts.push('<div class="fhead">📢 Channel Events <span class="muted" style="font-weight:400;font-size:0.72rem">— everyone, from channel-point redeems</span></div>' +
-        `<table class="lb"><tr>${t[0].map(c => `<th style="text-align:left">${esc(c)}</th>`).join('')}</tr>` +
-        t.slice(1).map(rw => `<tr class="${meCol(rw) ? 'mme' : ''}">${rw.map((c, i) => {
-          const b = i === 1 ? PodFeed.buff(String(c).toLowerCase().replace(/\s+/g, '_')) : null;
-          return `<td style="text-align:left">${b && b.kind !== 'unknown' ? PodFeed.KIND_ICON[b.kind] + ' ' : ''}${esc(c)}</td>`;
-        }).join('')}</tr>`).join('') + '</table>');
+        '<div class="muted" style="font-size:0.7rem;margin:2px 0 6px">No buff or shield events for this fight yet. Fight History has the full record once the fight resolves.</div>');
     }
     body.innerHTML = parts.filter(Boolean).join('') || '<p class="muted">Nothing active right now — this fills in during a fight.</p>';
   }
@@ -2866,9 +2854,10 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     }, 50);
   });
 
-  // ---- Reforge Gear reminder: once per hour, shared between a 1k-dust option
-  // and the 1k channel-points redemption. Driven by the live card state from
-  // /api/me (see reconcileReforge) — shown while available, one at a time.
+  // ---- Reforge Gear reminder: the site's once-per-hour 1k-dust reforge (the
+  // channel-points redemption it used to share the hour with is gone — the
+  // game dropped its Twitch bot seam on 2026-09-02). Driven by the live card
+  // state from /api/me (see reconcileReforge) — shown while available, one at a time.
   let reforgeDismissed = false; // dismissed for this availability window — don't re-toast until used/cooldown
   function showReforge(rf) {
     document.querySelectorAll('.toast.reforge').forEach(t => t.remove());
@@ -2877,14 +2866,12 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     const dustBtn = (rf.canDust && rf.action) ? `<button data-act="dust">${rf.label || 'Reforge (1k Dust)'}</button>` : '';
     el.innerHTML = `
       <div class="th"><span class="tn">⚒️ Reforge Gear Ready</span><span class="ts">Once per Hour</span></div>
-      <div class="tmods"><span>Upgrade a random equipped item 2–4 tiers — 1k dust or 1k channel points.</span></div>
+      <div class="tmods"><span>Upgrade a random equipped item 2–4 tiers — 1k dust.</span></div>
       <div class="tacts">
         ${dustBtn}
-        <button data-act="chat">Redeem (Points)</button>
         <button data-act="x">Dismiss</button>
       </div>`;
     el.querySelector('[data-act="x"]').onclick = () => { reforgeDismissed = true; el.remove(); updateDismissAll(); };
-    el.querySelector('[data-act="chat"]').onclick = () => toggleChat(true);
     const db = el.querySelector('[data-act="dust"]');
     if (db) db.onclick = async () => {
       db.disabled = true;
