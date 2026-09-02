@@ -4,14 +4,15 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf, craftFormsOf, golemsOf } from './server.mjs';
-import { netKey, firstBody, redirectNote } from './actions.mjs';
+import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf, craftFormsOf, craftOptionsOf, craftActionsOf, golemsOf } from './server.mjs';
+import { netKey, firstBody, redirectNote, loggedOutPage, getAuthed, probeSession, setCookie } from './actions.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 
 // Owner dossier: exact normalized login only. UI hiding is convenience; this
 // pure predicate backs the bridge route and guards the template filename too.
 assert.equal(ownerBuildsAllowed('lokati_gaming'), true);
 assert.equal(ownerBuildsAllowed(' Lokati_Gaming '), true);
+assert.equal(ownerBuildsAllowed('lokati'), true, "the operator's login since the Linux cutover (OPERATOR_LOGIN)");
 assert.equal(ownerBuildsAllowed('kibukah'), false);
 assert.equal(ownerBuildsAllowed(''), false);
 
@@ -358,6 +359,66 @@ assert.deepEqual(redirectNote('/passives?passive_failed=You%20have%20no%20points
 assert.deepEqual(redirectNote('/passives?memory_note=You%27re%20now%20playing%20Druid.'),
   { note: "You're now playing Druid." });
 assert.equal(redirectNote('/passives'), null);
+// The crafting card's two shapes (Aug/Sep '26): a refusal and Divinity's summary.
+assert.deepEqual(redirectNote('/inventory?craft_failed=That%20item%20is%20marked%20Keep.'),
+  { reason: 'That item is marked Keep.' });
+assert.deepEqual(redirectNote('/inventory?divinity_run=1&change=3%20Krangled%20%C2%B7%201%20unchanged%20%E2%80%94%209%20craft%20steps%20in%20total%2C%20no%20dust%20spent.'),
+  { note: '3 Krangled · 1 unchanged — 9 craft steps in total, no dust spent.' });
+assert.equal(redirectNote('/inventory?crafted=1'), null, 'a plain success carries no note');
+
+// --- Expired session, both ways the site says so. /fights.json answers a real
+// 401; the HTML pages render the logged-out card (render_logged_out) with a
+// 200 and no redirect — both account links, no top-nav stats span. A logged-in
+// page always carries that span, so it can never match. The shell (base.html)
+// inlines ~40 KB of stylesheet first, and that stylesheet mentions
+// .top-nav-stats on every page — the live logged-out /inventory is 72 KB with
+// the card at byte 44k. The fixture keeps both traits so a "first 30 KB" or a
+// bare-token check can't creep back in.
+const shellHead = '<!doctype html><html><head><style>\n' +
+  '  /* the real stylesheet is ~40 KB; .top-nav-stats is styled on every page, logged in or not */\n' +
+  '  .top-nav-stats {\n    flex: 1;\n  }\n' + '  .pad { margin: 0; }\n'.repeat(2200) + '</style></head><body>';
+assert.ok(shellHead.length > 40000, 'fixture shell is realistically large');
+const loggedOut = shellHead + '<div class="card"><h1>Adventure Character Dashboard</h1><p>Log in to view and manage your adventure character.</p>' +
+  '<p><a class="btn" href="/account/login">Log in</a> <a class="btn" href="/account/register">Register</a></p>' +
+  '<p class="muted"><a href="/patch-notes">Patch Notes</a></p></div></body></html>';
+const loggedIn = shellHead + '<nav class="top-nav"><span class="top-nav-stats">Lv 12 Warrior · 💰 1.2K</span>' +
+  '<a href="/account/login">x</a><a href="/account/register">y</a></nav><div class="card"><h1>Someone</h1></div></body></html>';
+assert.equal(loggedOutPage(loggedOut), true);
+assert.equal(loggedOutPage(loggedIn), false, 'the rendered top-nav-stats span means a live session, whatever else the page mentions');
+// The real thing, saved from the live site on 2026-09-02 (72 KB, card at byte
+// 44k, stylesheet mentions .top-nav-stats): guards the two live traits above.
+assert.equal(loggedOutPage(readFileSync('fixtures/logged-out-inventory.html', 'utf8')), true, 'the live logged-out /inventory page reads as expired');
+assert.equal(loggedOutPage('<div class="card"><a href="/account/login">Log in</a></div>'), false, 'one link alone is not the card');
+assert.equal(loggedOutPage(''), false);
+{
+  const realFetch = globalThis.fetch;
+  const fakeFetch = (status, body, extra = {}) => async () => ({ status, redirected: false, text: async () => body, ...extra });
+  const expiredOf = async (fn) => { try { await fn(); return 'no throw'; } catch (e) { return e.expired ? 'expired' : 'other:' + e.message; } };
+  try {
+    setCookie(null);
+    assert.equal(await expiredOf(() => getAuthed('/')), 'expired', 'no cookie at all reads as expired, not a 500');
+    setCookie('adv_session=x');
+    globalThis.fetch = fakeFetch(401, '[]');
+    assert.equal(await expiredOf(() => getAuthed('/fights.json')), 'expired', 'a real 401 is definitive');
+    globalThis.fetch = fakeFetch(200, loggedOut);
+    assert.equal(await expiredOf(() => getAuthed('/inventory')), 'expired', 'the logged-out card, 200 and unredirected');
+    globalThis.fetch = fakeFetch(200, loggedIn);
+    assert.equal((await getAuthed('/')).text, loggedIn, 'a logged-in page passes through');
+    globalThis.fetch = fakeFetch(521, '<html>cloudflare</html>');
+    assert.equal(await expiredOf(() => getAuthed('/')), 'other:site down: 521', '5xx is downtime, never expiry');
+    // probeSession: only a 200 JSON array is "logged in".
+    globalThis.fetch = fakeFetch(200, '[{"id":1}]');
+    assert.equal(await probeSession(), true);
+    globalThis.fetch = fakeFetch(401, '[]');
+    assert.equal(await expiredOf(probeSession), 'expired');
+    globalThis.fetch = fakeFetch(404, 'nope');
+    assert.equal(await expiredOf(probeSession), 'other:site problem: 404', 'an older server without the route is a site problem, not a login');
+    globalThis.fetch = fakeFetch(200, '<html>edge error page</html>');
+    assert.equal(await expiredOf(probeSession), 'other:site problem: non-JSON');
+    globalThis.fetch = fakeFetch(200, '{"ok":true}');
+    assert.equal(await expiredOf(probeSession), 'other:site problem: unexpected body');
+  } finally { globalThis.fetch = realFetch; setCookie(null); }
+}
 assert.equal(redirectNote(null), null);
 
 // --- Two forms POST to /craft since Divine Dust (Aug '26), and the recipe row
@@ -385,6 +446,44 @@ assert.deepEqual({ ...cf.divineDustRecipe, tip: undefined },
   { action: 'divine dust craft', dustCost: 1000, sandCost: 10, output: 1, affordable: true, tip: undefined });
 assert.match(cf.divineDustRecipe.tip, /^Costs dust \+ sand/);
 assert.equal(craftFormsOf(inventoryPage(true)).divineDustRecipe.affordable, false, 'a disabled Craft button = cannot afford');
+// --- Divinity (Sep '26) sits inside the SAME /craft form as a whole-bag action:
+// data-confirm-msg overrides the item-named confirm (it ignores the pickers) and
+// the button arrives disabled when nothing is eligible. Shape mirrors
+// render_crafting_card's {divinity_row}. Keep/Krangled markers ride the option
+// labels (craft_item_option_html): " 🔒 Keep" vs " 🔒".
+const divinityForm = (disabled) => `<form method="post" action="/craft">
+    <select name="item_a"><optgroup label="Equipped"><option value="itm_e" data-tier="3">Cap (T3)</option></optgroup>
+      <optgroup label="Helm"><option value="itm_k" data-tier="7" selected>Hood (T7) 🔒 Keep</option>
+      <option value="itm_l" data-tier="9">Crown (T9) 🔒</option>
+      <option value="itm_u" data-tier="9">Circlet (T9) ✦</option></optgroup></select>
+    <select name="item_b"></select>
+    <div class="craft-actions"><button class="btn-sm" type="submit" name="action" value="transmute" data-base="10" data-dust="500" data-tip="Adds a mod.">Transmute (10d)</button></div>
+    <div class="craft-actions">
+      <span class="muted">Whole bag:</span>
+      <button class="btn-sm" type="submit" name="action" value="divinity" data-confirm="1" data-confirm-msg="Run Divinity over all 3 eligible items in your bag? This spends 1 Unique Shard, Krangles most of them permanently, and cannot be undone." data-tip="One shard, every eligible item."${disabled ? ' disabled' : ''}>Divinity (3 items, 1 Unique Shard)</button>
+      <span class="muted">1 skipped (🔒 Krangled or Keep)</span>
+    </div></form>`;
+{
+  const form = craftFormsOf(divinityForm(false)).craftForm;
+  const acts = craftActionsOf(form);
+  const dv = acts.find(a => a.action === 'divinity');
+  assert.ok(dv, 'Divinity is scraped out of the shared craft form');
+  assert.equal(dv.label, 'Divinity (3 items, 1 Unique Shard)');
+  assert.equal(dv.dataLabel, 'Divinity');
+  assert.equal(dv.confirm, true);
+  assert.equal(dv.confirmMsg, 'Run Divinity over all 3 eligible items in your bag? This spends 1 Unique Shard, Krangles most of them permanently, and cannot be undone.');
+  assert.equal(dv.disabled, false);
+  assert.equal(dv.base, null, 'no per-item cost: shard-priced');
+  assert.equal(craftActionsOf(craftFormsOf(divinityForm(true)).craftForm).find(a => a.action === 'divinity').disabled, true, 'nothing eligible = disabled');
+  const tr = acts.find(a => a.action === 'transmute');
+  assert.equal(tr.confirmMsg, null, 'ordinary buttons carry no override');
+  assert.equal(tr.disabled, false);
+  const opts = craftOptionsOf(form);
+  assert.deepEqual(opts.map(o => [o.id, o.group, o.kept, o.locked]),
+    [['itm_e', 'Equipped', false, false], ['itm_k', 'Helm', true, false], ['itm_l', 'Helm', false, true], ['itm_u', 'Helm', false, false]],
+    'Keep and Krangled are distinct, and a unique marker is neither');
+  assert.equal(opts[1].selected, true);
+}
 // A pre-Divine-Dust page (one craft form, no recipe) must still parse.
 const old = craftFormsOf('<form method="post" action="/craft"><select name="item_a"></select></form>');
 assert.equal(old.divineDustRecipe, null);

@@ -7,14 +7,24 @@ here is an official API; it's the site's own endpoints, driven with your session
 Single cookie `adv_session`, **no CSRF token** — which is why every action below
 is a plain form-POST.
 
-The Electron shell owns the login. On first run it opens the site's Twitch login
-in a real app window and waits for `adv_session` to appear in its own session
-(`main.cjs`), then hands the cookie to the bridge with `actions.setCookie()`.
-There is no browser, no CDP attach and no credential file at runtime — the
-cookie lives in the Electron session and nowhere else.
+The Electron shell owns the login. On first run it opens the site's account
+login (`/account/login`, username + password — the Twitch OAuth route is gone
+since 2026-09-02) in a real app window and waits for `adv_session` to appear in
+its own session (`main.cjs`), then hands the cookie to the bridge with
+`actions.setCookie()`. There is no browser, no CDP attach and no credential file
+at runtime — the cookie lives in the Electron session and nowhere else. The site
+login does not log Twitch in; the chat panel is a separate embed.
 
-When it expires the shell notices the login redirect (`loginRedirect()` in
-`actions.mjs`) and shows the login window again. Nothing to re-run by hand.
+Expiry: `/fights.json` answers a real 401 to a dead session (the startup
+`probeSession()` uses it); the HTML pages instead serve the logged-out card
+with a 200, which `loggedOutPage()` in `actions.mjs` recognises. Either way the
+bridge answers `401 {expired:true}` and the pages offer **Log in again**, which
+POSTs `/api/relogin` — the shell opens the account login in a child window and
+swaps the cookie in place. No restart.
+
+Game-side caveat: registration refuses a name that already belongs to a
+character or session, and there is no claim flow — a Twitch-era character with
+no local account cannot log in at all once its old cookie expires.
 
 ## Read (open, no auth)
 - `wss://adventure.lokati.net/ws` — pushes `state` (stage + full roster) and

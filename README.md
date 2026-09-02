@@ -46,9 +46,17 @@ A Start Menu shortcut is created for you.
 
 ### First launch — log in
 
-On the very first run the app opens the Path of Dust login. Click **Login with Twitch** and sign
-in as you normally would. That single login powers everything — your character data **and** the
-chat. It’s saved, so you won’t be asked again.
+On the very first run the app opens the Path of Dust account login. Sign in with your game
+username and password (or **Register** from that page if you don't have an account yet). The
+session is saved, so you won't be asked again; when it expires, the app's pages offer a
+**Log in again** button — no restart needed.
+
+Twitch is separate: the site login no longer goes through Twitch, so it does not log the chat
+panel in. Log in to Twitch in the chat panel itself if you want to send messages.
+
+Note for long-time players: if your character was created through the old Twitch login and you
+never registered a game account, the game currently refuses to register that same name — that is
+a game-side limitation, not something the app can work around. Ask the game owner.
 
 ### Optional — chat emotes
 

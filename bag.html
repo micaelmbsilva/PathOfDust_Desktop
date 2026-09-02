@@ -192,6 +192,22 @@
 
 <script>
   const $ = (id) => document.getElementById(id);
+
+  // Expired session: the shell can re-open the login without a restart
+  // (bridge POST /api/relogin). Cancelled = the user closed the window; leave
+  // the message up. On success rerun whatever the caller was doing.
+  function wireRelogin(after) {
+    const b = $('err').querySelector('button.relogin'); if (!b) return;
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Logging in…';
+      let r; try { r = await fetch('/api/relogin', { method: 'POST' }).then(x => x.json()); } catch { r = { ok: false, error: 'bridge unreachable' }; }
+      if (r.ok) { $('err').textContent = ''; after(); return; }
+      b.disabled = false; b.textContent = 'Log in again';
+      if (r.error === 'unsupported') $('err').textContent = 'Session expired — restart the app to log in again.';
+      else if (!r.cancelled) $('err').textContent = 'Login failed: ' + (r.error || 'unknown error');
+    };
+  }
+  const sessionExpired = (after) => { $('err').innerHTML = 'Session expired. <button class="relogin" type="button">Log in again</button>'; wireRelogin(after); };
   async function api(endpoint, fields) {
     // currency-capable actions (craft/veil/polish/reforge/disenchant) are stamped
     // so the main window's battle toast can flag deltas mixed with crafting
@@ -202,7 +218,7 @@
       r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint, fields }) }).then(r => r.json());
     } catch { r = { ok: false, status: 'network' }; } // bridge down / non-JSON 500 — surface, don't die silently
-    if (r.expired) { r.ok = false; $('err').textContent = 'Session expired — restart the app to log in again.'; }
+    if (r.expired) { r.ok = false; sessionExpired(load); }
     else if (!r.ok) $('err').textContent = `${endpoint} -> ${r.status}`;
     return r;
   }
@@ -358,7 +374,12 @@
     document.body.style.cursor = 'progress';
     try {
     const r = await api(endpoint, fields);
-    if (!r.ok) { toast(`${label || endpoint} failed (${r.status})`, 'cost'); return r; }
+    // The site explains a refusal itself (craft_failed → r.reason): a Keep-ticked
+    // item, not enough dust, wrong item for the craft. Prefer that to a bare status.
+    if (!r.ok) { toast(r.reason ? `${label || endpoint}: ${r.reason}` : `${label || endpoint} failed (${r.status})`, 'cost'); return r; }
+    // A success the site summarises itself (Divinity's divinity_run → r.note)
+    // touches many items at once; its own summary beats the per-item diff.
+    if (r.note) { toast(`${label ? label + ': ' : ''}${r.note}`); load(); return r; }
     if (before) {
       let parts = [];
       for (let i = 0; i < 5; i++) { // read-after-write lag — ~3.0s before calling it rejected
@@ -413,7 +434,7 @@
       fetch('/api/me').then(r => r.json()).catch(() => ({})),
     ]); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
-    if (inv.expired || meData.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
+    if (inv.expired || meData.expired) { sessionExpired(load); return; }
 
     meName = meData.name || '';
     if (meData.name) document.title = `${GAME_NAME} — Bag — ${meData.name}`;
@@ -847,8 +868,19 @@
     { name: 'Modify', items: ['transmute', 'augment', 'regal', 'exalt'] },
     { name: 'Risky', items: ['scour', 'annulment', 'krangle', 'chancing'] },
     { name: 'Improve', items: ['polishing', 'reforge', 'recombine', 'divine dust'] },
+    { name: 'Whole bag', items: ['divinity'] }, // Divinity ignores the pickers — it runs over the whole bag
   ];
-  const loadSections = () => { try { const s = JSON.parse(localStorage.getItem(SEC)); return Array.isArray(s) && s.length ? s : null; } catch { return null; } };
+  const loadSections = () => {
+    try {
+      const s = JSON.parse(localStorage.getItem(SEC));
+      if (!Array.isArray(s) || !s.length) return null;
+      // A layout saved before Divinity existed (Sep '26) would otherwise file
+      // it wherever "new" ids go — the last section. Give it its own, once;
+      // everything the user arranged stays as it was.
+      if (!s.some(x => (x.items || []).includes('divinity'))) s.push({ name: 'Whole bag', items: ['divinity'] });
+      return s;
+    } catch { return null; }
+  };
   const saveSections = (s) => localStorage.setItem(SEC, JSON.stringify(s));
   let sections = loadSections() || JSON.parse(JSON.stringify(DEFAULT_SECTIONS));
   let dragging = null, didDragCraft = false; // didDragCraft swallows the click a drag leaves behind
@@ -879,7 +911,7 @@
           title="Rename this section"><button class="csec-del" data-del="${i}" title="Remove section (its buttons move to the one before)">✕</button></div>
         <div class="acts csec-body" data-sec="${i}">
           ${s.items.filter(id => byAction[id]).map(id => { const a = byAction[id];
-            return `<button data-craft="${esc(a.action)}" draggable="true"${tip(a.tip)}>${esc(a.label)}</button>`; }).join('')
+            return `<button data-craft="${esc(a.action)}" draggable="true"${tip(a.tip)}${a.disabled ? ' disabled' : ''}>${esc(a.label)}</button>`; }).join('')
           || '<span class="muted" style="font-size:0.78rem">Drag a craft here</span>'}
         </div>
       </div>`).join('') +
@@ -976,12 +1008,25 @@
     const tierA = A?.tier || 0, qualA = A?.quality || 0, perfA = !!A?.perfect;
     const pool = (A?.affixes || 0) + (B?.affixes || 0);
     const veiled = $('veil')?.checked;
+    // A Keep-ticked item refuses every craft since 2026-08-24 (the game's
+    // mutation_block), and a Krangled one always did — the site says so in the
+    // option label (" 🔒 Keep" / " 🔒"). Say it here before the click instead
+    // of after: which picker counts depends on the craft. Recombine consumes
+    // both A and B, so both gate it; Divinity ignores the pickers entirely and
+    // skips protected items itself, so nothing gates it; the rest use A.
+    // Repair is not a craft and is never blocked.
+    const lockReason = (o) => !o ? '' : o.kept ? 'marked 🔒 Keep — untick Keep on its card to craft it'
+      : o.locked ? 'Krangled — permanently locked, no craft can touch it' : '';
+    const blockA = lockReason(A), blockB = lockReason(B);
     // ×N label suffix only — per-cast cost rises as quality/tier climb mid-batch,
     // so a multiplied total would be a lie; affordability stays per-cast.
     const xN = batchTimes() > 1 ? ` ×${batchTimes()}` : '';
     for (const a of lastCraft.actions || []) {
       const btn = document.querySelector(`[data-craft="${a.action}"]`);
       if (!btn) continue;
+      const block = a.action === 'divinity' ? '' : (blockA || (a.recombine ? blockB : ''));
+      btn.dataset.tip = block || a.tip || ''; // the site's hover text, or why it's blocked
+      if (block) { btn.textContent = `${a.dataLabel || a.label} 🔒`; btn.disabled = true; continue; }
       if (a.polish) { const c = perfA ? 12 : Math.ceil(qualA / 10); btn.textContent = `Polishing (${c}s${xN})`; btn.disabled = (a.sand ?? 0) < c || A?.polishRoom === 0; continue; }
       if (a.reforge) { const c = 30 * tierA; btn.textContent = `Reforge (${c}d${xN})`; btn.disabled = (a.dust ?? 0) < c; continue; }
       // 2 ✨ per tier, never batched (the ×N above is the recipe's own thing).
@@ -989,7 +1034,7 @@
       if (a.divineDustApply) { const c = 2 * tierA;
         btn.textContent = `${A?.sacred ? 'Reroll Sacred Affix' : 'Apply Divine Dust'} (${c} ✨)`;
         btn.disabled = (a.divineDust ?? 0) < c; continue; }
-      if (a.base == null) { btn.textContent = a.label; btn.disabled = false; continue; } // Regal/Krangle: token label
+      if (a.base == null) { btn.textContent = a.label; btn.disabled = !!a.disabled; continue; } // Regal/Krangle/Divinity: token label, site decides disabled
       let cost = a.recombine ? a.base : a.base + 3 * tierA;
       if (veiled && a.veilExtra != null) { cost += a.veilExtra; if (a.recombine) cost += 500 * pool; }
       btn.textContent = `${a.dataLabel} (${cost > 0 ? cost + 'd' : 'Free'})`;
@@ -1226,8 +1271,10 @@
       if (action === 'divine dust' &&
           (lastCraft.options || []).find(o => o.id === $('itemA').value)?.sacred &&
           !confirm('Reroll this item’s sacred affix? The current one is lost.')) return;
+      // data-confirm-msg: the site's own wording when the item-named one would
+      // be wrong (Divinity ignores the pickers and names the real scope instead).
       if ((aDef?.confirm || action === 'scour' || action === 'krangle') &&
-          !confirm(`${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
+          !confirm(aDef?.confirmMsg || `${aDef?.dataLabel || title(action)} this item? Can't be undone.`)) return;
       if (action === 'recombine') {
         const aName = itemForOption($('itemA').value)?.name, bName = itemForOption($('itemB').value)?.name;
         const opts = { recombine: true };

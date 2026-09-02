@@ -191,6 +191,9 @@
   .apanel:is(.collapsed, .dcollapsed) .abody { display: none !important; }
   .apanel:is(.collapsed, .dcollapsed) .cbar { border-bottom: 0; }
   .apanel .abody { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px; }
+  /* Feed panel — the game's own narration lines, newest first (same order as the site's Feed card) */
+  .feedline { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.07); font-size: .84rem; line-height: 1.35; }
+  .feedline:first-child { color: #fff; }
   .rolechips { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .rolechips .chip[data-pf] { cursor: pointer; }
   .rolechips .chip[data-pf]:hover { border-color: rgba(160,140,255,0.6); }
@@ -484,6 +487,16 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     </span>
   </div>
   <div class="cwrap"><iframe id="fightsFrame" title="Fight history"></iframe></div>
+</div>
+
+<div class="apanel" id="feedpanel" style="top:90px;left:220px;width:440px;height:520px">
+  <div class="cbar" id="feedbar">
+    <span class="ctitle">📰 Feed</span>
+    <span class="cbtns"><button id="feedPop" title="pop out to its own window">⧉</button>
+      <button id="feedCollapse" title="collapse">▾</button>
+      <button title="close" onclick="toggleModal('feed', false)">✕</button></span>
+  </div>
+  <div class="abody" id="feedBody"><p class="muted">Nothing yet — the feed fills up as fights resolve.</p></div>
 </div>
 
 <div class="apanel" id="buffspanel" style="bottom:14px;left:16px;width:620px;height:150px">
@@ -781,11 +794,46 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
 
   // ---- stats modal: load + refresh ----
   let statsBusy = false; // in-flight guard: a slow fetch mustn't stack more
+  // Expired session: put a "Log in again" button where the stats go. The
+  // shell opens the account login in a child window (bridge POST /api/relogin)
+  // and the next poll picks the fresh session up.
+  let reloginBusy = false;
+  function showRelogin() {
+    const rows = document.getElementById('rows');
+    if (rows.querySelector('button.relogin')) return; // already offered — keep the button state
+    rows.innerHTML = '<p class="muted">Session expired.</p><button class="relogin" type="button">Log in again</button>';
+    rows.querySelector('button.relogin').onclick = async (ev) => {
+      if (reloginBusy) return; reloginBusy = true;
+      const b = ev.currentTarget; b.disabled = true; b.textContent = 'Logging in…';
+      let r; try { r = await fetch('/api/relogin', { method: 'POST' }).then(x => x.json()); } catch { r = { ok: false, error: 'bridge unreachable' }; }
+      reloginBusy = false;
+      if (r.ok) { rows.innerHTML = ''; loadStats(); return; }
+      b.disabled = false; b.textContent = 'Log in again';
+      if (r.error === 'unsupported') infoToast('Restart the app to log in again.');
+      else if (!r.cancelled) infoToast('Login failed: ' + (r.error || 'unknown error'));
+    };
+  }
+  // ---- Feed: the game's narration ring, pushed on the overlay socket since
+  // World 2 Stage 2 (2026-08-28). `announcements` arrives once per connect
+  // with the whole ring (oldest-first, replaces what we hold); `announcement`
+  // is one new line. Shown newest-first like the site's Feed card, capped 50.
+  const FEED_CAP = 50;
+  let feedLines = [];
+  function renderFeed() {
+    const el = document.getElementById('feedBody'); if (!el) return;
+    if (!document.getElementById('feedpanel').classList.contains('open')) return; // rendered on open
+    el.innerHTML = feedLines.length
+      ? feedLines.map(l => `<div class="feedline">${esc(l)}</div>`).join('')
+      : '<p class="muted">Nothing yet — the feed fills up as fights resolve.</p>';
+  }
   async function loadStats() {
     if (statsBusy) return;
     statsBusy = true;
     try {
       const r = await fetch('/api/me').then(r => r.json());
+      // Not downtime: the site is up, we just aren't logged in any more. The
+      // curtain would read as "game down" and hide the way back in.
+      if (r.expired) { siteFails = 0; setDown(false); showRelogin(); return; }
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
       if (r.name && r.name !== myName) { // enable highlight + operator items once we know the name
@@ -1042,7 +1090,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   // Panels open at close reopen next launch (positions already persist via lay.*)
-  const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights'];
+  const RESTORABLE_PANELS = ['party', 'buffs', 'fight', 'settings', 'inbox', 'chat', 'stream', 'characters', 'fights', 'feed'];
   let inboxWasOpen = false; // deferred inbox restore — only after /api/me confirms an operator name
   const persistPanels = () => { if (PANE) return; // pane window: only its pane is open — don't clobber main's list
     LS.set('openPanels', RESTORABLE_PANELS.filter(w =>
@@ -1059,7 +1107,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     if (open) {
       front(p);
       ({ party: renderParty, fight: renderFight, buffs: renderBuffs, settings: renderSettings, inbox: renderInbox,
-         characters: framePanel('characters', '/character.html'), fights: framePanel('fights', '/fights.html') })[which]();
+         characters: framePanel('characters', '/character.html'), fights: framePanel('fights', '/fights.html'), feed: renderFeed })[which]();
       // Clamp into the viewport — a position saved on a big window must still be
       // reachable on a small one. During restore only rescue panels that are
       // ENTIRELY off-screen: the window is still settling then, so nudging
@@ -1106,6 +1154,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   wirePanel('inboxpanel', 'inboxbar', 'inboxCollapse', 'lay.inbox');
   wirePanel('characterspanel', 'charactersbar', 'charactersCollapse', 'lay.characters');
   wirePanel('fightspanel', 'fightsbar', 'fightsCollapse', 'lay.fights');
+  wirePanel('feedpanel', 'feedbar', 'feedCollapse', 'lay.feed');
   // Both host one of our own pages in an iframe, so the panel and its pop-out
   // window run the same code. Loaded on first open, then left alone so the
   // page keeps its state (which character you were looking at) while hidden.
@@ -1121,7 +1170,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // Every other pane pops out as this same page in ?pane=X mode (see
   // enterPaneMode) — same code, its own live feed, sized to the pane it
   // replaces. The in-app pane closes; stats has no close, so it stays.
-  for (const which of ['party', 'buffs', 'fight', 'settings', 'inbox', 'stream', 'stats'])
+  for (const which of ['party', 'buffs', 'fight', 'settings', 'inbox', 'stream', 'stats', 'feed'])
     document.getElementById(which + 'Pop').onclick = () => {
       const el = document.getElementById(which === 'stats' ? 'stats' : which + 'panel');
       const r = el.getBoundingClientRect();
@@ -1162,12 +1211,15 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     broadcast: { label: '📣 Broadcast', title: 'Operator only — banner message to every running app (empty message clears it)', act: () => sendBroadcast() },
     inbox: { label: '📬 Feedback Inbox', title: 'Operator only — feedback sent from the app (newest 50)', act: () => toggleModal('inbox'), isActive: panelOpen('inbox') },
     fights: { label: '⚔️ Fight History', title: "Every recent fight, straight from the game's own records — exact totals, no estimates", act: () => toggleModal('fights'), isActive: panelOpen('fights') },
+    feed: { label: '📰 Feed', title: "The game's own narration — what just happened, newest first (the site's Feed card)", act: () => toggleModal('feed'), isActive: panelOpen('feed') },
     builds: { label: '📐 Build Dossier', title: 'Owner only — ladder-level builds under ordinary four-mod gearing', act: () => openWin('/owner/builds', 'builds', 1260, 900) },
     downtime: { label: '💤 Preview Downtime', title: 'Operator only — show the downtime curtain without the game being down (click again to clear)', act: () => toggleDownPreview(), isActive: () => downPreview },
   };
   // Operator-only toolbar items, keyed by character name. UI gating only — the
   // backend's PING_KEY (sent by the bridge) is the actual auth.
-  const OPERATOR_ITEMS = { broadcast: ['lokati_gaming', 'kibukah'], inbox: ['lokati_gaming', 'kibukah'], builds: ['lokati_gaming'], downtime: ['lokati_gaming', 'kibukah'] };
+  // `lokati` is the operator's login since the game's Linux cutover
+  // (OPERATOR_LOGIN, 2026-09-02); `lokati_gaming` is the Twitch-era name.
+  const OPERATOR_ITEMS = { broadcast: ['lokati', 'lokati_gaming', 'kibukah'], inbox: ['lokati', 'lokati_gaming', 'kibukah'], builds: ['lokati', 'lokati_gaming'], downtime: ['lokati', 'lokati_gaming', 'kibukah'] };
   // The operator key (surfaced as POD_OPERATOR by /config.js) overrides the
   // name gate: with the game site down /api/me can't name the character, and
   // the operator tools — broadcast, inbox — talk to the telemetry backend,
@@ -1176,7 +1228,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   const itemHidden = (id) => OPERATOR_ITEMS[id] && !window.POD_OPERATOR && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
-    { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight'] } },
+    { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'feed'] } },
     { i: 'stream' }, { i: 'highlight' }, { i: 'autolock' },
     { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'refresh', 'update', 'feedback'] } },
   ];
@@ -2654,6 +2706,14 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
         if (d.type === 'state') {
           lastRoster = d;
           if (document.getElementById('partypanel').classList.contains('open')) renderParty();
+        }
+        if (d.type === 'announcements' && Array.isArray(d.lines)) {
+          feedLines = d.lines.filter(l => typeof l === 'string').slice(-FEED_CAP).reverse(); // server order is oldest-first
+          renderFeed();
+        }
+        if (d.type === 'announcement' && typeof d.line === 'string') {
+          feedLines.unshift(d.line); if (feedLines.length > FEED_CAP) feedLines.length = FEED_CAP;
+          renderFeed();
         }
         if (d.type === 'encounter') {
           encTimes.push(Date.now()); if (encTimes.length > 6) encTimes.shift(); // cadence sample for the next-battle ETA

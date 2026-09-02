@@ -188,7 +188,7 @@
     // empty #err. Land the user back on the roster with a reason instead.
     try { c = await get('/api/character?login=' + encodeURIComponent(login)); }
     catch { $('err').textContent = "Couldn't load that character — try again."; back(); return; }
-    if (c.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
+    if (c.expired) { sessionExpired(() => showCharacter(login)); return; }
     if (c.notFound || !c.name) { $('err').textContent = 'No such character.'; back(); return; }
     document.title = `${GAME_NAME} — ${c.name}`;
     const profile = c.stats.filter(s => PROFILE.includes(s.label));
@@ -308,11 +308,27 @@
   // fresh = the user asked for this (Reload), so bypass the bridge's roster
   // cache — otherwise the button re-renders the same stale classes it already
   // has and looks broken.
+
+  // Expired session: the shell can re-open the login without a restart
+  // (bridge POST /api/relogin). Cancelled = the user closed the window; leave
+  // the message up. On success rerun whatever the caller was doing.
+  function wireRelogin(after) {
+    const b = $('err').querySelector('button.relogin'); if (!b) return;
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Logging in…';
+      let r; try { r = await fetch('/api/relogin', { method: 'POST' }).then(x => x.json()); } catch { r = { ok: false, error: 'bridge unreachable' }; }
+      if (r.ok) { $('err').textContent = ''; after(); return; }
+      b.disabled = false; b.textContent = 'Log in again';
+      if (r.error === 'unsupported') $('err').textContent = 'Session expired — restart the app to log in again.';
+      else if (!r.cancelled) $('err').textContent = 'Login failed: ' + (r.error || 'unknown error');
+    };
+  }
+  const sessionExpired = (after) => { $('err').innerHTML = 'Session expired. <button class="relogin" type="button">Log in again</button>'; wireRelogin(after); };
   async function loadRoster(fresh) {
     $('err').textContent = '';
     try { rosterList = await get('/api/roster' + (fresh ? '?fresh=1' : '')); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
-    if (rosterList.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
+    if (rosterList.expired) { sessionExpired(() => loadRoster(fresh)); return; }
     rosterList = (rosterList || []).filter(r => r.login);
     renderRoster();
   }

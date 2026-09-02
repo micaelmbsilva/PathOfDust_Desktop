@@ -1,7 +1,9 @@
 // Electron shell: starts the bridge in-process and shows it in a real app
 // window. Standalone .exe (bundled Chromium). Multi-user: no tokens are shipped —
-// each user logs in once via the site's Twitch OAuth, and that one login drives
-// everything (site session for stats/bag/passives/actions, and Twitch chat).
+// each user logs in once with the site's own account login (username +
+// password, since 2026-09-02 — the Twitch OAuth route no longer exists), and
+// that one session drives stats/bag/passives/actions. Twitch chat is a separate
+// embed and is NOT logged in by this.
 const { app, BrowserWindow, session, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
@@ -128,19 +130,64 @@ function installId() {
 const getAdvSession = async () =>
   (await session.defaultSession.cookies.get({ url: SITE, name: 'adv_session' }))[0]?.value || null;
 
-// Show the site login in-window and resolve once adv_session appears. The site
-// bounces through id.twitch.tv OAuth; logging in there also logs Twitch in.
-function runLogin(win) {
-  return new Promise((resolve) => {
-    const check = async () => { const v = await getAdvSession(); if (v) { cleanup(); resolve(v); } };
+// Resolve with the adv_session value once the site sets it in `win`. The
+// account login 302s to / on success, which fires did-redirect-navigation; a
+// failed login re-renders the form (401) and fires nothing we act on. Rejects
+// when the window closes first (e.cancelled) or the login page itself fails to
+// load (site down). Listeners always come off, whichever way it ends.
+function awaitSessionCookie(win) {
+  return new Promise((resolve, reject) => {
+    const wc = win.webContents;
+    const done = (fn, v) => { cleanup(); fn(v); };
+    const check = async () => { const v = await getAdvSession().catch(() => null); if (v) done(resolve, v); };
+    const onClosed = () => { const e = new Error('login window closed'); e.cancelled = true; done(reject, e); };
+    // -3 is ABORTED: a navigation superseded by another (the 302 home), not a failure.
+    const onFail = (_ev, code, desc, _url, isMainFrame) => { if (isMainFrame && code !== -3) done(reject, new Error(`login page failed to load: ${desc || code}`)); };
     const cleanup = () => {
-      win.webContents.removeListener('did-navigate', check);
-      win.webContents.removeListener('did-redirect-navigation', check);
+      wc.removeListener('did-navigate', check);
+      wc.removeListener('did-redirect-navigation', check);
+      wc.removeListener('did-fail-load', onFail);
+      win.removeListener('closed', onClosed);
     };
-    win.webContents.on('did-navigate', check);
-    win.webContents.on('did-redirect-navigation', check);
-    win.loadURL(`${SITE}/login`);
+    wc.on('did-navigate', check);
+    wc.on('did-redirect-navigation', check);
+    wc.on('did-fail-load', onFail);
+    win.on('closed', onClosed);
   });
+}
+
+// Show the site's account login in-window and resolve once adv_session appears.
+function runLogin(win) {
+  const p = awaitSessionCookie(win);
+  win.loadURL(`${SITE}/account/login`);
+  return p;
+}
+
+// In-app re-login for an expired session (the bridge's /api/relogin): drop the
+// dead cookie, open the account login in a child window, hand the new cookie to
+// the bridge. One shared in-flight promise — a second call while the window is
+// up just focuses it. Resolves true; rejects with e.cancelled when the user
+// closes the window, or with the load error.
+let reloginWin = null, reloginP = null;
+function relogin(parent, actions) {
+  if (reloginP) { if (reloginWin && !reloginWin.isDestroyed()) reloginWin.focus(); return reloginP; }
+  reloginP = (async () => {
+    await session.defaultSession.cookies.remove(SITE, 'adv_session').catch(() => {});
+    reloginWin = new BrowserWindow({
+      width: 560, height: 680, parent: parent && !parent.isDestroyed() ? parent : undefined,
+      backgroundColor: '#0c0a16', autoHideMenuBar: true, title: 'Log in',
+      icon: path.join(__dirname, 'assets', 'icon.png'),
+    });
+    try {
+      const v = await runLogin(reloginWin);
+      actions.setCookie(`adv_session=${v}`);
+      return true;
+    } finally {
+      if (reloginWin && !reloginWin.isDestroyed()) reloginWin.close();
+      reloginWin = null; reloginP = null;
+    }
+  })();
+  return reloginP;
 }
 
 // Re-set every twitch.tv cookie with SameSite=None so the third-party chat
@@ -316,22 +363,31 @@ async function start() {
   initWindowPersistence(win, winState); // remember main + child windows across launches
 
   // Log in once (persisted across launches); reuse the saved session thereafter.
+  // Closing the window mid-login quits the app (window-all-closed) — nothing to do.
+  const loginOrQuit = () => runLogin(win).catch((e) => { if (!e.cancelled) console.warn('login failed:', e.message); return null; });
   let advSession = await getAdvSession();
-  if (!advSession) advSession = await runLogin(win);
+  if (!advSession) advSession = await loginOrQuit();
+  if (!advSession) return;
 
   actions.setCookie(`adv_session=${advSession}`); // the bridge now acts as this user
   // A persisted cookie can be invalidated server-side; without this check the
-  // UI's "restart to re-login" advice loops forever on the same dead cookie
-  // (runLogin resolves instantly while the stale cookie still exists).
-  try { await actions.getAuthed('/inventory'); }
+  // UI's re-login advice loops forever on the same dead cookie (runLogin
+  // resolves instantly while the stale cookie still exists). /fights.json
+  // answers a real 401 for a dead session — no scrape heuristic involved.
+  try { await actions.probeSession(); }
   catch (e) {
     if (e.expired) {
       await session.defaultSession.cookies.remove(SITE, 'adv_session').catch(() => {});
-      advSession = await runLogin(win);
+      advSession = await loginOrQuit();
+      if (!advSession) return;
       actions.setCookie(`adv_session=${advSession}`);
-    } // site-down errors fall through to the normal downtime handling
+    } // anything else (site down, edge error page): carry on — the renderer's
+      // /api/me poll raises the downtime curtain after two failures.
   }
-  await relaxTwitchCookies();                     // make the chat embed see the login
+  // Twitch cookies only exist here if the user logged in to Twitch in this
+  // session at some point (the site login no longer does that); relaxing what
+  // is there keeps the chat embed usable, and is a no-op otherwise.
+  await relaxTwitchCookies();
   await session.defaultSession.clearCache().catch(() => {}); // drop stale cached app files
   win.loadURL(`http://localhost:${PORT}/`);
   // Authoritative keyboard-focus restore for the chat iframe: after toast
@@ -339,6 +395,8 @@ async function start() {
   // renderer-side focus() alone doesn't always recover it. The bridge exposes
   // this via /api/refocus.
   global.__refocus = () => { if (!win.isDestroyed()) { win.focus(); win.webContents.focus(); } };
+  // Expired session → the pages offer "Log in again" (bridge /api/relogin).
+  global.__relogin = () => relogin(win, actions);
   initAutoUpdate(); // background: full-app update via electron-updater
 }
 

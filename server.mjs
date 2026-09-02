@@ -74,8 +74,10 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 // The build dossier is an owner tool, not another public static page. Both the
 // friendly endpoint and the template's filename pass through this server-side
 // identity check so knowing the file name does not bypass the gate.
-const OWNER_BUILDS_LOGIN = 'lokati_gaming';
-export const ownerBuildsAllowed = (name) => String(name || '').trim().toLowerCase() === OWNER_BUILDS_LOGIN;
+// Both identities: the game's OPERATOR_LOGIN became `lokati` on the Linux
+// cutover (2026-09-02); `lokati_gaming` is the Twitch-era character name.
+const OWNER_BUILDS_LOGINS = new Set(['lokati', 'lokati_gaming']);
+export const ownerBuildsAllowed = (name) => OWNER_BUILDS_LOGINS.has(String(name || '').trim().toLowerCase());
 
 // Pull our character sheet and extract name + stat rows. Regex over the site's
 // own markup — brittle-by-design is fine, it's one page we control the read of.
@@ -490,6 +492,59 @@ export function craftFormsOf(text) {
   } };
 }
 
+// The craft form's item picker. Attribute-order independent (the site appends
+// new data-* attrs, e.g. data-polish-room in Aug '26). polishRoom: null = attr
+// absent (old site). The site groups these: an "Equipped" optgroup first, then
+// one per slot, and the label already carries tier/mod-count/quality plus 🔒
+// and ✦ markers. Walk the markup in order so the grouping survives instead of
+// being flattened. Exported for the scrape smoke-test.
+export function craftOptionsOf(craftForm) {
+  const selA = (craftForm.match(/<select name="item_a">([\s\S]*?)<\/select>/) || [])[1] || '';
+  let group = '';
+  return [...selA.matchAll(/<optgroup label="([^"]*)"|<option value="([^"]+)"([^>]*)>([^<]*)</g)]
+    .map(m => {
+      if (m[1] !== undefined) { group = strip(m[1]); return null; }
+      const at = m[3], num = (n) => { const v = (at.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
+      const label = strip(m[4]);
+      // Since 2026-08-24 the label ends in " 🔒 Keep" for a Keep-ticked item and
+      // " 🔒" for a Krangled one — both refuse every craft; only the wording
+      // (and whether the player can undo it) differs, so they stay distinct.
+      const kept = /\u{1F512}\s*Keep$/u.test(label);
+      const locked = !kept && /\u{1F512}$/u.test(label);
+      return { id: m[2], group, affixes: num('data-affixes') ?? 0, tier: num('data-tier') ?? 0,
+        quality: num('data-quality') ?? 0, perfect: num('data-perfect') === 1,
+        // Sacred already? Then Divine Dust rerolls the affix instead of granting one.
+        sacred: num('data-sacred') === 1,
+        polishRoom: num('data-polish-room'), label, kept, locked,
+        // The site preselects whatever you crafted last.
+        selected: /\bselected\b/.test(at) };
+    }).filter(Boolean);
+}
+// The craft form's action buttons, with each button's cost data so the client
+// can replicate the live per-item cost calc (base + 3*tier, veil extras,
+// reforge 30*tier, polish). Exported for the scrape smoke-test.
+export function craftActionsOf(craftForm) {
+  return [...craftForm.matchAll(/name="action" value="([^"]+)"([^>]*)>([^<]*)</g)]
+    .map(m => {
+      const a = m[2];
+      const num = (n) => { const v = (a.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
+      return {
+        action: m[1], label: strip(m[3]), tip: tipOf(a),
+        base: num('data-base'), veilExtra: num('data-veil-extra'),
+        dataLabel: (a.match(/data-label="([^"]*)"/) || [])[1] || strip(m[3]).replace(/\s*\(.*\)\s*$/, ''),
+        recombine: /data-recombine/.test(a), polish: /data-polish(?!-)/.test(a), reforge: /data-reforge/.test(a),
+        divineDustApply: /data-divine-dust-apply/.test(a),
+        dust: num('data-dust'), sand: num('data-sand'), divineDust: num('data-divine-dust'),
+        confirm: /data-confirm/.test(a), // site marks destructive/committing crafts itself
+        // Divinity (Sep '26) overrides the item-named confirm text — it ignores
+        // the pickers — and arrives disabled when nothing in the bag is eligible.
+        // The site HTML-escapes the message; decode so it reads as written.
+        confirmMsg: decode((a.match(/data-confirm-msg="([^"]*)"/) || [])[1] || '') || null,
+        disabled: /(^|\s)disabled(\s|$)/.test(a),
+      };
+    });
+}
+
 // Full inventory: currencies, tokens, equipped gear, bag, and the craft form's
 // item options + action buttons. Enough to drive a custom Bag page.
 export async function inventory() { // exported for scrape smoke-tests
@@ -536,41 +591,7 @@ export async function inventory() { // exported for scrape smoke-tests
   }
 
   const { craftForm, divineDustRecipe } = craftFormsOf(text);
-  const selA = (craftForm.match(/<select name="item_a">([\s\S]*?)<\/select>/) || [])[1] || '';
-  // Attribute-order independent (the site appends new data-* attrs, e.g.
-  // data-polish-room in Aug '26). polishRoom: null = attr absent (old site).
-  // The site groups these: an "Equipped" optgroup first, then one per slot, and
-  // the label already carries tier/mod-count/quality plus 🔒 and ✦ markers. Walk
-  // the markup in order so the grouping survives instead of being flattened.
-  let group = '';
-  const options = [...selA.matchAll(/<optgroup label="([^"]*)"|<option value="([^"]+)"([^>]*)>([^<]*)</g)]
-    .map(m => {
-      if (m[1] !== undefined) { group = strip(m[1]); return null; }
-      const at = m[3], num = (n) => { const v = (at.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
-      return { id: m[2], group, affixes: num('data-affixes') ?? 0, tier: num('data-tier') ?? 0,
-        quality: num('data-quality') ?? 0, perfect: num('data-perfect') === 1,
-        // Sacred already? Then Divine Dust rerolls the affix instead of granting one.
-        sacred: num('data-sacred') === 1,
-        polishRoom: num('data-polish-room'), label: strip(m[4]),
-        // The site preselects whatever you crafted last.
-        selected: /\bselected\b/.test(at) };
-    }).filter(Boolean);
-  // Capture each button's cost data so the client can replicate the live
-  // per-item cost calc (base + 3*tier, veil extras, reforge 30*tier, polish).
-  const actions = [...craftForm.matchAll(/name="action" value="([^"]+)"([^>]*)>([^<]*)</g)]
-    .map(m => {
-      const a = m[2];
-      const num = (n) => { const v = (a.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
-      return {
-        action: m[1], label: strip(m[3]), tip: tipOf(a),
-        base: num('data-base'), veilExtra: num('data-veil-extra'),
-        dataLabel: (a.match(/data-label="([^"]*)"/) || [])[1] || strip(m[3]).replace(/\s*\(.*\)\s*$/, ''),
-        recombine: /data-recombine/.test(a), polish: /data-polish(?!-)/.test(a), reforge: /data-reforge/.test(a),
-        divineDustApply: /data-divine-dust-apply/.test(a),
-        dust: num('data-dust'), sand: num('data-sand'), divineDust: num('data-divine-dust'),
-        confirm: /data-confirm/.test(a), // site marks destructive/committing crafts itself
-      };
-    });
+  const options = craftOptionsOf(craftForm), actions = craftActionsOf(craftForm);
   const veilTip = tipOf((craftForm.match(/class="veil-check"([^>]*)>/) || [])[1] || '');
   // Hideout Warrior's "Include Krangle" checkbox (name="hideout_krangle") —
   // null when the site doesn't render it (pre-Aug-'26 or no hideout button).
@@ -755,8 +776,9 @@ const FIGHTS_LIMIT = 50;
 // The scrape stays as a fallback for a server that predates the JSON tier.
 async function fights() {
   try {
+    // A 401 never reaches here: getAuthed throws it as `expired` (dead session).
     const { status, text } = await getAuthed(`/fights.json?limit=${FIGHTS_LIMIT}`);
-    if (status === 401 || status === 403) return { gated: true, fights: [] };
+    if (status === 403) return { gated: true, fights: [] };
     if (status < 400) {
       const data = JSON.parse(text);
       if (Array.isArray(data)) return { gated: false, source: 'summary', fights: data };
@@ -1128,6 +1150,14 @@ const srv = createServer(async (req, res) => {
       if (!p) { res.writeHead(400); return res.end('bad page'); }
       exec(`start "" "https://adventure.lokati.net${p}"`);
       return json(res, { ok: true });
+    }
+    if (url.pathname === '/api/relogin' && req.method === 'POST') {
+      // Expired session: the shell opens the account login in a child window
+      // and hands the fresh cookie to actions.setCookie (see main.cjs __relogin).
+      // Unlike __refocus this is async — the login takes as long as the user does.
+      if (typeof globalThis.__relogin !== 'function') return json(res, { ok: false, error: 'unsupported' });
+      try { await globalThis.__relogin(); return json(res, { ok: true }); }
+      catch (e) { return json(res, e.cancelled ? { ok: false, cancelled: true } : { ok: false, error: String(e.message || e) }); }
     }
     if (url.pathname === '/api/refocus' && req.method === 'POST') {
       // Shell-level focus restore (see main.cjs __refocus). No-op on old shells.

@@ -86,12 +86,28 @@
     /([A-Z][A-Za-z]*)\s*\{\s*([a-z_]+):\s*(\d+)\s*\}/g,
     (_, name, field, n) => `${name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()} +${(+n).toLocaleString()} ${field}`);
 
+
+  // Expired session: the shell can re-open the login without a restart
+  // (bridge POST /api/relogin). Cancelled = the user closed the window; leave
+  // the message up. On success rerun whatever the caller was doing.
+  function wireRelogin(after) {
+    const b = $('err').querySelector('button.relogin'); if (!b) return;
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Logging in…';
+      let r; try { r = await fetch('/api/relogin', { method: 'POST' }).then(x => x.json()); } catch { r = { ok: false, error: 'bridge unreachable' }; }
+      if (r.ok) { $('err').textContent = ''; after(); return; }
+      b.disabled = false; b.textContent = 'Log in again';
+      if (r.error === 'unsupported') $('err').textContent = 'Session expired — restart the app to log in again.';
+      else if (!r.cancelled) $('err').textContent = 'Login failed: ' + (r.error || 'unknown error');
+    };
+  }
+  const sessionExpired = (after) => { $('err').innerHTML = 'Session expired. <button class="relogin" type="button">Log in again</button>'; wireRelogin(after); };
   async function load() {
     $('err').textContent = '';
     let d;
     try { d = await fetch('/api/fights', { cache: 'no-store' }).then(r => r.json()); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
-    if (d.expired) { $('err').textContent = 'Session expired — restart the app to log in again.'; return; }
+    if (d.expired) { sessionExpired(load); return; }
     // Everything below comes from the game's own summary tier. The app's live
     // capture is deliberately NOT used as a fallback here: the overlay thinning
     // trims it, and this pane exists to be exact.
