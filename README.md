@@ -54,9 +54,9 @@ session is saved, so you won't be asked again; when it expires, the app's pages 
 Twitch is separate: the site login no longer goes through Twitch, so it does not log the chat
 panel in. Log in to Twitch in the chat panel itself if you want to send messages.
 
-Note for long-time players: if your character was created through the old Twitch login and you
-never registered a game account, the game currently refuses to register that same name — that is
-a game-side limitation, not something the app can work around. Ask the game owner.
+Note for long-time players: a character created through the old Twitch login needs a game
+account under the same name to keep playing; the game does not let a new account claim an
+existing character's name. This is how the game works by design, not an app problem.
 
 ### Optional — chat emotes
 

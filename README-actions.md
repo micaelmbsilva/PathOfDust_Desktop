@@ -22,9 +22,10 @@ bridge answers `401 {expired:true}` and the pages offer **Log in again**, which
 POSTs `/api/relogin` — the shell opens the account login in a child window and
 swaps the cookie in place. No restart.
 
-Game-side caveat: registration refuses a name that already belongs to a
-character or session, and there is no claim flow — a Twitch-era character with
-no local account cannot log in at all once its old cookie expires.
+By design on the game side: registration refuses a name that already belongs
+to a character or session, and there is no claim flow. A Twitch-era character
+with no local account therefore cannot mint a new session once its old cookie
+expires; the app only surfaces this, it does not work around it.
 
 ## Read (open, no auth)
 - `wss://adventure.lokati.net/ws` — pushes `state` (stage + full roster) and
