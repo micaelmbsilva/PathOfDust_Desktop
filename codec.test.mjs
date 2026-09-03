@@ -59,6 +59,17 @@ const fits = async (v) => header.length + 1 + itemLink(await encodeItem(maxed, v
 assert.ok(await fits(1) > 500, 'v1 got small enough that v2 has no reason to exist');
 assert.ok(await fits(2) <= 500, `header + v2 link is ${await fits(2)} chars, over Twitch's 500`);
 
+// Nine slots since 2026-09-03. The slot's v2 wire form is its index into the
+// codec's SLOTS list, so the list is append-only: the first five must stay in
+// their original order (an old link's index 4 is still boots), and a new-slot
+// item must round-trip by index rather than fall back to the raw string.
+assert.match(readFileSync('./item-codec.js', 'utf8'),
+  /const SLOTS = \['weapon', 'helm', 'body', 'gloves', 'boots'(?:, '[a-z0-9]+')*\];/,
+  'SLOTS must keep weapon..boots first, in order — the index is the wire format');
+for (const s of ['ring1', 'ring2', 'amulet', 'pants'])
+  assert.equal((await decodeItem(await encodeItem({ ...maxed, s }, 2))).s, s, `${s} survives v2`);
+assert.equal((await decodeItem(await encodeItem({ ...maxed, s: 'boots' }, 2))).s, 'boots');
+
 // Unknown versions and garbage must throw, never mis-decode.
 await assert.rejects(() => decodeItem('3.abc'));
 await assert.rejects(() => decodeItem('2.abc'));

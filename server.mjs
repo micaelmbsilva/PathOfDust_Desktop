@@ -478,7 +478,11 @@ export function craftFormsOf(text) {
   const chunks = text.split('action="/craft"').slice(1).map(s => s.split('</form>')[0]);
   const craftForm = chunks.find(s => s.includes('name="item_a"')) || '';
   const dd = chunks.find(s => s.includes('value="divine dust craft"'));
-  if (!dd) return { craftForm, divineDustRecipe: null };
+  if (!dd) {
+    // Below the unlock stage (2026-09-03) the row is a bare locked span, no form.
+    const lk = text.match(/<span class="muted"([^>]*)>\s*🔒 Craft Divine Dust — unlocks at stage (\d+)\s*<\/span>/);
+    return { craftForm, divineDustRecipe: lk ? { locked: true, stage: +lk[2], tip: tipOf(lk[1]) } : null };
+  }
   const cost = dd.match(/Craft Divine Dust \((\d+)d \+ (\d+)s\s*→\s*(\d+)/);
   return { craftForm, divineDustRecipe: {
     action: 'divine dust craft',
@@ -524,9 +528,14 @@ export function craftActionsOf(craftForm) {
     .map(m => {
       const a = m[2];
       const num = (n) => { const v = (a.match(new RegExp(`${n}="(-?\\d+)"`)) || [])[1]; return v == null ? null : +v; };
+      const flt = (n) => { const v = (a.match(new RegExp(`${n}="(-?\\d+(?:\\.\\d+)?)"`)) || [])[1]; return v == null ? null : +v; };
       return {
         action: m[1], label: strip(m[3]), tip: tipOf(a),
         base: num('data-base'), veilExtra: num('data-veil-extra'),
+        // Per-tier surcharge dials (2026-09-03): ceil(tierMult × tier^tierExp),
+        // computed client-side off the selected item. Absent on Recombine and
+        // token-priced buttons — no tier term there.
+        tierMult: flt('data-tier-mult'), tierExp: flt('data-tier-exp'),
         dataLabel: (a.match(/data-label="([^"]*)"/) || [])[1] || strip(m[3]).replace(/\s*\(.*\)\s*$/, ''),
         recombine: /data-recombine/.test(a), polish: /data-polish(?!-)/.test(a), reforge: /data-reforge/.test(a),
         divineDustApply: /data-divine-dust-apply/.test(a),

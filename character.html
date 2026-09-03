@@ -113,9 +113,15 @@
   const get = (p) => fetch(p, { cache: 'no-store' }).then(r => r.json());
 
   // ---- item card, same visual language as the Bag page (read-only here) ----
-  const SLOT_EMOJI = { weapon: '⚔️', helm: '🪖', body: '🛡️', gloves: '🧤', boots: '🥾' };
+  const SLOT_EMOJI = { weapon: '⚔️', helm: '🪖', body: '🛡️', gloves: '🧤', boots: '🥾', ring1: '💍', ring2: '💍', amulet: '📿', pants: '👖' };
   const title = (s) => (s || '').charAt(0).toUpperCase() + (s || '').slice(1).toLowerCase();
-  const slotOf = (s) => `${SLOT_EMOJI[(s || '').toLowerCase()] || ''} ${title(s)}`.trim();
+  // The site names a slot three ways since the four new slots (2026-09-03):
+  // form value `ring1`, picker/bag label `Ring1`, Equipped-grid label `Ring I`
+  // (its DISPLAY_SLOTS). One key for all of them, so emoji, pips and share
+  // payloads never depend on which page the string came from.
+  const SLOT_LABEL = { ring1: 'Ring I', ring2: 'Ring II' };
+  const slotKey = (s) => { const k = (s || '').toLowerCase().trim(); return k === 'ring i' ? 'ring1' : k === 'ring ii' ? 'ring2' : k.replace(/\s+/g, ''); };
+  const slotOf = (s) => { const k = slotKey(s); return `${SLOT_EMOJI[k] || ''} ${SLOT_LABEL[k] || title(s)}`.trim(); };
   const qual = (it) => {
     const q = it.quality || '';
     const inner = it.sacred || q === 'Sacred' ? `<span class="sacredq">${esc(q)}</span>`

@@ -28,8 +28,31 @@ const line = (needle) => {
 };
 
 const optSlot = new Function(
-  `${line('const SLOTS =')}\n${line('const slotFromLabel =')}\n` +
+  `${line('const slotKey =')}\n${line('const SLOTS =')}\n${line('const slotFromLabel =')}\n` +
   `${lift('  function optSlot(md, text) {')}\nreturn optSlot;`)();
+const slotKey = new Function(`${line('const slotKey =')}\nreturn slotKey;`)();
+const tierCost = new Function(`${lift('  function tierCost(a, tier) {')}\nreturn tierCost;`)();
+
+// --- slotKey: the three spellings the site uses for one slot (2026-09-03) ---
+assert.equal(slotKey('Ring I'), 'ring1', 'Equipped-grid label (DISPLAY_SLOTS)');
+assert.equal(slotKey('Ring II'), 'ring2');
+assert.equal(slotKey('Ring1'), 'ring1', 'picker optgroup / bag-row label');
+assert.equal(slotKey('ring2'), 'ring2', 'form value');
+assert.equal(slotKey('Boots'), 'boots');
+assert.equal(slotKey(''), '');
+// The new-slot picker shapes.
+assert.equal(optSlot({ group: 'Ring1', label: 'Band (T5, 1 mod Q10%)' }, ''), 'ring1');
+assert.equal(optSlot({ group: 'Equipped', label: 'Band (Ring1, T5, 1 mod Q10%)' }, ''), 'ring1');
+assert.equal(optSlot({ group: 'Pants', label: 'Greaves (T2, 0 mods)' }, ''), 'pants');
+
+// --- tierCost: ceil(mult × tier^exp) per term, the numbers the game's own
+// tunable hint quotes for the shipped 3 × tier^1.1 ---
+const dial = { tierMult: 3, tierExp: 1.1 };
+assert.equal(tierCost(dial, 10), 38);
+assert.equal(tierCost(dial, 100), 476);
+assert.equal(tierCost(dial, 201), 1025);
+assert.equal(tierCost(dial, 0), 0, 'no item selected');
+assert.equal(tierCost({ tierMult: null, tierExp: null }, 50), 0, 'Recombine / token buttons carry no dials');
 const pickExisting = new Function(
   `${lift('    function pickExisting(sel, vals) {')}\nreturn pickExisting;`)();
 

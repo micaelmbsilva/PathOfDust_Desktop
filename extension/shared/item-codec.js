@@ -47,7 +47,9 @@
     'divine damage (heal debuff/buff chance)',
     'chaos damage (block debuff chance)',
   ];
-  const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
+  // Index IS the wire format (v2 stores a slot as its position here), so this
+  // list is append-only: the four 2026-09-03 slots go after boots, never between.
+  const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots', 'ring1', 'ring2', 'amulet', 'pants'];
   const FLAGS = ['sa', 'un', 'kr'];
 
   // v2 body. null means "key absent" — no field of a compact item is ever

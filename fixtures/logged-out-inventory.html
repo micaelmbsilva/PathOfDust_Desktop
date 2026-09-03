@@ -823,15 +823,19 @@
     // items are currently picked (each <option> carries data-affixes -
     // see craft_item_options) - server-side is still the source of truth,
     // this is purely a preview so the cost shown matches what submitting
-    // the form will actually charge. The 6 non-Recombine buttons also add
-    // a flat per-tier surcharge (TIER_CRAFT_DUST_COST in adventure.rs -
-    // kept as a literal here, not interpolated, since this script block
-    // has no access to that Rust constant by name) off item_a's own tier
-    // (each <option> carries data-tier) - Recombine doesn't pay this at
-    // all (see AdventureManager::craft_item vs recombine_gear - two
-    // separate cost paths), so it's excluded via the same data-recombine
-    // check the pool surcharge already uses.
-    var TIER_CRAFT_DUST_COST = 3;
+    // the form will actually charge.
+    // The 6 non-Recombine buttons also add the per-tier surcharge off
+    // item_a's own tier (each <option> carries data-tier). Its two
+    // parameters arrive as data-tier-mult/data-tier-exp on each button
+    // that pays it - Recombine doesn't pay it at all (see
+    // AdventureManager::craft_item vs recombine_gear - two separate cost
+    // paths) and so carries neither attribute. Until 2026-09-02 the
+    // multiplier was a hardcoded `var TIER_CRAFT_DUST_COST = 3` right
+    // here, a second copy of the formula that would have gone on quoting
+    // the old price the moment the server's own value changed; both
+    // parameters are now live tunables, so the literal is gone and the
+    // arithmetic below must stay the ceil-per-term shape
+    // AdventureManager::craft_item_ex charges.
     var veilCheckbox = document.querySelector('input[name="veiled"]');
     var itemASelect = document.querySelector('select[name="item_a"]');
     var itemBSelect = document.querySelector('select[name="item_b"]');
@@ -924,15 +928,26 @@
         var n = parseInt(select.selectedOptions[0].getAttribute('data-tier') || '0', 10);
         return isNaN(n) ? 0 : n;
       };
+      // Math.ceil per term, exactly as AdventureManager::craft_item_ex
+      // does - the base fee is already ceil'd server-side into data-base,
+      // this ceils the tier term on its own, and the two are then summed.
+      // Never one ceil over the whole sum, and never Math.round.
+      var tierCostOf = function(btn) {
+        var mult = parseFloat(btn.getAttribute('data-tier-mult'));
+        var exp = parseFloat(btn.getAttribute('data-tier-exp'));
+        if (isNaN(mult) || isNaN(exp)) return 0;
+        var tier = tierOf(itemASelect);
+        if (tier <= 0) return 0;
+        return Math.ceil(mult * Math.pow(tier, exp));
+      };
       var updateCraftCosts = function() {
         var veiled = veilCheckbox.checked;
         var pool = affixCountOf(itemASelect) + affixCountOf(itemBSelect);
-        var tierCost = TIER_CRAFT_DUST_COST * tierOf(itemASelect);
         craftButtons.forEach(function(btn) {
           var base = parseInt(btn.getAttribute('data-base'), 10);
           var extra = btn.getAttribute('data-veil-extra');
           var isRecombine = btn.hasAttribute('data-recombine');
-          var cost = isRecombine ? base : base + tierCost;
+          var cost = isRecombine ? base : base + tierCostOf(btn);
           if (veiled && extra !== null) {
             cost += parseInt(extra, 10);
             if (isRecombine) {
@@ -951,31 +966,47 @@
   })(); } catch (err) { /* isolates this block's own failure from every other block on the page - see the scroll-restore block's own history for why. */ }
 
   try { (function() {
-    // Confirmation prompt for Krangle & Scour (see action_btn's
-    // data-confirm attribute) - both are irreversible, so this shows
-    // exactly which item is about to be affected before the form
-    // actually submits, instead of a silent one-click commit.
-    var craftForm = document.querySelector('.craft-actions')?.closest('form');
-    if (craftForm) {
-      craftForm.addEventListener('submit', function(e) {
-        var btn = e.submitter;
-        if (!btn || !btn.hasAttribute('data-confirm')) return;
-        // A whole-bag action (Divinity) supplies its own message: the
-        // default text below names the item_a selection, which that
-        // action ignores entirely, so it would confirm the wrong scope.
-        var ownMsg = btn.getAttribute('data-confirm-msg');
-        if (ownMsg) {
-          if (!window.confirm(ownMsg)) e.preventDefault();
-          return;
-        }
-        var itemSelect = craftForm.querySelector('select[name="item_a"]');
-        var itemLabel = itemSelect && itemSelect.selectedOptions.length ? itemSelect.selectedOptions[0].textContent : 'this item';
-        var actionLabel = btn.getAttribute('data-label') || btn.textContent;
-        if (!window.confirm(actionLabel + ' ' + itemLabel + '? This cannot be undone.')) {
-          e.preventDefault();
-        }
-      });
-    }
+    // Confirmation prompt for every irreversible submit button (see
+    // action_btn's data-confirm attribute) - these commit permanently,
+    // so this shows exactly what is about to be affected before the
+    // form actually submits, instead of a silent one-click commit.
+    //
+    // Delegated on `document`, NOT bound to a particular form. It used
+    // to do document.querySelector('.craft-actions').closest('form'),
+    // i.e. the FIRST form on the page containing a .craft-actions row.
+    // On 2026-08-19 the Divine Dust recipe - its own standalone <form>
+    // with its own .craft-actions div - was inserted ABOVE the main
+    // craft form, so from that day the listener attached to a form with
+    // no data-confirm button in it and every confirmation on the page
+    // went silent for two weeks: Krangle, Scour, Annulment, Chancing,
+    // Hideout Warrior, and Divinity, which was added after the break
+    // and so never confirmed once in its life. Submit events bubble, so
+    // listening at the document and keying off the submitter's own
+    // attribute makes this independent of how many forms exist, where
+    // they sit, and what order they render in. A form inserted anywhere
+    // cannot steal the binding, because there is no first-match binding
+    // left to steal - do not "fix" this back into a per-form bind.
+    document.addEventListener('submit', function(e) {
+      var btn = e.submitter;
+      if (!btn || !btn.hasAttribute('data-confirm')) return;
+      // A whole-bag action (Divinity) supplies its own message: the
+      // default text below names the item_a selection, which that
+      // action ignores entirely, so it would confirm the wrong scope.
+      var ownMsg = btn.getAttribute('data-confirm-msg');
+      if (ownMsg) {
+        if (!window.confirm(ownMsg)) e.preventDefault();
+        return;
+      }
+      // Read the selection out of the submitting form itself, so the
+      // named item is always the one that form is about to act on.
+      var form = e.target;
+      var itemSelect = form && form.querySelector ? form.querySelector('select[name="item_a"]') : null;
+      var itemLabel = itemSelect && itemSelect.selectedOptions.length ? itemSelect.selectedOptions[0].textContent : 'this item';
+      var actionLabel = btn.getAttribute('data-label') || btn.textContent;
+      if (!window.confirm(actionLabel + ' ' + itemLabel + '? This cannot be undone.')) {
+        e.preventDefault();
+      }
+    });
   })(); } catch (err) { /* isolates this block's own failure from every other block on the page - see the scroll-restore block's own history for why. */ }
 
   try { (function() {

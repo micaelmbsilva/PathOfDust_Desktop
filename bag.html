@@ -228,9 +228,15 @@
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const tip = (s) => s ? ` data-tip="${esc(s)}"` : '';
-  const SLOT_EMOJI = { weapon: '⚔️', helm: '🪖', body: '🛡️', gloves: '🧤', boots: '🥾' };
+  const SLOT_EMOJI = { weapon: '⚔️', helm: '🪖', body: '🛡️', gloves: '🧤', boots: '🥾', ring1: '💍', ring2: '💍', amulet: '📿', pants: '👖' };
   const title = (s) => (s || '').charAt(0).toUpperCase() + (s || '').slice(1).toLowerCase();
-  const slotOf = (s) => `${SLOT_EMOJI[(s || '').toLowerCase()] || ''} ${title(s)}`.trim();
+  // The site names a slot three ways since the four new slots (2026-09-03):
+  // form value `ring1`, picker/bag label `Ring1`, Equipped-grid label `Ring I`
+  // (its DISPLAY_SLOTS). One key for all of them, so emoji, pips and share
+  // payloads never depend on which page the string came from.
+  const SLOT_LABEL = { ring1: 'Ring I', ring2: 'Ring II' };
+  const slotKey = (s) => { const k = (s || '').toLowerCase().trim(); return k === 'ring i' ? 'ring1' : k === 'ring ii' ? 'ring2' : k.replace(/\s+/g, ''); };
+  const slotOf = (s) => { const k = slotKey(s); return `${SLOT_EMOJI[k] || ''} ${SLOT_LABEL[k] || title(s)}`.trim(); };
   const qual = (it) => {
     const q = esc(it.quality || '');
     const inner = it.sacred || it.quality === 'Sacred' ? `<span class="sacredq">${q}</span>`
@@ -521,7 +527,13 @@
     // from the item crafts below (it's its own form on the site too) and stays
     // visible even with an empty bag. Its own x1/x10/x50, not the polish/reforge
     // batch — the site treats them as separate radio groups.
-    const ddRecipeHtml = (r) => !r ? '' : `
+    // Below the unlock stage the site renders a locked line instead of the
+    // form (2026-09-03) — show it rather than nothing, so the missing recipe
+    // reads as "not yet" instead of "broken".
+    const ddRecipeHtml = (r) => !r ? '' : r.locked ? `
+      <div class="acts" style="align-items:center;margin:4px 0 8px"${tip(r.tip)}>
+        <span class="muted">🔒 Craft Divine Dust — unlocks at stage ${esc(r.stage)}</span>
+      </div>` : `
       <div class="acts" style="align-items:center;margin:4px 0 8px"${tip(r.tip)}>
         <span class="muted" id="ddCost">✨ Craft Divine Dust (${r.dustCost}d + ${r.sandCost}s → ${r.output}):</span>
         ${[1, 10, 50].map(n => `<label class="hint"><input type="radio" name="ddtimes" class="ddx" value="${n}"${n === (cbGet('ddtimes') || 1) ? ' checked' : ''}> ×${n}</label>`).join('')}
@@ -550,7 +562,7 @@
       <div class="craft-main">
       <label>Item A <select id="itemA">${opts(inv.craft.options)}</select></label>
       <label>Item B (Recombine) <select id="itemB">${opts(inv.craft.options, '<option value="">None</option>')}</select></label>
-      <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"${cbGet('veil') ? ' checked' : ''}> Veil This Craft (+500 dust; Recombine also +500 per combined modifier)</label>
+      <label class="hint"${tip(inv.craft.veilTip)}><input type="checkbox" id="veil"${cbGet('veil') ? ' checked' : ''}> Veil This Craft (+${(inv.craft.actions.find(a => !a.recombine && a.veilExtra != null) || {}).veilExtra ?? 500} dust; Recombine also +500 per combined modifier)</label>
       ${inv.craft.hideoutKrangle ? `<label class="hint" title="Hideout Warrior only: leave checked to end on Krangle (permanently locks the item); uncheck to stop after Exalt"><input type="checkbox" id="hideoutK"${cbGet('hideoutK', inv.craft.hideoutKrangle.checked) ? ' checked' : ''}> Include Krangle (Hideout Warrior)</label>` : ''}
       <div class="acts" style="align-items:center;margin:10px 0 4px">
         <span class="muted">Polish / Reforge batch:</span>
@@ -673,15 +685,15 @@
   // The <select> itself stays (hidden) — persistence, updateCosts and the craft
   // POST all read .value off it, and a dispatched change keeps them in sync.
   // Slot parsed from an option label like "Crude Blade (Weapon, T3, 2 mods)".
-  const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots'];
-  const slotFromLabel = (l) => ((l || '').match(/\(([^,)]+)/) || [])[1]?.trim().toLowerCase() || '';
+  const SLOTS = ['weapon', 'helm', 'body', 'gloves', 'boots', 'ring1', 'ring2', 'amulet', 'pants'];
+  const slotFromLabel = (l) => slotKey(((l || '').match(/\(([^,)]+)/) || [])[1]);
   // The slot is folded into the option TEXT only inside the "Equipped" group
   // (the game passes show_slot=true there alone); a per-slot optgroup leaves it
   // implied by the group label, so a bag option reads "Blade (T3, 2 mods Q40%)"
   // and the label parse yields "t3" — matching no pip, which is what left a
   // slot filter showing only that slot's equipped item.
   function optSlot(md, text) {
-    const g = (md?.group || '').toLowerCase();
+    const g = slotKey(md?.group);
     return SLOTS.includes(g) ? g : slotFromLabel(md?.label || text);
   }
   const SORTS = [['tier', 'Tier'], ['quality', 'Qual'], ['mods', 'Mods'], ['name', 'A–Z']];
@@ -730,7 +742,7 @@
         [-1, st.sort === 'name' ? 'Z → A' : 'Low → High']]
         .map(([d, lbl]) => pip(st.dir === d, `data-dir="${d}"`, lbl)).join('')) : '') +
       sec('Quality', QUALS.map(([k, em, t]) => pip(st.quals.has(k), `data-qual="${k}"`, em, t, true)).join('')) +
-      sec('Slot', SLOTS.map(s => pip(st.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, title(s), true)).join(''));
+      sec('Slot', SLOTS.map(s => pip(st.slots.has(s), `data-slot="${s}"`, SLOT_EMOJI[s] || s, SLOT_LABEL[s] || title(s), true)).join(''));
     // Re-rendering the card would blow away the field the user is typing in, so
     // the search box updates state and refreshes only the list.
     const q = el.querySelector('.pip-q');
@@ -1002,6 +1014,16 @@
     span.textContent = `✨ Craft Divine Dust (${d.toLocaleString()}d + ${s.toLocaleString()}s → ${o}):`;
     const btn = $('ddCraft'); if (btn) btn.disabled = !(lastDustN >= d && lastSandN >= s);
   }
+  // The per-tier half of a craft's price, as the site computes it
+  // (base.html's tierCostOf): ceil(mult × tier^exp) from the button's own
+  // data-tier-mult / data-tier-exp — the flat "3 per tier" is gone (craft cost
+  // dials, 2026-09-03). Ceil the tier term alone, then add the already-scaled
+  // base; never one ceil over the sum. No attributes (Recombine, token-priced
+  // actions) means no tier term.
+  function tierCost(a, tier) {
+    if (a.tierMult == null || a.tierExp == null || !(tier > 0)) return 0;
+    return Math.ceil(a.tierMult * Math.pow(tier, a.tierExp));
+  }
   function updateCosts() {
     const byId = Object.fromEntries((lastCraft.options || []).map(o => [o.id, o]));
     const A = byId[$('itemA')?.value], B = byId[$('itemB')?.value];
@@ -1035,10 +1057,14 @@
         btn.textContent = `${A?.sacred ? 'Reroll Sacred Affix' : 'Apply Divine Dust'} (${c} ✨)`;
         btn.disabled = (a.divineDust ?? 0) < c; continue; }
       if (a.base == null) { btn.textContent = a.label; btn.disabled = !!a.disabled; continue; } // Regal/Krangle/Divinity: token label, site decides disabled
-      let cost = a.recombine ? a.base : a.base + 3 * tierA;
+      let cost = a.recombine ? a.base : a.base + tierCost(a, tierA);
+      // veilExtra comes off the button already scaled for the currency actions
+      // and as the raw 500 for Recombine — either way it's the site's number.
       if (veiled && a.veilExtra != null) { cost += a.veilExtra; if (a.recombine) cost += 500 * pool; }
       btn.textContent = `${a.dataLabel} (${cost > 0 ? cost + 'd' : 'Free'})`;
-      btn.disabled = false;
+      // Affordability is the site's call (dust vs the scaled base, rendered as
+      // `disabled`); the preview here only changes the label, as the site's does.
+      btn.disabled = !!a.disabled;
     }
     renderPick();
   }
@@ -1100,7 +1126,7 @@
   // "#pod-item=" contract in /item-codec.js (mirrored byte-for-byte in
   // extension/shared/, enforced by codec.test.mjs).
   const compactItem = (it) => ({
-    n: it.name, s: (it.slot || '').toLowerCase(), t: numTier(it) || undefined,
+    n: it.name, s: slotKey(it.slot), t: numTier(it) || undefined,
     q: it.sacred ? 'Sacred' : it.quality || undefined, p: it.primary || undefined,
     im: (it.implicits || []).map(i => i.t),
     m: (it.mods || []).map(m => [m.t, rollOf(m.tip), m.crit ? 1 : 0]),
@@ -1143,7 +1169,7 @@
     const st = bagPipState, q = st.q.trim().toLowerCase();
     const all = lastBag.length;
     const items = lastBag.filter(it => bagMatch(it, q)
-      && (!st.slots.size || st.slots.has((it.slot || '').toLowerCase()))
+      && (!st.slots.size || st.slots.has(slotKey(it.slot)))
       && (!st.quals.size || st.quals.has(qualOf(it))));
     if (st.sort) items.sort((a, b) => st.dir * BAG_CMP[st.sort](a, b));
     const shown = items.length === all ? `${all}` : `${items.length} of ${all}`;

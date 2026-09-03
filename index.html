@@ -1204,6 +1204,9 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     settings: { label: '⚙️ Settings', title: 'App options — notifications, display, performance, history retention', act: () => toggleModal('settings'), isActive: panelOpen('settings') },
     wiki: { label: '📖 Wiki', title: 'Open the game wiki in your browser', act: () => openPage('wiki') },
     'patch-notes': { label: '📜 Patch Notes', title: "Open the game's patch notes in your browser", act: () => openPage('patch-notes') },
+    // A child window shares the Electron session, so the form is already logged
+    // in — unlike openPage(), which hands the URL to the external browser.
+    bugs: { label: '🐞 Report a Game Bug', title: "The game's own bug form — goes to the game owner (Feedback goes to the app's maintainer)", act: () => window.open('https://adventure.lokati.net/bugs', 'podbugs', 'width=640,height=760') },
     refresh: { label: '🔄 Reload App', title: 'Fully reload the app', act: () => location.reload() },
     update: { label: '⬆️ Check for Updates', title: 'Check for updates', act: () => updateAction() },
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
@@ -1229,7 +1232,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
     { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'feed'] } },
     { i: 'stream' }, { i: 'highlight' }, { i: 'autolock' },
-    { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'refresh', 'update', 'feedback'] } },
+    { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'bugs', 'refresh', 'update', 'feedback'] } },
   ];
   function loadToolbar() {
     const raw = LS.get('topbar', null);

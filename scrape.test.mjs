@@ -150,6 +150,10 @@ const charPage = `<div class="top-nav"></div><div class="card">
       <div class="gear-stat"><ul><li class="mod-roll" data-tip="Roll: 97%">+18% crit chance</li></ul></div>
       <span class="indestructible">Indestructible</span></div>
     <div class="gear-slot empty"><div class="gear-slot-label">Helm</div><div class="gear-empty">— empty —</div></div>
+    <div class="gear-slot"><div class="gear-slot-label">Ring I</div>
+      <div class="gear-name">Iron Band</div><div class="gear-quality">Quality 12%</div>
+      <div class="gear-primary">+40 max hp</div><div class="gear-tier">Tier 5</div>
+      <div class="gear-stat"></div></div>
   </div></div>
   <div class="card"><h2>Bag (1)</h2><div class="bag-rows">
     <details class="bag-row" open><summary>Boots (1)</summary><div class="bag-row-items">
@@ -158,6 +162,12 @@ const charPage = `<div class="top-nav"></div><div class="card">
         <div class="gear-primary">+9 hp / 2.0s</div><div class="gear-tier">Tier 3</div>
         <div class="gear-stat"></div>
         <div class="durability-bar"><div class="durability-fill warn" style="width:35%"></div></div><span class="durability-pct">35%</span>
+      </div></div></details>
+    <details class="bag-row" open><summary>Ring1 (1)</summary><div class="bag-row-items">
+      <div class="gear-slot"><div class="gear-slot-label">Ring1</div>
+        <div class="gear-name">Copper Loop</div><div class="gear-quality">Quality 3%</div>
+        <div class="gear-primary">+12 max hp</div><div class="gear-tier">Tier 1</div>
+        <div class="gear-stat"></div>
       </div></div></details></div></div>`;
 const ch = characterOf(charPage, 'lokati_gaming');
 assert.equal(ch.name, 'Lokati');
@@ -166,12 +176,18 @@ assert.equal(ch.hasTree, true);
 assert.equal(ch.xp.pct, 9);
 assert.equal(ch.stats.length, 2, 'currency stats are NOT dropped for the in-app viewer');
 assert.equal(ch.stats[1].vtip, 'base 100', 'breakdown tooltips hang off the value div');
-assert.equal(ch.equipped.length, 2, 'the empty Helm slot keeps its cell');
+assert.equal(ch.equipped.length, 3, 'the empty Helm slot keeps its cell');
+// The four 2026-09-03 slots: the Equipped grid labels them by DISPLAY_SLOTS
+// text ("Ring I"), the bag rows by the enum name ("Ring1"). The scraper hands
+// both through raw; the pages' slotKey() folds them to `ring1`.
+assert.equal(ch.equipped[2].slot, 'Ring I');
+assert.equal(ch.equipped[2].name, 'Iron Band');
 assert.equal(ch.equipped[1].name, '', 'empty slot has no item name');
 assert.deepEqual(ch.equipped[0].durability, { pct: null, indestructible: true });
 assert.deepEqual(ch.equipped[0].mods, [{ t: '+18% crit chance', tip: 'Roll: 97%' }]);
 assert.ok(!ch.equipped[0].repair, "another player's gear is never actionable");
-assert.equal(ch.bag.length, 1, 'bag items are not mistaken for equipped');
+assert.equal(ch.bag.length, 2, 'bag items are not mistaken for equipped');
+assert.equal(ch.bag[1].slot, 'Ring1');
 assert.deepEqual(ch.bag[0].durability, { pct: 35, indestructible: false });
 assert.deepEqual(characterOf('<div class="card"><h1>Not Found</h1></div>', 'nope'), { notFound: true });
 
@@ -457,7 +473,9 @@ const divinityForm = (disabled) => `<form method="post" action="/craft">
       <option value="itm_l" data-tier="9">Crown (T9) 🔒</option>
       <option value="itm_u" data-tier="9">Circlet (T9) ✦</option></optgroup></select>
     <select name="item_b"></select>
-    <div class="craft-actions"><button class="btn-sm" type="submit" name="action" value="transmute" data-base="10" data-dust="500" data-tip="Adds a mod.">Transmute (10d)</button></div>
+    <div class="craft-actions"><button class="btn-sm" type="submit" name="action" value="transmute" data-base="10" data-dust="500" data-tier-mult="3" data-tier-exp="1.1" data-veil-extra="50" data-tip="Adds a mod.">Transmute (10d)</button>
+      <button class="btn-sm" type="submit" name="action" value="exalt" data-base="40" data-dust="500" data-tier-mult="3" data-tier-exp="1.1" data-veil-extra="50" data-tip="Adds a mod." disabled>Exalt (40d)</button>
+      <button class="btn-sm" type="submit" name="action" value="recombine" data-base="0" data-label="Recombine" data-veil-extra="500" data-recombine="1" data-tip="Merge.">Recombine (Free)</button></div>
     <div class="craft-actions">
       <span class="muted">Whole bag:</span>
       <button class="btn-sm" type="submit" name="action" value="divinity" data-confirm="1" data-confirm-msg="Run Divinity over all 3 eligible items in your bag? This spends 1 Unique Shard, Krangles most of them permanently, and cannot be undone." data-tip="One shard, every eligible item."${disabled ? ' disabled' : ''}>Divinity (3 items, 1 Unique Shard)</button>
@@ -478,11 +496,29 @@ const divinityForm = (disabled) => `<form method="post" action="/craft">
   const tr = acts.find(a => a.action === 'transmute');
   assert.equal(tr.confirmMsg, null, 'ordinary buttons carry no override');
   assert.equal(tr.disabled, false);
+  // Craft cost dials (2026-09-03): per-tier surcharge parameters ride each
+  // priced button; Recombine and token buttons carry none. veilExtra arrives
+  // pre-scaled on the currency actions and raw (500) on Recombine.
+  assert.equal(tr.tierMult, 3); assert.equal(tr.tierExp, 1.1); assert.equal(tr.veilExtra, 50);
+  assert.equal(acts.find(a => a.action === 'exalt').disabled, true, 'the site renders unaffordable buttons disabled');
+  const rc = acts.find(a => a.action === 'recombine');
+  assert.deepEqual([rc.base, rc.tierMult, rc.tierExp, rc.veilExtra, rc.recombine], [0, null, null, 500, true]);
+  assert.equal(dv.tierMult, null, 'shard-priced: no tier term');
   const opts = craftOptionsOf(form);
   assert.deepEqual(opts.map(o => [o.id, o.group, o.kept, o.locked]),
     [['itm_e', 'Equipped', false, false], ['itm_k', 'Helm', true, false], ['itm_l', 'Helm', false, true], ['itm_u', 'Helm', false, false]],
     'Keep and Krangled are distinct, and a unique marker is neither');
   assert.equal(opts[1].selected, true);
+}
+// Below the unlock stage (2026-09-03) the recipe row is a bare locked span.
+{
+  const locked = `<div class="card" id="crafting-card"><div class="craft-actions">
+      <span class="muted" data-tip="Unlocks when the group reaches stage 12. Once unlocked it stays unlocked — a later stage loss can't take it away.">🔒 Craft Divine Dust — unlocks at stage 12</span>
+    </div><form method="post" action="/craft"><select name="item_a"></select></form></div>`;
+  const lf = craftFormsOf(locked);
+  assert.match(lf.craftForm, /name="item_a"/, 'the item form is still found past the locked span');
+  assert.deepEqual({ ...lf.divineDustRecipe, tip: undefined }, { locked: true, stage: 12, tip: undefined });
+  assert.match(lf.divineDustRecipe.tip, /^Unlocks when the group reaches stage 12/);
 }
 // A pre-Divine-Dust page (one craft form, no recipe) must still parse.
 const old = craftFormsOf('<form method="post" action="/craft"><select name="item_a"></select></form>');
