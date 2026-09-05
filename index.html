@@ -837,7 +837,7 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
       if (r.name && r.name !== myName) { // enable highlight + operator items once we know the name
-        myName = r.name; applyOverlaySettings(); renderToolbar(); pollFeedback();
+        myName = r.name; applyOverlaySettings(); renderToolbar(); pollFeedback(); probeSiteOperator();
         if (inboxWasOpen && !itemHidden('inbox')) { inboxWasOpen = false; toggleModal('inbox', true); }
       }
       // just the archetype — dust/sand already appear in the rows below
@@ -1206,7 +1206,13 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
     'patch-notes': { label: '📜 Patch Notes', title: "Open the game's patch notes in your browser", act: () => openPage('patch-notes') },
     // A child window shares the Electron session, so the form is already logged
     // in — unlike openPage(), which hands the URL to the external browser.
-    bugs: { label: '🐞 Report a Game Bug', title: "The game's own bug form — goes to the game owner (Feedback goes to the app's maintainer)", act: () => window.open('https://adventure.lokati.net/bugs', 'podbugs', 'width=640,height=760') },
+    bugs: { label: '🐞 Report a Game Bug', title: "The game's own bug form — goes to the game owner (Feedback goes to the app's maintainer)", act: () => openSite('/bugs', 'podbugs', 640, 760) },
+    // Operator pages, shown only when the site itself says this session is the
+    // operator (/api/site-operator); the site 404s them for anyone else anyway.
+    tunables: { label: '🎛️ Live Tunables', title: 'Operator only — live game dials, plus the Operator Controls card (Trigger Encounter Now, boss select)', act: () => openSite('/admin/tunables', 'podtunables', 980, 900) },
+    adminPassives: { label: '🌳 Passive Overrides', title: 'Operator only — retune passive nodes live', act: () => openSite('/admin/passives', 'podadminpassives', 1100, 900) },
+    adminBugs: { label: '🐞 Bug Reports', title: 'Operator only — bug reports players sent from the game', act: () => openSite('/admin/bugs', 'podadminbugs', 900, 800) },
+    logout: { label: '🚪 Log out', title: 'Log out of the game and sign in as another account', act: () => logoutAndRelogin() },
     refresh: { label: '🔄 Reload App', title: 'Fully reload the app', act: () => location.reload() },
     update: { label: '⬆️ Check for Updates', title: 'Check for updates', act: () => updateAction() },
     feedback: { label: '🐛 Feedback', title: 'Send feedback / report a bug', act: () => sendFeedback() },
@@ -1222,17 +1228,42 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
   // `lokati` is the operator's login since the game's Linux cutover
   // (OPERATOR_LOGIN, 2026-09-02); `lokati_gaming` is the Twitch-era name.
   const OPERATOR_ITEMS = { broadcast: ['lokati', 'lokati_gaming', 'kibukah'], inbox: ['lokati', 'lokati_gaming', 'kibukah'], builds: ['lokati', 'lokati_gaming'], downtime: ['lokati', 'lokati_gaming', 'kibukah'] };
+  // Site-admin shortcuts are gated by the site's own answer, not by name:
+  // OPERATOR_ITEMS' aliases and the POD_OPERATOR telemetry key say nothing
+  // about whether this game session is OPERATOR_LOGIN.
+  const SITE_OPERATOR_ITEMS = new Set(['tunables', 'adminPassives', 'adminBugs']);
+  let siteOperator = false;
+  async function probeSiteOperator() {
+    let v = false;
+    try { v = !!(await fetch('/api/site-operator').then(r => r.json())).operator; } catch {}
+    if (v !== siteOperator) { siteOperator = v; renderToolbar(); }
+  }
+  // A site page in a child window: shares the Electron session, so it opens
+  // already logged in (openPage() hands the URL to the external browser instead).
+  const openSite = (path, key, w, h) => window.open('https://adventure.lokati.net' + path, key, `width=${w},height=${h}`);
+  // Log out, then straight into the account login — /api/relogin clears the
+  // Electron cookie jar and opens the window, so exactly one login appears.
+  async function logoutAndRelogin() {
+    if (!confirm('Log out of the game? You can then sign in as another account.')) return;
+    try { await fetch('/api/logout', { method: 'POST' }).then(r => r.json()); } catch {}
+    siteOperator = false; myName = ''; renderToolbar();
+    const l = await fetch('/api/relogin', { method: 'POST' }).then(r => r.json()).catch(() => ({ ok: false, error: 'bridge unreachable' }));
+    if (l.ok) loadStats();
+    else if (l.error === 'unsupported') infoToast('Logged out — restart the app to log in again.');
+    else if (!l.cancelled) infoToast('Login failed: ' + (l.error || 'unknown error'));
+  }
   // The operator key (surfaced as POD_OPERATOR by /config.js) overrides the
   // name gate: with the game site down /api/me can't name the character, and
   // the operator tools — broadcast, inbox — talk to the telemetry backend,
   // which is up regardless. Still UI gating only; the key authenticates
   // server-side.
-  const itemHidden = (id) => OPERATOR_ITEMS[id] && !window.POD_OPERATOR && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
+  const itemHidden = (id) => SITE_OPERATOR_ITEMS.has(id) ? !siteOperator
+    : OPERATOR_ITEMS[id] && !window.POD_OPERATOR && !OPERATOR_ITEMS[id].includes(myName.toLowerCase());
   const DEFAULT_LAYOUT = [
     { i: 'bag' }, { i: 'passives' }, { i: 'characters' }, { i: 'chat' },
     { g: { id: 'g-combat', name: '⚔️ Combat', items: ['party', 'buffs', 'fight', 'feed'] } },
     { i: 'stream' }, { i: 'highlight' }, { i: 'autolock' },
-    { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'bugs', 'refresh', 'update', 'feedback'] } },
+    { g: { id: 'g-more', name: '⋯ More', items: ['settings', 'wiki', 'patch-notes', 'bugs', 'tunables', 'adminPassives', 'adminBugs', 'logout', 'refresh', 'update', 'feedback'] } },
   ];
   function loadToolbar() {
     const raw = LS.get('topbar', null);

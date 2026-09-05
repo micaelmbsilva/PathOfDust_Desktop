@@ -6,7 +6,7 @@ import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises';
 import { exec } from 'node:child_process';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { post, getAuthed, loginRedirect, netStats } from './actions.mjs';
+import { post, getAuthed, loginRedirect, netStats, logout } from './actions.mjs';
 import { GAME_NAME, TELEMETRY_URL, PING_KEY } from './config.mjs';
 
 // Anonymous telemetry/feedback → the Railway backend. No-op if no URL set.
@@ -1156,6 +1156,24 @@ const srv = createServer(async (req, res) => {
       exec(`start "" "https://adventure.lokati.net${p}"`);
       return json(res, { ok: true });
     }
+    if (url.pathname === '/api/logout' && req.method === 'POST') {
+      // Server session dropped + bridge cookie forgotten; the page then calls
+      // /api/relogin, which clears the Electron jar and opens the login.
+      siteOp = { at: 0, v: false };
+      try { const r = await logout(); return json(res, { ok: true, status: r.status }); }
+      catch (e) { return json(res, { ok: false, error: String(e.message || e) }); }
+    }
+    if (url.pathname === '/api/site-operator') {
+      // The site's own answer to "is this session the operator": /admin/tunables
+      // is 200 for OPERATOR_LOGIN and a real 404 for anyone else. Gates the
+      // admin shortcuts in the toolbar — the site stays authoritative either way.
+      if (Date.now() - siteOp.at > 5 * 60000) {
+        let v = false;
+        try { v = (await getAuthed('/admin/tunables')).status === 200; } catch (e) { if (e.expired) throw e; }
+        siteOp = { at: Date.now(), v };
+      }
+      return json(res, { operator: siteOp.v });
+    }
     if (url.pathname === '/api/relogin' && req.method === 'POST') {
       // Expired session: the shell opens the account login in a child window
       // and hands the fresh cookie to actions.setCookie (see main.cjs __relogin).
@@ -1250,6 +1268,7 @@ async function installLoginRedirect() {
 }
 export const ready = listening.then(installLoginRedirect);
 
+let siteOp = { at: 0, v: false }; // /api/site-operator cache (reset on logout)
 const json = (res, obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 // 2MB byte cap — fight reports are the biggest client, and they're compact by
 // design. Overflow rejects (typed 413, handled by the route catch-all) so route

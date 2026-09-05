@@ -4,11 +4,11 @@
  "pointsForLevel": "1 + floor(level / 4)",
  "overflowConversionCapPerRank": 0.1,
  "counts": {
-  "nodes": 471,
-  "withEffect": 470,
+  "nodes": 469,
+  "withEffect": 469,
   "tuned": 0
  },
- "tunedScraped": "2026-09-03T11:49:38.387Z",
+ "tunedScraped": "2026-09-05T09:07:15.026Z",
  "tunedSource": "https://adventure.lokati.net/wiki/passives",
  "classes": {
   "Warrior": [
@@ -997,7 +997,7 @@
    {
     "key": "shatter",
     "name": "Shatter",
-    "description": "Overwhelm's damage reduction shred also applies to block chance, by the same amount per rank.",
+    "description": "Overwhelm's damage-reduction shred also applies to the target's block chance - at 100% of the shred at rank 1, 135% at rank 2, 165% at rank 3.",
     "parent": "overwhelm",
     "tier": "modifier",
     "max": 3,
@@ -1009,8 +1009,8 @@
      "per": 0,
      "ranks": [
       1,
-      1,
-      1
+      1.35,
+      1.65
      ]
     }
    },
@@ -2335,21 +2335,6 @@
     }
    },
    {
-    "key": "stillwater",
-    "name": "Stillwater",
-    "description": "Serenity triggers guaranteed on your first evade each fight - rank 2 extends this to your 2nd evade, rank 3 to your 3rd.",
-    "parent": "serenity",
-    "tier": "modifier",
-    "max": 3,
-    "magnitudeCap": 3,
-    "unlockAt": 4,
-    "effect": {
-     "kind": "special",
-     "r1": 1,
-     "per": 1
-    }
-   },
-   {
     "key": "unmovable",
     "name": "Unmovable",
     "description": "Serenity's damage reduction bonus is increased by another 5% per rank (up to +15% at 3/3).",
@@ -2865,19 +2850,6 @@
      "kind": "special",
      "r1": 0.1,
      "per": 0.1
-    }
-   },
-   {
-    "key": "sacredoverflow",
-    "name": "Sacred Overflow",
-    "description": "Unused Bulwark of Light shield value converts to a heal at 50% efficiency per rank (up to 150% at 3/3) when it expires.",
-    "parent": "bulwarkoflight",
-    "tier": "modifier",
-    "max": 3,
-    "magnitudeCap": 3,
-    "unlockAt": 4,
-    "effect": {
-     "kind": "none"
     }
    },
    {
@@ -6773,7 +6745,7 @@
    {
     "key": "golemmaster",
     "name": "Golem Master",
-    "description": "Grants the ability to summon 1 golem at rank 1 - +1 per additional rank (3 golems at 3/3). Golems have 33% of your stats; you deal 33% less damage per summoned golem, additive (1% of normal damage at 3 golems).",
+    "description": "Grants the ability to summon 1 golem at rank 1 - +1 per additional rank (3 golems at 3/3). Golems are built from your whole build with their base stats at 33% of yours; your own damage is unaffected by how many you have out.",
     "parent": null,
     "tier": "skill",
     "max": 3,

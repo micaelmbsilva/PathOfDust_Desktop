@@ -143,6 +143,17 @@ export async function probeSession() {
   if (!Array.isArray(data)) throw new Error('site problem: unexpected body');
   return true;
 }
+// Log out: the site drops the server session and answers 302 + a Max-Age=0
+// cookie. redirect:'manual' on purpose — following it lands on the logged-out
+// card, which getAuthed() would (correctly) report as `expired`. Whatever the
+// site says, the bridge forgets the cookie: the shell's relogin() is what
+// clears the Electron jar and opens the account login afterwards.
+export async function logout() {
+  try {
+    const res = await fetch(`${ORIGIN}/logout`, { headers: { 'Cookie': cookieHeader() }, redirect: 'manual', signal: AbortSignal.timeout(10000) });
+    return { status: res.status };
+  } finally { setCookie(null); }
+}
 // A craft/equip POST against a dead session may 302 to the login page
 // (/account/login matches on "login"); most just 303 home silently, so this
 // stays best-effort and the page scrape's loggedOutPage check is the real guard.
