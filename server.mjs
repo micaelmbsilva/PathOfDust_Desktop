@@ -450,6 +450,34 @@ export function pendingOf(text) {
   return pend;
 }
 
+// Unique Shard picker (site, 2026-09-25). The shard button no longer submits:
+// it opens an in-page flow (id="us-flow", rendered only while a shard is held)
+// and NOTHING is spent until the one POST /craft/unique-shard {item_id, choice}.
+// The old `name="action" value="unique shard"` button is gone, so this keys off
+// #us-flow, never the craft form. Kinds, Luckstone kinds and the per-item rows
+// (whole-item block reason, Divine Forge's modifier keys, greyed kinds + why)
+// are all read off the page; the site enforces the same gates on apply.
+// Exported for the scrape smoke-test.
+export function uniqueShardOf(text) {
+  const flow = text.split('id="us-flow"')[1];
+  if (flow == null) return null;
+  const btn = text.match(/<button([^>]*data-us-open[^>]*)>([^<]*)</);
+  const attr = (at, n) => decode((at.match(new RegExp(`${n}="([^"]*)"`)) || [])[1] || '');
+  const kinds = [...flow.matchAll(/data-us-pick="([^"]+)" data-us-name="([^"]*)">[^<]*<\/button>\s*<span class="muted">([^<]*)</g)]
+    .map(m => ({ key: m[1], name: decode(m[2]), desc: decode(m[3]) }));
+  const luck = [...flow.matchAll(/<button([^>]*data-us-choice="[^"]+"[^>]*)>([^<]*)</g)]
+    .map(m => ({ choice: attr(m[1], 'data-us-choice'), label: attr(m[1], 'data-us-label'), name: strip(m[2]) }));
+  const items = {};
+  for (const m of flow.matchAll(/<div data-us-item="([^"]*)"([^>]*)>([\s\S]*?)<\/div>/g)) {
+    items[decode(m[1])] = {
+      name: attr(m[2], 'data-name'), blocked: attr(m[2], 'data-blocked'),
+      affixes: [...m[3].matchAll(/<i data-affix="([^"]*)" data-label="([^"]*)">/g)].map(a => ({ key: a[1], label: decode(a[2]) })),
+      off: Object.fromEntries([...m[3].matchAll(/<i data-off="([^"]*)" data-why="([^"]*)">/g)].map(o => [o[1], decode(o[2])])),
+    };
+  }
+  return { label: btn ? strip(btn[2]) : 'Unique Shard', tip: btn ? tipOf(btn[1]) : '', kinds, luck, items };
+}
+
 // "Name Your Krangled Item" prompt. Krangle is the only way to earn a nickname,
 // and the site asks once per item — while `nickname` is unset it keeps
 // prompting, and submitting an EMPTY value is how you decline (it records
@@ -597,6 +625,10 @@ export async function inventory() { // exported for scrape smoke-tests
 
   const { craftForm, divineDustRecipe } = craftFormsOf(text);
   const options = craftOptionsOf(craftForm), actions = craftActionsOf(craftForm);
+  // The shard button keeps its old action id so it lands in whatever craft
+  // section the player already dragged it into; bag.html opens the picker.
+  const uniqueShard = uniqueShardOf(text);
+  if (uniqueShard) actions.push({ action: 'unique shard', label: uniqueShard.label, tip: uniqueShard.tip, dataLabel: 'Unique Shard', uniqueShard: true });
   const veilTip = tipOf((craftForm.match(/class="veil-check"([^>]*)>/) || [])[1] || '');
   // Hideout Warrior's "Include Krangle" checkbox (name="hideout_krangle") —
   // null when the site doesn't render it (pre-Aug-'26 or no hideout button).
@@ -620,7 +652,7 @@ export async function inventory() { // exported for scrape smoke-tests
   // keeps prompting, and submitting an EMPTY value is how you decline (it
   // records "asked and skipped" so it stops). Only one pending item is offered
   // at a time even if several are waiting.
-  return { dust, sand, divineDust, tokens, bagCap, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle, divineDustRecipe }, veil, autoDisenchant, nameItem: nameItemOf(text) };
+  return { dust, sand, divineDust, tokens, bagCap, equipped, bag: bag(text).items, craft: { options, actions, veilTip, hideoutKrangle, divineDustRecipe, uniqueShard }, veil, autoDisenchant, nameItem: nameItemOf(text) };
 }
 
 // One passive canvas out of a page fragment. The site renders the same
@@ -1234,6 +1266,7 @@ const srv = createServer(async (req, res) => {
     res.end(data);
   } catch (e) {
     if (e.expired) { res.writeHead(401, { 'Content-Type': 'application/json' }); return res.end('{"expired":true}'); }
+    if (e.mustChangePassword) { res.writeHead(403, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ mustChangePassword: true, message: e.message })); }
     if (e.status === 413) { try { res.writeHead(413); return res.end('body too large'); } catch { return; } }
     res.writeHead(e.code === 'ENOENT' ? 404 : 500);
     res.end(String(e.message || e));

@@ -834,6 +834,8 @@ body.legacy #overlay, body.legacy #zoomcapture, body.legacy #down { display: non
       // Not downtime: the site is up, we just aren't logged in any more. The
       // curtain would read as "game down" and hide the way back in.
       if (r.expired) { siteFails = 0; setDown(false); showRelogin(); return; }
+      // Same, but a fresh login would land in the same place: say what to do.
+      if (r.mustChangePassword) { siteFails = 0; setDown(false); document.getElementById('rows').innerHTML = `<p class="muted">${esc(r.message)}</p>`; return; }
       document.getElementById('hname').textContent = r.name;
       if (r.name) setTitle(r.name);
       if (r.name && r.name !== myName) { // enable highlight + operator items once we know the name
