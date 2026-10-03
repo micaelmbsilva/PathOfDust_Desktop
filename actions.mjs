@@ -96,6 +96,7 @@ export const firstBody = (text) => {
   return second < 0 ? text : text.slice(0, second);
 };
 
+export const MUST_CHANGE_PASSWORD = 'Your account is using a temporary password. Open adventure.lokati.net in your web browser, log in, and set a new password — the app picks up again on its own once that is done.';
 // Authenticated GET — returns the response text. For scraping our own pages.
 // 5xx (incl. Cloudflare's 52x error pages when the game is down) throws so the
 // scrape routes 500 and the UI shows its downtime state instead of parsing junk.
@@ -113,6 +114,13 @@ export async function getAuthed(path = '/') {
   // without this every scrape silently parses as an empty inventory/character.
   if (res.status === 401 || loggedOutPage(text)) {
     const e = new Error('session expired'); e.expired = true; throw e;
+  }
+  // An owner-issued temporary password (site, 2026-10-02) parks the account:
+  // every page 303s to /account/change-password until a new one is set, and
+  // that form page parsed as a character called "Set a new password" with
+  // nothing in it. Not expired — logging in again lands in the same place.
+  if (res.redirected && new URL(res.url).pathname === '/account/change-password') {
+    const e = new Error(MUST_CHANGE_PASSWORD); e.mustChangePassword = true; throw e;
   }
   return { status: res.status, text: firstBody(text) };
 }

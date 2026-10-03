@@ -4,7 +4,7 @@
 // src/adventure_web.rs) — a Sacred item that ALSO carries a unique affix
 // (Celestial Shard) must yield both lines, each with its own colour flag.
 import assert from 'node:assert/strict';
-import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf, craftFormsOf, craftOptionsOf, craftActionsOf, golemsOf } from './server.mjs';
+import { elementalOf, implicitsOf, repairOf, durabilityOf, treeOf, fightsOf, rosterOf, characterOf, nameItemOf, ownerBuildsAllowed, passivesOf, craftFormsOf, craftOptionsOf, craftActionsOf, golemsOf, uniqueShardOf } from './server.mjs';
 import { netKey, firstBody, redirectNote, loggedOutPage, getAuthed, probeSession, setCookie } from './actions.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -555,6 +555,45 @@ const tn = treeOf(tunedNode).nodes[0];
 assert.equal(tn.tuned, 'Tuned: 0.2 / 0.4 / 0.6 (default 0.1 / 0.2 / 0.3)');
 assert.equal(tn.desc, 'Hits harder.', 'the truncated attribute tail is not part of the description');
 assert.equal(treeOf(roNode).nodes[0].tuned, null, 'an untuned node carries no note');
+
+// --- Unique Shard picker (site render_unique_shard_flow, 2026-09-25). The
+// button is type="button" with no name="action", so the craft-form scrape no
+// longer sees it; #us-flow is the only signal, and the options come off it.
+const usKind = (key, name, desc) => `<div class="us-kind" data-kind="${key}"><button type="button" class="btn-sm" data-us-pick="${key}" data-us-name="${name}">${name}</button> <span class="muted">${desc}</span> <span class="us-why"></span></div>`;
+const usPage = `<form method="post" action="/craft"><select name="item_a"><option value="it1">Crude Blade</option></select>` +
+  `<button class="btn-sm" type="button" data-us-open="1" data-tip="Grants a unique affix of your choice.">Unique Shard (Free — 2 tokens)</button></form>` +
+  `<div id="us-flow" hidden><h3>Unique Shard — <span data-us-itemname></span></h3><div data-us-panel="picker"><p class="us-blocked" hidden></p>` +
+  usKind('celestialConversion', 'Celestial Conversion', 'Deals 10% of each heal as bonus damage') +
+  usKind('craftingExpertise', 'Crafting Expertise', 'Crafts on your gear cost less') +
+  usKind('divineForge', 'Divine Forge', 'Doubles two of this item&#39;s modifiers — you tick which two.') +
+  usKind('luckstone', 'Luckstone', 'A lucky second roll on Echo, Crit, Evasion, Block or Splash') +
+  `<button type="button" class="btn-sm" data-us-cancel>Cancel</button></div>` +
+  `<div data-us-panel="luckstone" hidden><p>Luckstone: pick which mechanic becomes lucky.</p>` +
+  `<button type="button" class="btn-sm" data-us-choice="luckstone:echo" data-us-label="Luckstone (Lucky Echo, 5–15% rolled on apply)">Lucky Echo</button> ` +
+  `<button type="button" class="btn-sm" data-us-choice="luckstone:block" data-us-label="Luckstone (Lucky Block, 5–15% rolled on apply)">Lucky Block</button> ` +
+  `<button type="button" class="btn-sm" data-us-back>Cancel</button></div>` +
+  `<form method="post" action="/craft/unique-shard" id="us-form"><input type="hidden" name="item_id" value=""><input type="hidden" name="choice" value="">` +
+  `<button type="submit" value="unique shard" data-confirm="1" data-confirm-msg="" hidden>Apply</button></form>` +
+  `<div data-us-item="it1" data-name="Crude &quot;Blade&quot;" data-blocked="" hidden><i data-affix="critChance" data-label="Crit Chance"></i><i data-affix="blockChance" data-label="Block Chance"></i>` +
+  `<i data-off="craftingExpertise" data-why="equipped items only — equip this item first"></i></div>` +
+  `<div data-us-item="it2" data-name="Odd Cap" data-blocked="This item is Krangled and can&#39;t be crafted." hidden><i data-off="divineForge" data-why="needs at least 2 modifiers on this item"></i></div>` +
+  `</div>`;
+const us = uniqueShardOf(usPage);
+assert.equal(us.label, 'Unique Shard (Free — 2 tokens)');
+assert.equal(us.tip, 'Grants a unique affix of your choice.');
+assert.deepEqual(us.kinds.map(k => k.key), ['celestialConversion', 'craftingExpertise', 'divineForge', 'luckstone']);
+assert.equal(us.kinds[2].desc, 'Doubles two of this item\'s modifiers — you tick which two.');
+assert.deepEqual(us.luck.map(l => l.choice), ['luckstone:echo', 'luckstone:block']);
+assert.equal(us.luck[1].name, 'Lucky Block');
+assert.equal(us.luck[1].label, 'Luckstone (Lucky Block, 5–15% rolled on apply)');
+assert.equal(us.items.it1.name, 'Crude "Blade"');
+assert.equal(us.items.it1.blocked, '');
+assert.deepEqual(us.items.it1.affixes, [{ key: 'critChance', label: 'Crit Chance' }, { key: 'blockChance', label: 'Block Chance' }]);
+assert.deepEqual(us.items.it1.off, { craftingExpertise: 'equipped items only — equip this item first' }, 'a greyed kind keeps its reason');
+assert.equal(us.items.it2.blocked, 'This item is Krangled and can\'t be crafted.', 'a whole-item block');
+assert.deepEqual(us.items.it2.affixes, []);
+assert.equal(craftActionsOf(craftFormsOf(usPage).craftForm).length, 0, 'the opener is not a craft-form action');
+assert.equal(uniqueShardOf('<form method="post" action="/craft"></form>'), null, 'no shard held = no #us-flow = no button');
 
 console.log('ok');
 process.exit(0); // importing server.mjs opens the bridge listener

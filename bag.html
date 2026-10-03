@@ -165,6 +165,7 @@
 
   <div id="nameItem"></div>
   <div id="veilChoice"></div>
+  <div id="usFlow"></div>
 
   <h2>Crafting</h2>
   <div id="craftPick"></div>
@@ -441,6 +442,7 @@
     ]); }
     catch { $('err').textContent = 'Can\'t reach the game right now'; return; }
     if (inv.expired || meData.expired) { sessionExpired(load); return; }
+    if (inv.mustChangePassword) { $('err').textContent = inv.message; return; }
 
     meName = meData.name || '';
     if (meData.name) document.title = `${GAME_NAME} — Bag — ${meData.name}`;
@@ -1212,11 +1214,70 @@
   if (localStorage.getItem('bagGroup')) gSel.value = localStorage.getItem('bagGroup');
   gSel.onchange = () => { localStorage.setItem('bagGroup', gSel.value); renderBag(); };
 
+  // Unique Shard picker — the site's own browse-before-commit flow (#us-flow,
+  // parsed by uniqueShardOf in server.mjs): pick a kind → Divine Forge's two
+  // modifiers / Luckstone's kind → one "permanent" confirm → the single
+  // POST /craft/unique-shard. Every Cancel/Back is local and spends nothing.
+  // The item's row is snapshotted at open so a reload can't pull it away.
+  let usPick = null; // { id, row, us } while the picker is open
+  function usShow(step) {
+    if (!step || !usPick) { usPick = null; $('usFlow').innerHTML = ''; return; }
+    const { row, us } = usPick;
+    const back = '<button data-us="back">Back</button>', cancel = '<button data-us="cancel">Cancel</button>';
+    let body;
+    if (step === 'picker') {
+      const blocked = row ? row.blocked : 'Pick an item first.';
+      body = (blocked ? `<p class="muted">⛔ ${esc(blocked)}</p>` : '') + us.kinds.map(k => {
+        const why = row && row.off[k.key], off = blocked || why;
+        return `<div style="margin:6px 0${off ? ';opacity:0.5' : ''}"><button data-us="pick" data-uskind="${esc(k.key)}"${off ? ' disabled' : ''}>${esc(k.name)}</button> ` +
+          `<span class="muted">${esc(k.desc)}${why && !blocked ? ` (unavailable: ${esc(why)})` : ''}</span></div>`;
+      }).join('') + `<div class="acts">${cancel}</div>`;
+    } else if (step === 'divineForge') {
+      body = `<p>Divine Forge: tick exactly 2 of this item's modifiers to double.</p><div class="acts">` +
+        row.affixes.map(a => `<label class="hint"><input type="checkbox" class="usdf" value="${esc(a.key)}" data-label="${esc(a.label)}"> ${esc(a.label)}</label>`).join('') +
+        `</div><div class="acts"><button data-us="df" disabled>Apply Divine Forge</button>${back}${cancel}</div>`;
+    } else {
+      body = `<p>Luckstone: pick which mechanic becomes lucky.</p><div class="acts">` +
+        us.luck.map((l, i) => `<button data-us="luck" data-usi="${i}">${esc(l.name)}</button>`).join('') + `${back}${cancel}</div>`;
+    }
+    $('usFlow').innerHTML = `<div class="veilbox"><h2>🎫 Unique Shard — ${esc(row ? row.name : 'no item selected')}</h2>` +
+      `<p class="muted">Browse freely — nothing is spent until you confirm your pick.</p>${body}</div>`;
+    const boxes = [...$('usFlow').querySelectorAll('.usdf')];
+    boxes.forEach(x => x.onchange = () => {
+      const n = boxes.filter(y => y.checked).length;
+      boxes.forEach(y => { y.disabled = n >= 2 && !y.checked; });
+      $('usFlow').querySelector('[data-us="df"]').disabled = n !== 2;
+    });
+    $('usFlow').scrollIntoView({ block: 'nearest' });
+  }
+  async function usCommit(choice, label) {
+    const { id, row } = usPick;
+    // Cancelling here leaves the player on the step they were on.
+    if (!confirm(`Apply ${label} to ${row.name}? This spends 1 Unique Shard and is permanent — it cannot be undone.`)) return;
+    usShow(null);
+    await craftAct('craft/unique-shard', { item_id: id, choice }, 'Unique Shard');
+    refresh();
+  }
+
   // One delegated listener instead of re-binding every button after each render.
   document.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-un],[data-eq],[data-lock],[data-dis],[data-veilpick],[data-share],[data-craft],[data-rep],[data-repall]');
+    const b = e.target.closest('[data-un],[data-eq],[data-lock],[data-dis],[data-veilpick],[data-share],[data-craft],[data-rep],[data-repall],[data-us]');
     if (!b) return;
     const d = b.dataset;
+    if (d.us !== undefined) {
+      if (!usPick) return;
+      if (d.us === 'cancel') return usShow(null);
+      if (d.us === 'back') return usShow('picker');
+      if (d.us === 'luck') { const l = usPick.us.luck[+d.usi]; return l && usCommit(l.choice, l.label || `Luckstone (Lucky ${l.name})`); }
+      if (d.us === 'df') {
+        const t = [...$('usFlow').querySelectorAll('.usdf:checked')];
+        if (t.length !== 2) return;
+        return usCommit(`divineForge:${t[0].value},${t[1].value}`, `Divine Forge (doubles ${t[0].dataset.label} and ${t[1].dataset.label})`);
+      }
+      const kind = d.uskind; // d.us === 'pick'
+      if (kind === 'divineForge' || kind === 'luckstone') return usShow(kind);
+      return usCommit(kind, (usPick.us.kinds.find(k => k.key === kind) || {}).name || kind);
+    }
     // Repair spends dust and the site answers with a bare 303 either way, so
     // diff the result like a craft does rather than claiming success blindly.
     if (d.rep !== undefined) {
@@ -1282,6 +1343,14 @@
     if (d.craft !== undefined) {
       if (didDragCraft) { didDragCraft = false; return; } // a reorder drag ends in a click — don't craft
       const action = d.craft;
+      // The shard spends nothing on click any more — it opens the picker. Never
+      // falls through to POST /craft: that old path spent the shard first.
+      if (action === 'unique shard') {
+        const us = lastCraft.uniqueShard;
+        if (!us) return;
+        usPick = { id: $('itemA').value, row: us.items[$('itemA').value] || null, us };
+        return usShow('picker');
+      }
       const fields = { action, item_a: $('itemA').value };
       if (action === 'recombine' && $('itemB').value) fields.item_b = $('itemB').value;
       if ($('veil').checked) fields.veiled = '1';
